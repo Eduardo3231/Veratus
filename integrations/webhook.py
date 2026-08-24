@@ -11,7 +11,11 @@ from pathlib import Path
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 
-LANDING_DIR = Path(__file__).resolve().parents[1] / "landing"
+APP_DIR = Path(__file__).resolve().parent
+# Localmente o arquivo vive em integrations/; no container ele vive em /app.
+LANDING_DIR = APP_DIR / "landing"
+if not LANDING_DIR.is_dir():
+    LANDING_DIR = APP_DIR.parent / "landing"
 app = Flask(__name__, static_folder=str(LANDING_DIR), static_url_path="")
 MAX_REQUESTS_PER_WINDOW = int(os.getenv("RATE_LIMIT_REQUESTS", "10"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
