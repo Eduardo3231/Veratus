@@ -1,0 +1,21 @@
+name: Verify Veratus
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r integrations/requirements.txt
+      - name: Check Python syntax
+        run: python -m py_compile integrations/webhook.py integrations/push_to_mailerlite.py
+      - name: Build webhook image
+        run: docker build -f integrations/Dockerfile -t veratus-webhook .

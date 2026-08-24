@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: veratus-leads
+    runtime: docker
+    dockerContext: .
+    dockerfilePath: ./integrations/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: MAILERLITE_API_KEY
+        sync: false
+      - key: MAILERLITE_GROUP_ID
+        sync: false
+      - key: FRONTEND_ORIGINS
+        sync: false

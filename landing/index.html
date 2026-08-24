@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Entre na lista VIP da Veratus e receba a oferta de lançamento em primeira mão.">
+  <title>Veratus — Lista VIP</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero"><div class="wrap">
+    <p class="eyebrow">TECNOLOGIA COM IDENTIDADE</p><h1 class="logo">VERATUS</h1>
+    <p class="tag">Eletrônicos com design marcante, acabamento e propósito.</p>
+    <section class="capture-panel" aria-labelledby="vip-title">
+      <h2 id="vip-title">Receba a primeira oferta</h2><p>Entre na lista VIP para saber da pré-venda antes de todo mundo.</p>
+      <form id="capture" class="capture" action="/webhook" method="post" novalidate>
+        <label><span>E-mail</span><input name="email" type="email" autocomplete="email" placeholder="Seu melhor e-mail" required maxlength="254"></label>
+        <label><span>WhatsApp <em>(opcional)</em></span><input name="whatsapp" type="tel" autocomplete="tel" placeholder="(00) 00000-0000" maxlength="32"></label>
+        <label class="honeypot" aria-hidden="true">Empresa<input name="company" type="text" tabindex="-1" autocomplete="off"></label>
+        <label class="consent"><input name="consent" type="checkbox" value="true" required><span>Concordo em receber comunicações da Veratus por e-mail e, se informado, WhatsApp. Consulte a <a href="privacy.html">Política de Privacidade</a>.</span></label>
+        <button type="submit">Quero entrar na lista VIP</button>
+      </form><p id="form-status" class="form-status" role="status" aria-live="polite"></p>
+    </section>
+  </div></header>
+  <main class="features wrap"><section><h2>Por que Veratus?</h2><p>Tecnologia funcional que também comunica estilo, com escolhas de design e qualidade que fazem diferença no uso.</p></section><section><h2>Vantagem de chegar antes</h2><p>A lista VIP recebe primeiro a oferta de lançamento e as novidades sobre disponibilidade.</p></section></main>
+  <footer class="site-footer"><p>© Veratus — Todos os direitos reservados</p></footer>
+  <script>
+    const form=document.getElementById('capture'),status=document.getElementById('form-status');
+    form.addEventListener('submit',async(event)=>{event.preventDefault();if(!form.checkValidity()){form.reportValidity();return}const button=form.querySelector('button'),params=new URLSearchParams(location.search),data=Object.fromEntries(new FormData(form));data.source='landing_pre_venda';['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(key=>{if(params.get(key))data[key]=params.get(key)});button.disabled=true;status.textContent='Enviando seu cadastro…';try{const response=await fetch(form.action,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)}),result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'Não foi possível concluir o cadastro.');form.reset();status.textContent='Cadastro confirmado. Você receberá as novidades da Veratus.'}catch(error){status.textContent=error.message||'Não foi possível enviar agora. Tente novamente em instantes.'}finally{button.disabled=false}});
+  </script>
+</body></html>
