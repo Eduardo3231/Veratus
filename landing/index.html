@@ -3,29 +3,75 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Entre na lista VIP da Veratus e receba a oferta de lançamento em primeira mão.">
-  <title>Veratus — Lista VIP</title>
+  <meta name="description" content="Veratus — precisão, equilíbrio e permanência. Entre na lista de acesso antecipado.">
+  <title>Veratus — Acesso antecipado</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="hero"><div class="wrap">
-    <p class="eyebrow">TECNOLOGIA COM IDENTIDADE</p><h1 class="logo">VERATUS</h1>
-    <p class="tag">Eletrônicos com design marcante, acabamento e propósito.</p>
-    <section class="capture-panel" aria-labelledby="vip-title">
-      <h2 id="vip-title">Receba a primeira oferta</h2><p>Entre na lista VIP para saber da pré-venda antes de todo mundo.</p>
-      <form id="capture" class="capture" action="/webhook" method="post" novalidate>
-        <label><span>E-mail</span><input name="email" type="email" autocomplete="email" placeholder="Seu melhor e-mail" required maxlength="254"></label>
-        <label><span>WhatsApp <em>(opcional)</em></span><input name="whatsapp" type="tel" autocomplete="tel" placeholder="(00) 00000-0000" maxlength="32"></label>
-        <label class="honeypot" aria-hidden="true">Empresa<input name="company" type="text" tabindex="-1" autocomplete="off"></label>
-        <label class="consent"><input name="consent" type="checkbox" value="true" required><span>Concordo em receber comunicações da Veratus por e-mail e, se informado, WhatsApp. Consulte a <a href="privacy.html">Política de Privacidade</a>.</span></label>
-        <button type="submit">Quero entrar na lista VIP</button>
-      </form><p id="form-status" class="form-status" role="status" aria-live="polite"></p>
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <nav class="nav shell" aria-label="Principal">
+        <a class="wordmark" href="#top" aria-label="Veratus, início">VERATUS</a>
+        <a class="nav-link" href="#acesso">ACESSO ANTECIPADO <span aria-hidden="true">↘</span></a>
+      </nav>
+
+      <div class="hero-grid shell" id="top">
+        <div class="hero-copy">
+          <p class="kicker"><span></span> EST. PARA O ESSENCIAL</p>
+          <h1 id="hero-title">A tecnologia<br><em>permanece</em><br>quando tem propósito.</h1>
+          <p class="lede">Veratus cria objetos de presença silenciosa — precisos no uso, equilibrados na forma e feitos para durar na memória.</p>
+          <div class="hero-actions">
+            <a class="button button-gold" href="#acesso">Entrar na lista privada <span aria-hidden="true">→</span></a>
+            <p>PRIMEIRA EDIÇÃO<br><strong>EM BREVE</strong></p>
+          </div>
+        </div>
+
+        <figure class="emblem-stage" aria-label="Símbolo da Veratus em dourado">
+          <div class="orbital orbital-one"></div><div class="orbital orbital-two"></div>
+          <div class="emblem-image"><img src="assets/veratus-emblem.jpeg" alt="Símbolo dourado da Veratus"></div>
+          <figcaption><span>V / 01</span><span>PRECISÃO · EQUILÍBRIO · PERMANÊNCIA</span></figcaption>
+        </figure>
+      </div>
+      <div class="hero-footer shell"><span>SCROLL PARA DESCOBRIR</span><span class="scroll-line" aria-hidden="true"></span><span>BRASIL · 2026</span></div>
     </section>
-  </div></header>
-  <main class="features wrap"><section><h2>Por que Veratus?</h2><p>Tecnologia funcional que também comunica estilo, com escolhas de design e qualidade que fazem diferença no uso.</p></section><section><h2>Vantagem de chegar antes</h2><p>A lista VIP recebe primeiro a oferta de lançamento e as novidades sobre disponibilidade.</p></section></main>
-  <footer class="site-footer"><p>© Veratus — Todos os direitos reservados</p></footer>
+
+    <section class="manifesto shell">
+      <p class="section-label">01 / O CÓDIGO VERATUS</p>
+      <div class="manifesto-main">
+        <h2>Menos ruído.<br>Mais <em>intenção.</em></h2>
+        <p>Não é sobre ter mais tecnologia. É sobre escolher melhor. A Veratus nasce da união entre linhas precisas, materiais que convidam ao toque e uma relação mais consciente com o que nos acompanha todos os dias.</p>
+      </div>
+      <div class="principles">
+        <article><span>01</span><h3>Precisão</h3><p>Cada detalhe precisa justificar sua presença.</p></article>
+        <article><span>02</span><h3>Equilíbrio</h3><p>Função e forma em conversa constante.</p></article>
+        <article><span>03</span><h3>Permanência</h3><p>Uma estética que não depende do próximo ciclo.</p></article>
+      </div>
+    </section>
+
+    <section class="access-section" id="acesso" aria-labelledby="access-title">
+      <div class="access shell">
+        <div class="access-intro"><p class="section-label">02 / ACESSO PRIVADO</p><h2 id="access-title">A primeira<br>escolha é sua.</h2><p>Receba o anúncio da primeira edição, detalhes de disponibilidade e a condição reservada para quem chega antes.</p></div>
+        <div class="form-card">
+          <p class="form-overline">LISTA DE ACESSO ANTECIPADO</p>
+          <form id="capture" class="capture" action="/webhook" method="post" novalidate>
+            <label><span>Seu e-mail</span><input name="email" type="email" autocomplete="email" placeholder="nome@exemplo.com" required maxlength="254"></label>
+            <label><span>WhatsApp <em>opcional</em></span><input name="whatsapp" type="tel" autocomplete="tel" placeholder="(00) 00000-0000" maxlength="32"></label>
+            <label class="honeypot" aria-hidden="true">Empresa<input name="company" type="text" tabindex="-1" autocomplete="off"></label>
+            <label class="consent"><input name="consent" type="checkbox" value="true" required><span>Concordo em receber comunicações da Veratus e li a <a href="privacy.html">Política de Privacidade</a>.</span></label>
+            <button type="submit" class="button button-light">Solicitar acesso <span aria-hidden="true">→</span></button>
+          </form>
+          <p id="form-status" class="form-status" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="footer shell"><a class="wordmark" href="#top">VERATUS</a><p>PRECISÃO · EQUILÍBRIO · PERMANÊNCIA</p><p>© 2026 VERATUS</p></footer>
   <script>
     const form=document.getElementById('capture'),status=document.getElementById('form-status');
-    form.addEventListener('submit',async(event)=>{event.preventDefault();if(!form.checkValidity()){form.reportValidity();return}const button=form.querySelector('button'),params=new URLSearchParams(location.search),data=Object.fromEntries(new FormData(form));data.source='landing_pre_venda';['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(key=>{if(params.get(key))data[key]=params.get(key)});button.disabled=true;status.textContent='Enviando seu cadastro…';try{const response=await fetch(form.action,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)}),result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'Não foi possível concluir o cadastro.');form.reset();status.textContent='Cadastro confirmado. Você receberá as novidades da Veratus.'}catch(error){status.textContent=error.message||'Não foi possível enviar agora. Tente novamente em instantes.'}finally{button.disabled=false}});
+    form.addEventListener('submit',async(event)=>{event.preventDefault();if(!form.checkValidity()){form.reportValidity();return}const button=form.querySelector('button'),params=new URLSearchParams(location.search),data=Object.fromEntries(new FormData(form));data.source='landing_pre_venda';['utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(key=>{if(params.get(key))data[key]=params.get(key)});button.disabled=true;status.textContent='Registrando seu acesso…';try{const response=await fetch(form.action,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)}),result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'Não foi possível concluir o cadastro.');form.reset();status.textContent='Acesso registrado. Em breve, você receberá as novidades da Veratus.'}catch(error){status.textContent=error.message||'Não foi possível enviar agora. Tente novamente em instantes.'}finally{button.disabled=false}});
   </script>
-</body></html>
+</body>
+</html>
