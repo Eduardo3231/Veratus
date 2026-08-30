@@ -2,11 +2,11 @@
 
 ## Objetivo
 
-Validar a procura e converter as primeiras vendas de uma seleção de relógios masculinos, com preço de referência de **R$390** e prazo de despacho/entrega informado de **até 7 dias**.
+Validar a procura e converter as primeiras vendas de uma seleção de relógios masculinos, com preço a partir de **R$299,90** e prazo de despacho/entrega informado de **até 7 dias**.
 
 ## Verdades que devem aparecer em toda comunicação
 
-- Preço: **R$390**.
+- Preço: **a partir de R$299,90**, conforme o modelo confirmado.
 - Prazo: **até 7 dias**, somente se for um prazo que a operação consegue cumprir.
 - Estoque e variações: confirmar antes de cada anúncio.
 - Procedência, condição, garantia, resistência à água, movimento, medidas e acessórios: publicar somente dados verificáveis em nota fiscal, documentação do fornecedor ou inspeção do item.
@@ -17,11 +17,11 @@ Validar a procura e converter as primeiras vendas de uma seleção de relógios 
 | Métrica | Valor |
 | --- | ---: |
 | Custo informado do produto | R$65 |
-| Preço de venda | R$390 |
-| Margem bruta antes de operação | R$325 |
-| Margem bruta sobre a venda | 83,3% |
+| Preço de venda | A partir de R$299,90 |
+| Margem bruta antes de operação | A partir de R$234,90 |
+| Margem bruta sobre a venda | A partir de 78,3% |
 
-O custo de anúncio aceitável só pode ser definido depois de reservar frete, embalagem, taxas de pagamento, impostos, trocas/devoluções e atendimento. Fórmula: `CAC máximo = R$325 − custos operacionais por pedido − lucro mínimo desejado`.
+O custo de anúncio aceitável só pode ser definido depois de reservar frete, embalagem, taxas de pagamento, impostos, trocas/devoluções e atendimento. Fórmula: `CAC máximo = R$234,90 − custos operacionais por pedido − lucro mínimo desejado`.
 
 ## Direção de Foto
 
@@ -55,7 +55,7 @@ Uso recomendado: imagem editorial de anúncio ou capa de campanha. Antes de publ
 
 **Subtítulo:** Uma seleção Veratus de relógios masculinos para quem procura acabamento marcante e estilo em qualquer ocasião.
 
-**Preço:** R$390
+**Preço:** a partir de R$299,90
 
 **Operação:** Envio em até 7 dias, conforme disponibilidade.
 
@@ -69,7 +69,7 @@ Uso recomendado: imagem editorial de anúncio ou capa de campanha. Antes de publ
 >
 > Conheça a seleção Veratus de relógios masculinos com presença, acabamento e estilo para acompanhar a sua rotina.
 >
-> R$390 · envio em até 7 dias. Consulte os modelos disponíveis.
+> A partir de R$299,90 · frete incluso e envio em até 7 dias. Consulte os modelos disponíveis.
 
 ### B. Escolha
 
@@ -77,7 +77,7 @@ Uso recomendado: imagem editorial de anúncio ou capa de campanha. Antes de publ
 >
 > Escolha um relógio que termina o visual com intenção. Modelos selecionados, disponibilidade limitada por variação.
 >
-> R$390 · envio em até 7 dias.
+> A partir de R$299,90 · frete incluso e envio em até 7 dias.
 
 ### C. Detalhe
 
@@ -85,7 +85,7 @@ Uso recomendado: imagem editorial de anúncio ou capa de campanha. Antes de publ
 >
 > Uma seleção feita para homens que valorizam presença nos detalhes.
 >
-> Veja os modelos disponíveis por R$390.
+> Veja os modelos disponíveis a partir de R$299,90.
 
 ## Estrutura do Primeiro Teste de Anúncio
 
@@ -108,6 +108,6 @@ Uso recomendado: imagem editorial de anúncio ou capa de campanha. Antes de publ
 
 ## Roteiro de Atendimento Inicial
 
-> Olá! Obrigado pelo interesse na seleção Veratus. O modelo que você viu está disponível por R$390. O prazo informado é de até 7 dias. Posso te enviar as fotos reais, detalhes do item e as opções de pagamento?
+> Olá! Obrigado pelo interesse na seleção Veratus. Os modelos partem de R$299,90, com frete incluso. O prazo informado é de até 7 dias. Posso te enviar as fotos reais, detalhes do item e as opções de pagamento?
 
 Não confirmar disponibilidade, prazo, especificações ou garantia sem consultar o estoque e os dados do modelo solicitado.
