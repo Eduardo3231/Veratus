@@ -17,7 +17,7 @@
     <section class="hero" aria-labelledby="hero-title">
       <nav class="nav shell" aria-label="Principal">
         <a class="wordmark" href="#top" aria-label="Veratus, início">VERATUS</a>
-        <a class="nav-link" href="#comprar">COMPRAR PELO WHATSAPP <span aria-hidden="true">↘</span></a>
+        <div class="nav-actions"><a class="nav-link nav-collection-link" href="#colecao">COLEÇÃO <span aria-hidden="true">↓</span></a><a class="nav-link" href="#comprar">COMPRAR PELO WHATSAPP <span aria-hidden="true">↘</span></a></div>
       </nav>
 
       <div class="hero-grid shell" id="top">
@@ -26,7 +26,7 @@
           <h1 id="hero-title">A artesania fina<br><em>que vale</em><br>o seu tempo.</h1>
           <p class="lede">Relógios selecionados para quem valoriza presença e um visual marcante. Escolha seu modelo com atendimento direto pelo WhatsApp.</p>
           <div class="hero-actions">
-            <a class="button button-gold" href="https://wa.me/5511958323612?text=Ol%C3%A1%2C+vim+pelo+site+da+Veratus+e+quero+conhecer+os+modelos+dispon%C3%ADveis." target="_blank" rel="noopener">Ver modelos disponíveis <span aria-hidden="true">→</span></a>
+            <a class="button button-gold purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1%2C+vim+pelo+site+da+Veratus+e+quero+conhecer+os+modelos+dispon%C3%ADveis." target="_blank" rel="noopener">Ver modelos disponíveis <span aria-hidden="true">→</span></a>
             <p>A PARTIR DE<br><strong>R$ 299,90</strong></p>
           </div>
         </div>
@@ -40,8 +40,34 @@
       <div class="hero-footer shell"><span>SCROLL PARA DESCOBRIR</span><span class="scroll-line" aria-hidden="true"></span><span>BRASIL · 2026</span></div>
     </section>
 
+    <section class="collection shell" id="colecao" aria-labelledby="collection-title">
+      <div class="collection-heading">
+        <div><p class="section-label">01 / MODELOS EM DESTAQUE</p><h2 id="collection-title">Encontre o detalhe<br><em>que fala por você.</em></h2></div>
+        <p>Uma seleção visual para você explorar as variações disponíveis antes de falar com a Veratus.</p>
+      </div>
+      <div class="collection-showcase">
+        <div class="model-stage" aria-live="polite">
+          <span class="model-stage-count"><b id="selected-index">01</b> / 03</span>
+          <img id="selected-model-image" src="assets/products/veratus-modelo-ivory.png" alt="Modelo Ivory, relógio com mostrador claro e aro escuro">
+          <div class="model-stage-copy"><p id="selected-model-type">SELEÇÃO VERATUS</p><h3 id="selected-model-name">IVORY</h3></div>
+        </div>
+        <div class="model-selector" role="tablist" aria-label="Escolha um modelo para visualizar">
+          <button class="model-option is-active" type="button" role="tab" aria-selected="true" aria-controls="selected-model-image" data-model-index="01" data-model-name="IVORY" data-model-type="SELEÇÃO VERATUS" data-model-image="assets/products/veratus-modelo-ivory.png" data-model-alt="Modelo Ivory, relógio com mostrador claro e aro escuro">
+            <img src="assets/products/veratus-modelo-ivory.png" alt="" aria-hidden="true"><span><b>01 / IVORY</b><small>Clareza e contraste</small></span><i aria-hidden="true">↗</i>
+          </button>
+          <button class="model-option" type="button" role="tab" aria-selected="false" aria-controls="selected-model-image" data-model-index="02" data-model-name="AZURE" data-model-type="SELEÇÃO VERATUS" data-model-image="assets/products/veratus-modelo-azure.png" data-model-alt="Modelo Azure, relógio com aro azul e mostrador claro">
+            <img src="assets/products/veratus-modelo-azure.png" alt="" aria-hidden="true"><span><b>02 / AZURE</b><small>Azul de presença</small></span><i aria-hidden="true">↗</i>
+          </button>
+          <button class="model-option" type="button" role="tab" aria-selected="false" aria-controls="selected-model-image" data-model-index="03" data-model-name="EMERALD" data-model-type="SELEÇÃO VERATUS" data-model-image="assets/products/veratus-modelo-emerald.png" data-model-alt="Modelo Emerald, relógio com mostrador e aro verdes">
+            <img src="assets/products/veratus-modelo-emerald.png" alt="" aria-hidden="true"><span><b>03 / EMERALD</b><small>Verde marcante</small></span><i aria-hidden="true">↗</i>
+          </button>
+          <p class="collection-price">A partir de <strong>R$ 299,90</strong><br><span>Frete incluso para todo o Brasil</span></p>
+        </div>
+      </div>
+    </section>
+
     <section class="manifesto shell">
-      <p class="section-label">01 / SELEÇÃO PREMIUM</p>
+      <p class="section-label">02 / SELEÇÃO PREMIUM</p>
       <div class="manifesto-main">
         <h2>Mais que um relógio.<br>Mais <em>status.</em></h2>
         <p>Para quem busca uma escolha marcante no pulso, a Veratus reúne modelos selecionados com atendimento direto, compra simples e envio para todo o Brasil.</p>
@@ -55,7 +81,7 @@
 
     <section class="access-section" id="comprar" aria-labelledby="purchase-title">
       <div class="access shell">
-        <div class="access-intro"><p class="section-label">02 / COMPRE COM ATENDIMENTO</p><h2 id="purchase-title">Escolha o seu.<br>Fale <em>direto</em> conosco.</h2><p>Envie uma mensagem para receber os modelos disponíveis, confirmar a disponibilidade e concluir seu pedido com a Veratus.</p></div>
+        <div class="access-intro"><p class="section-label">03 / COMPRE COM ATENDIMENTO</p><h2 id="purchase-title">Escolha o seu.<br>Fale <em>direto</em> conosco.</h2><p>Envie uma mensagem para receber os modelos disponíveis, confirmar a disponibilidade e concluir seu pedido com a Veratus.</p></div>
         <div class="purchase-card">
           <p class="form-overline">PEDIDO PELO WHATSAPP</p>
           <p class="purchase-price">A partir de <strong>R$ 299,90</strong></p>
@@ -65,14 +91,14 @@
             <li>Frete incluso para todo o Brasil</li>
             <li>Prazo de envio: até 7 dias após confirmação</li>
           </ul>
-          <a class="button button-light" href="https://wa.me/5511958323612?text=Ol%C3%A1%2C+vim+pelo+site+da+Veratus+e+quero+comprar+um+rel%C3%B3gio.+Pode+me+mostrar+os+modelos+dispon%C3%ADveis%3F" target="_blank" rel="noopener">Quero comprar pelo WhatsApp <span aria-hidden="true">→</span></a>
+          <a class="button button-light purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1%2C+vim+pelo+site+da+Veratus+e+quero+comprar+um+rel%C3%B3gio.+Pode+me+mostrar+os+modelos+dispon%C3%ADveis%3F" target="_blank" rel="noopener">Quero comprar pelo WhatsApp <span aria-hidden="true">→</span></a>
           <p class="purchase-fine">Após confirmar o modelo, você recebe um link de pagamento por Pix, débito ou crédito.</p>
         </div>
       </div>
     </section>
 
     <section class="purchase-process shell" aria-labelledby="process-title">
-      <p class="section-label">03 / COMO FUNCIONA</p>
+      <p class="section-label">04 / COMO FUNCIONA</p>
       <div class="process-heading"><h2 id="process-title">Uma compra clara,<br><em>do início ao envio.</em></h2><p>Você só conclui o pagamento depois de receber a confirmação completa do pedido.</p></div>
       <ol class="process-list">
         <li><span>01</span><div><h3>Escolha</h3><p>Chame no WhatsApp e receba os modelos disponíveis.</p></div></li>
@@ -83,5 +109,6 @@
     </section>
   </main>
   <footer class="footer shell"><a class="wordmark" href="#top">VERATUS</a><p>PRECISÃO · EQUILÍBRIO · PERMANÊNCIA</p><p><a href="condicoes-de-compra.html">CONDIÇÕES</a> · <a href="privacy.html">PRIVACIDADE</a></p><p>© 2026 VERATUS</p></footer>
+  <script src="site.js"></script>
 </body>
 </html>
