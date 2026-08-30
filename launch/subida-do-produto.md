@@ -5,7 +5,7 @@
 - **Site público atual:** `https://veratus.onrender.com/` ainda exibe acesso antecipado.
 - **Página de venda preparada localmente:** `landing/index.html`.
 - **Canal de compra:** WhatsApp `+55 11 95832-3612`.
-- **Oferta informada:** a partir de R$ 299,90 por unidade.
+- **Oferta informada:** a partir de R$ 389,90 por unidade.
 - **Prazo informado:** entrega para todo o Brasil em até 7 dias após confirmação.
 - **Anúncios:** somente prévias; nenhuma campanha, anúncio ou gasto foi criado.
 
@@ -23,7 +23,7 @@
 3. Aguarde o deploy do Render terminar.
 4. Abra `https://veratus.onrender.com/` e valide:
    - os botões abrem uma conversa com `+55 11 95832-3612`;
-   - aparece o preço a partir de R$ 299,90;
+   - aparece o preço a partir de R$ 389,90;
    - aparece o prazo de até 7 dias;
    - a página não menciona mais “acesso antecipado”.
 
@@ -66,7 +66,7 @@ Antes de receber pagamento, confirme por mensagem: modelo, cor, valor total, end
 | 2 | Escolha de presença | Detalhes que finalizam o visual. Atendimento pelo WhatsApp. |
 | 3 | Seu tempo, seu estilo | Conheça os modelos disponíveis. |
 | 4 | Elegância nos detalhes | Seleção masculina. Entrega para todo o Brasil. |
-| 5 | Um detalhe que fica | A partir de R$299,90. Envio em até 7 dias. |
+| 5 | Um detalhe que fica | A partir de R$389,90. Envio em até 7 dias. |
 
 ## Liberação de mídia
 

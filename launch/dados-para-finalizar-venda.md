@@ -7,7 +7,7 @@ Preencha e mantenha estes dados disponíveis antes de aceitar o primeiro pagamen
 | Identificação do vendedor | Preenchida na página de condições de compra | Condições de compra, confirmação de pedido e comprovante |
 | Endereço para atendimento e devolução | Preenchido na página de condições de compra | Condições de compra e pós-venda |
 | Pagamento | Link enviado após confirmação; Pix, débito ou crédito | Página e mensagem de confirmação do pedido |
-| Frete | Incluso no preço a partir de R$ 299,90 para todo o Brasil | Página, anúncio e confirmação do pedido |
+| Frete | Incluso no preço a partir de R$ 389,90 para todo o Brasil | Página, anúncio e confirmação do pedido |
 | Envio | Transportadora/Correios e formato do rastreio | Pós-venda |
 | Política comercial | Como serão tratadas trocas, desistências e produtos com defeito | Condições de compra e atendimento |
 
