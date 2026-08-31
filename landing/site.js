@@ -9,7 +9,7 @@ function selectModel(option) {
   options.forEach((item) => {
     const active = item === option;
     item.classList.toggle('is-active', active);
-    item.setAttribute('aria-selected', String(active));
+    item.setAttribute('aria-pressed', String(active));
   });
 
   selectedImage.classList.add('is-changing');
@@ -31,12 +31,18 @@ function selectModel(option) {
 options.forEach((option) => option.addEventListener('click', () => selectModel(option)));
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const revealItems = document.querySelectorAll('.reveal');
 const hero = document.querySelector('.hero');
+const motionSelectors = [
+  '.nav', '.hero-footer', '.access-product-image', '.footer > *'
+].join(', ');
+
+document.querySelectorAll(motionSelectors).forEach((item) => item.classList.add('reveal'));
+const revealItems = document.querySelectorAll('.reveal');
 
 document.body.classList.add('js-ready');
-revealItems.forEach((item) => {
-  if (item.dataset.revealDelay) item.style.setProperty('--reveal-delay', `${item.dataset.revealDelay}ms`);
+revealItems.forEach((item, index) => {
+  const delay = item.dataset.revealDelay ?? (index % 4) * 65;
+  item.style.setProperty('--reveal-delay', `${delay}ms`);
 });
 
 function reveal(item) {
