@@ -29,3 +29,32 @@ function selectModel(option) {
 }
 
 options.forEach((option) => option.addEventListener('click', () => selectModel(option)));
+
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const revealItems = document.querySelectorAll('.reveal');
+const hero = document.querySelector('.hero');
+
+document.body.classList.add('js-ready');
+revealItems.forEach((item) => {
+  if (item.dataset.revealDelay) item.style.setProperty('--reveal-delay', `${item.dataset.revealDelay}ms`);
+});
+
+function reveal(item) {
+  item.classList.add('is-visible');
+}
+
+if (reducedMotion || !('IntersectionObserver' in window)) {
+  revealItems.forEach(reveal);
+  hero?.classList.add('is-loaded');
+} else {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      reveal(entry.target);
+      observer.unobserve(entry.target);
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -35px' });
+
+  revealItems.forEach((item) => observer.observe(item));
+  window.requestAnimationFrame(() => hero?.classList.add('is-loaded'));
+}
