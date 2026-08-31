@@ -41,7 +41,7 @@ const revealItems = document.querySelectorAll('.reveal');
 
 document.body.classList.add('js-ready');
 revealItems.forEach((item, index) => {
-  const delay = item.dataset.revealDelay ?? (index % 4) * 65;
+  const delay = item.dataset.revealDelay ?? (index % 4) * 105;
   item.style.setProperty('--reveal-delay', `${delay}ms`);
 });
 
