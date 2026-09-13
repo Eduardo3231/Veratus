@@ -2,117 +2,68 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Veratus — relógios selecionados para quem valoriza presença. Compre com atendimento pelo WhatsApp e entrega para todo o Brasil.">
-  <title>Veratus — Relógios selecionados</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="icon" type="image/png" href="assets/veratus-v-wheat-alpha.png?v=6">
-  <meta name="theme-color" content="#0d0d0d">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="description" content="Veratus — uma curadoria de relógios para diferentes estilos, com atendimento direto e compra acompanhada.">
+  <meta name="theme-color" content="#050505">
+  <meta property="og:title" content="Veratus — Seu tempo. Seu estilo.">
+  <meta property="og:description" content="Descubra a coleção Veratus e encontre o modelo que combina com seu momento.">
+  <meta property="og:image" content="assets/campaign/royal-blue-editorial.webp">
+  <meta property="og:type" content="website"><meta property="og:locale" content="pt_BR"><meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://veratus.onrender.com/">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="preload" href="assets/video/veratus-hero-poster.webp" as="image"><link rel="stylesheet" href="styles.css">
+  <title>Veratus — Seu tempo. Seu estilo.</title>
 </head>
 <body>
-  <main>
+  <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+  <header class="site-header" id="topo">
+    <a class="brand" href="#topo" aria-label="Veratus, início"><img src="assets/veratus-emblem.jpeg" alt="Veratus" width="128" height="128"></a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-nav"><span></span><span></span><span></span><span class="sr-only">Abrir menu</span></button>
+    <nav id="main-nav" class="main-nav" aria-label="Navegação principal"><a href="#colecao">Coleção</a><a href="#essencia">Nossa essência</a><a href="#estilos">Estilos</a><a href="#contato">Contato</a><a class="nav-cta purchase-link" href="https://wa.me/5511958323612" target="_blank" rel="noopener">WhatsApp</a></nav>
+  </header>
+  <main id="conteudo">
     <section class="hero" aria-labelledby="hero-title">
-      <nav class="nav shell" aria-label="Principal">
-        <a class="wordmark" href="#top" aria-label="Veratus, início">VERATUS</a>
-        <div class="nav-actions"><a class="nav-link nav-collection-link" href="#colecao">COLEÇÃO <span aria-hidden="true">↓</span></a><a class="nav-link" href="#comprar">COMPRAR PELO WHATSAPP <span aria-hidden="true">↘</span></a></div>
-      </nav>
-
-      <div class="hero-grid shell" id="top">
-        <div class="hero-copy reveal reveal-hero">
-          <p class="kicker"><span></span> RELÓGIOS SELECIONADOS</p>
-          <h1 id="hero-title">A artesania fina<br><em>que vale</em><br>o seu tempo.</h1>
-          <p class="lede">Relógios selecionados para quem valoriza presença e um visual marcante. Escolha seu modelo com atendimento direto pelo WhatsApp.</p>
-          <div class="hero-actions">
-            <a class="button button-gold purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1%2C+vim+pelo+site+da+Veratus+e+quero+conhecer+os+modelos+dispon%C3%ADveis." target="_blank" rel="noopener">Ver modelos disponíveis <span aria-hidden="true">→</span></a>
-            <p>A PARTIR DE<br><strong>R$ 389,90</strong></p>
-          </div>
-        </div>
-
-        <figure class="emblem-stage reveal reveal-hero" data-reveal-delay="150" aria-label="Símbolo da Veratus em dourado">
-          <div class="orbital orbital-one"><span class="orbital-light orbital-light-a" aria-hidden="true"></span><span class="orbital-light orbital-light-b" aria-hidden="true"></span></div><div class="orbital orbital-two"><span class="orbital-light orbital-light-c" aria-hidden="true"></span></div>
-          <div class="emblem-image"><img src="assets/veratus-emblem.jpeg" alt="Símbolo dourado da Veratus"></div>
-          <figcaption><span>V / 01</span><span>PRECISÃO · EQUILÍBRIO · PERMANÊNCIA</span></figcaption>
-        </figure>
-      </div>
-      <div class="hero-footer shell"><span>SCROLL PARA DESCOBRIR</span><span class="scroll-line" aria-hidden="true"></span><span>BRASIL · 2026</span></div>
+      <video class="hero-video" autoplay muted loop playsinline preload="metadata" poster="assets/video/veratus-hero-poster.webp" aria-hidden="true"><source src="assets/video/veratus-hero-desktop.mp4" type="video/mp4"></video>
+      <div class="hero-shade" aria-hidden="true"></div>
+      <div class="hero-content shell"><p class="eyebrow">Mais que relógios</p><h1 id="hero-title">Presença<br>em cada<br><em>detalhe.</em></h1><p class="hero-copy">Relógios selecionados para acompanhar diferentes histórias, estilos e momentos.</p><div class="hero-actions"><a class="button button-gold" href="#colecao">Explorar a coleção</a><a class="button button-ghost purchase-link" href="https://wa.me/5511958323612" target="_blank" rel="noopener">Falar com a Veratus</a></div></div>
+      <div class="hero-meta shell"><span>VERATUS / 2026</span><a href="#essencia">Role para descobrir <i aria-hidden="true"></i></a></div>
     </section>
-
-    <section class="collection shell" id="colecao" aria-labelledby="collection-title">
-      <div class="collection-heading reveal">
-        <div><p class="section-label">01 / MODELOS EM DESTAQUE</p><h2 id="collection-title">Encontre o detalhe<br><em>que fala por você.</em></h2></div>
-        <p>Uma seleção visual para você explorar as variações disponíveis antes de falar com a Veratus.</p>
-      </div>
-      <div class="collection-showcase reveal" data-reveal-delay="100">
-        <div class="model-stage" aria-live="polite">
-          <span class="model-stage-count"><b id="selected-index">01</b> / 03</span>
-          <img id="selected-model-image" src="assets/products/veratus-modelo-silver.png" alt="Modelo Silver, relógio com mostrador claro e acabamento em aço" loading="lazy" decoding="async">
-          <div class="model-stage-copy"><p id="selected-model-type">SELEÇÃO VERATUS</p><h3 id="selected-model-name">SILVER</h3></div>
-        </div>
-        <div class="model-selector" aria-label="Escolha um modelo para visualizar">
-          <button class="model-option is-active" type="button" aria-pressed="true" data-model-index="01" data-model-name="SILVER" data-model-type="SELEÇÃO VERATUS" data-model-image="assets/products/veratus-modelo-silver.png" data-model-alt="Modelo Silver, relógio com mostrador claro e acabamento em aço">
-            <img src="assets/products/veratus-modelo-silver.png" alt="" aria-hidden="true" loading="lazy" decoding="async"><span><b>01 / SILVER</b><small>Clássico em aço</small></span><i aria-hidden="true">↗</i>
-          </button>
-          <button class="model-option" type="button" aria-pressed="false" data-model-index="02" data-model-name="NAVY GOLD" data-model-type="SELEÇÃO VERATUS" data-model-image="assets/products/veratus-modelo-navy-gold.png" data-model-alt="Modelo Navy Gold, relógio azul com acabamento dourado">
-            <img src="assets/products/veratus-modelo-navy-gold.png" alt="" aria-hidden="true" loading="lazy" decoding="async"><span><b>02 / NAVY GOLD</b><small>Azul e dourado</small></span><i aria-hidden="true">↗</i>
-          </button>
-          <button class="model-option" type="button" aria-pressed="false" data-model-index="03" data-model-name="EMERALD" data-model-type="SELEÇÃO VERATUS" data-model-image="assets/products/veratus-modelo-emerald.png" data-model-alt="Modelo Emerald, relógio com mostrador e aro verdes">
-            <img src="assets/products/veratus-modelo-emerald.png" alt="" aria-hidden="true" loading="lazy" decoding="async"><span><b>03 / EMERALD</b><small>Verde marcante</small></span><i aria-hidden="true">↗</i>
-          </button>
-          <p class="collection-price">A partir de <strong>R$ 389,90</strong><br><span>Frete incluso para todo o Brasil</span></p>
-        </div>
+    <section class="manifesto section shell" id="essencia" aria-labelledby="manifesto-title"><div class="section-index">01 / Nossa essência</div><div class="manifesto-grid reveal"><h2 id="manifesto-title">Não existe<br>um único jeito<br><em>de ter estilo.</em></h2><div><p>A Veratus acredita que estilo não pertence a um único perfil, rotina ou momento.</p><p>Cada pessoa carrega sua própria história. O relógio apenas acompanha.</p></div></div></section>
+    <section class="experience section" id="colecao" aria-labelledby="collection-title">
+      <div class="shell collection-heading reveal"><div><p class="section-index">02 / Experiência da coleção</p><h2 id="collection-title">Quatro universos.<br><em>Uma essência.</em></h2></div><p>Escolha um ambiente. Descubra o modelo que combina com o seu momento.</p></div>
+      <div class="watch-experience shell reveal"><div class="watch-stage"><div class="watch-glow" aria-hidden="true"></div><img id="selected-watch" src="assets/campaign/silver-jubilee-editorial.webp" alt="Relógio Silver Jubilee em cenário editorial escuro" width="1024" height="1536"><span class="watch-counter"><b id="watch-index">01</b> / 04</span></div>
+        <div class="watch-panel" aria-live="polite"><p id="watch-biome" class="eyebrow">Geleira / Alta montanha</p><h3 id="watch-name">Silver Jubilee</h3><p id="watch-description">Elegância discreta para todos os momentos.</p>
+          <div class="watch-options" role="group" aria-label="Selecione um modelo">
+            <button class="watch-option is-active" type="button" aria-pressed="true" data-index="01" data-name="Silver Jubilee" data-biome="Geleira / Alta montanha" data-description="Elegância discreta para todos os momentos." data-image="assets/campaign/silver-jubilee-editorial.webp" data-alt="Relógio Silver Jubilee em cenário editorial escuro"><span>01</span>Silver</button>
+            <button class="watch-option" type="button" aria-pressed="false" data-index="02" data-name="Royal Blue" data-biome="Costa vulcânica / Golden hour" data-description="Presença marcante em cada detalhe." data-image="assets/campaign/royal-blue-editorial.webp" data-alt="Relógio Royal Blue em cenário azul e dourado"><span>02</span>Royal</button>
+            <button class="watch-option" type="button" aria-pressed="false" data-index="03" data-name="Emerald" data-biome="Cânion de floresta esmeralda" data-description="Estilo autêntico com personalidade." data-image="assets/campaign/emerald-editorial.webp" data-alt="Relógio Emerald em cenário verde escuro"><span>03</span>Emerald</button>
+            <button class="watch-option" type="button" aria-pressed="false" data-index="04" data-name="Ocean Blue" data-biome="Fiorde glacial / Blue hour" data-description="Sofisticação esportiva sem exageros." data-image="assets/campaign/ocean-blue-editorial.webp" data-alt="Relógio Ocean Blue em cenário azul e preto"><span>04</span>Ocean</button>
+          </div><a class="text-link purchase-link" id="selected-watch-link" href="https://wa.me/5511958323612" target="_blank" rel="noopener">Quero este modelo <span aria-hidden="true">↗</span></a>
+        </div></div>
+    </section>
+    <section class="detail-story section" aria-labelledby="detail-title"><div class="detail-media reveal"><img src="assets/campaign/royal-blue-gold-box.webp" alt="Relógio azul e dourado apresentado em caixa clara" loading="lazy" width="1024" height="1536"></div><div class="detail-copy reveal"><p class="section-index">03 / Produto protagonista</p><h2 id="detail-title">O detalhe muda.<br><em>A presença fica.</em></h2><p>Uma seleção visual para você comparar cores, acabamentos e estilos antes de conversar com a Veratus.</p><a class="text-link" href="#galeria">Ver todos os detalhes <span aria-hidden="true">↓</span></a></div></section>
+    <section class="style-section section shell" id="estilos" aria-labelledby="style-title">
+      <div class="style-heading reveal"><div><p class="section-index">04 / Escolha seu estilo</p><h2 id="style-title">Qual é o<br><em>seu estilo?</em></h2></div><p>Não existe uma escolha única. Existe o modelo que combina com seu momento.</p></div>
+      <div class="style-filter reveal" role="group" aria-label="Filtrar modelos por estilo"><button class="style-button is-active" type="button" data-filter="todos">Todos</button><button class="style-button" type="button" data-filter="classico">Clássico</button><button class="style-button" type="button" data-filter="esportivo">Esportivo</button><button class="style-button" type="button" data-filter="marcante">Marcante</button><button class="style-button" type="button" data-filter="versatil">Versátil</button></div>
+      <div class="editorial-grid" id="galeria">
+        <article class="product-card reveal" data-style="classico versatil"><img src="assets/campaign/silver-jubilee-box.webp" alt="Relógio prateado com mostrador claro em caixa" loading="lazy"><div><span>Clássico / Versátil</span><h3>Silver Jubilee</h3><a href="#colecao">Ver detalhes</a></div></article>
+        <article class="product-card reveal" data-style="marcante"><img src="assets/campaign/royal-blue-gold-box.webp" alt="Relógio dourado com mostrador azul em caixa" loading="lazy"><div><span>Marcante</span><h3>Royal Blue</h3><a href="#colecao">Ver detalhes</a></div></article>
+        <article class="product-card reveal" data-style="marcante"><img src="assets/campaign/emerald-box.webp" alt="Relógio em aço com mostrador verde em caixa" loading="lazy"><div><span>Marcante</span><h3>Emerald</h3><a href="#colecao">Ver detalhes</a></div></article>
+        <article class="product-card reveal" data-style="esportivo versatil"><img src="assets/campaign/ocean-blue-box.webp" alt="Relógio em aço com mostrador azul em caixa" loading="lazy"><div><span>Esportivo / Versátil</span><h3>Ocean Blue</h3><a href="#colecao">Ver detalhes</a></div></article>
       </div>
     </section>
-
-    <section class="manifesto shell reveal">
-      <p class="section-label">02 / SELEÇÃO PREMIUM</p>
-      <div class="manifesto-main">
-        <h2>Mais que um relógio.<br>Mais <em>status.</em></h2>
-        <p>Para quem busca uma escolha marcante no pulso, a Veratus reúne modelos selecionados com atendimento direto, compra simples e envio para todo o Brasil.</p>
-      </div>
-      <div class="principles">
-        <article><span>01</span><h3>Seleção</h3><p>Modelos escolhidos para compor um visual de presença.</p></article>
-        <article><span>02</span><h3>Atendimento</h3><p>Você conversa com a Veratus antes de concluir o pedido.</p></article>
-        <article><span>03</span><h3>Entrega</h3><p>Envio para todo o Brasil, em até 7 dias após a confirmação.</p></article>
-      </div>
-    </section>
-
-    <section class="access-section" id="comprar" aria-labelledby="purchase-title">
-      <div class="access shell">
-        <div class="access-intro reveal"><p class="section-label">03 / COMPRE COM ATENDIMENTO</p><h2 id="purchase-title">Escolha o seu.<br>Fale <em>direto</em> conosco.</h2><p>Envie uma mensagem para receber os modelos disponíveis, confirmar a disponibilidade e concluir seu pedido com a Veratus.</p><figure class="access-product-image"><img src="assets/products/veratus-selection-grid.png" alt="Seleção de relógios em caixas pretas, organizada em uma grade" loading="lazy" decoding="async"></figure></div>
-        <div class="purchase-card reveal" data-reveal-delay="120">
-          <p class="form-overline">PEDIDO PELO WHATSAPP</p>
-          <p class="purchase-price">A partir de <strong>R$ 389,90</strong></p>
-          <p class="purchase-note">Preço por unidade com frete incluso. Consulte o valor do modelo escolhido antes de finalizar.</p>
-          <ul class="offer-points">
-            <li>Atendimento direto pela Veratus</li>
-            <li>Frete incluso para todo o Brasil</li>
-            <li>Prazo de envio: até 7 dias após confirmação</li>
-          </ul>
-          <a class="button button-light purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1%2C+vim+pelo+site+da+Veratus+e+quero+comprar+um+rel%C3%B3gio.+Pode+me+mostrar+os+modelos+dispon%C3%ADveis%3F" target="_blank" rel="noopener">Quero comprar pelo WhatsApp <span aria-hidden="true">→</span></a>
-          <p class="purchase-fine">Após confirmar o modelo, você recebe um link de pagamento por Pix, débito ou crédito.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="purchase-process shell" aria-labelledby="process-title">
-      <p class="section-label">04 / COMO FUNCIONA</p>
-      <div class="process-heading reveal"><h2 id="process-title">Uma compra clara,<br><em>do início ao envio.</em></h2><p>Você só conclui o pagamento depois de receber a confirmação completa do pedido.</p></div>
-      <figure class="collection-editorial reveal" data-reveal-delay="90">
-        <div class="collection-editorial-image"><img src="assets/products/veratus-collection-showcase.png" alt="Coleção de relógios em caixas pretas, apresentada em um ambiente escuro" loading="lazy" decoding="async"></div>
-        <figcaption><span>VERATUS / COLEÇÃO</span><p>Escolha um modelo que acompanha a sua presença.</p></figcaption>
-      </figure>
-      <ol class="process-list reveal" data-reveal-delay="120">
-        <li><span>01</span><div><h3>Escolha</h3><p>Chame no WhatsApp e receba os modelos disponíveis.</p></div></li>
-        <li><span>02</span><div><h3>Confirmação</h3><p>Confirmamos modelo, valor total com frete incluso e enviamos o link de pagamento.</p></div></li>
-        <li><span>03</span><div><h3>Envio</h3><p>Após a confirmação, você recebe a atualização e o rastreio do envio.</p></div></li>
-      </ol>
-      <p class="process-links"><a href="condicoes-de-compra.html">Condições de compra</a><a href="privacy.html">Privacidade</a></p>
-    </section>
+    <section class="archive section" aria-labelledby="archive-title"><div class="shell archive-heading reveal"><p class="section-index">05 / Arquivo da coleção</p><h2 id="archive-title">Explore cada<br><em>possibilidade.</em></h2></div><div class="archive-track" tabindex="0" aria-label="Galeria horizontal de modelos">
+      <figure><img src="assets/campaign/silver-black-box.webp" alt="Relógio prateado com aro preto" loading="lazy"><figcaption>Silver Onyx</figcaption></figure><figure><img src="assets/campaign/ocean-white-box.webp" alt="Relógio prateado com mostrador claro e aro azul" loading="lazy"><figcaption>Ocean White</figcaption></figure><figure><img src="assets/campaign/onyx-box.webp" alt="Relógio prateado com mostrador preto" loading="lazy"><figcaption>Onyx Classic</figcaption></figure><figure><img src="assets/campaign/bronze-classic-box.webp" alt="Relógio prateado com mostrador bronze" loading="lazy"><figcaption>Bronze Classic</figcaption></figure><figure><img src="assets/campaign/silver-classic-box.webp" alt="Relógio prateado com mostrador claro" loading="lazy"><figcaption>Silver Classic</figcaption></figure>
+      <figure class="original-asset"><img src="assets/products/veratus-modelo-silver.png" alt="Modelo prateado da coleção original Veratus" loading="lazy"><figcaption>Silver / Acervo Veratus</figcaption></figure><figure class="original-asset"><img src="assets/products/veratus-modelo-navy-gold.png" alt="Modelo azul e dourado da coleção original Veratus" loading="lazy"><figcaption>Navy Gold / Acervo Veratus</figcaption></figure><figure class="original-asset"><img src="assets/products/veratus-modelo-emerald.png" alt="Modelo verde da coleção original Veratus" loading="lazy"><figcaption>Emerald / Acervo Veratus</figcaption></figure><figure class="original-asset"><img src="assets/products/veratus-gmt-onyx-hero.png" alt="Modelo GMT Onyx da coleção original Veratus" loading="lazy"><figcaption>GMT Onyx / Acervo Veratus</figcaption></figure><figure class="original-asset"><img src="assets/products/veratus-selection-grid.png" alt="Seleção de relógios do acervo original Veratus" loading="lazy"><figcaption>Seleção / Acervo Veratus</figcaption></figure><figure class="original-asset"><img src="assets/products/veratus-collection-showcase.png" alt="Apresentação da coleção original Veratus" loading="lazy"><figcaption>Coleção / Acervo Veratus</figcaption></figure>
+    </div></section>
+    <section class="inclusion section" aria-labelledby="inclusion-title"><div class="inclusion-bg" aria-hidden="true"></div><div class="shell reveal"><p class="section-index">06 / Veratus</p><h2 id="inclusion-title">O tempo é de todos.<br><em>O estilo também.</em></h2><p>Pessoas diferentes. Rotinas diferentes. Uma forma própria de expressar quem são.</p></div></section>
+    <section class="trust section shell" aria-labelledby="trust-title"><div class="trust-heading reveal"><p class="section-index">07 / Compra acompanhada</p><h2 id="trust-title">Clareza em<br><em>cada etapa.</em></h2></div><div class="trust-grid"><article class="reveal"><span>01</span><h3>Curadoria Veratus</h3><p>Uma seleção visual pensada para ajudar você a encontrar o estilo que combina com o seu momento.</p></article><article class="reveal"><span>02</span><h3>Detalhes antes da compra</h3><p>Peça fotos, disponibilidade, valores e condições diretamente pelo WhatsApp.</p></article><article class="reveal"><span>03</span><h3>Atendimento direto</h3><p>Converse com uma pessoa antes de tomar sua decisão.</p></article></div></section>
+    <section class="contact section" id="contato" aria-labelledby="contact-title"><div class="shell contact-grid reveal"><div><p class="eyebrow">Seu tempo. Seu estilo.</p><h2 id="contact-title">Encontre o modelo<br><em>que fala por você.</em></h2></div><div><p>Fale com a Veratus para consultar modelos, disponibilidade, valores e condições atuais.</p><a class="button button-light purchase-link" href="https://wa.me/5511958323612" target="_blank" rel="noopener">Conversar no WhatsApp</a></div></div></section>
   </main>
-  <footer class="footer shell"><a class="wordmark" href="#top">VERATUS</a><p>PRECISÃO · EQUILÍBRIO · PERMANÊNCIA</p><nav class="footer-contact" aria-label="Canais oficiais"><a href="mailto:veratus.ltda@gmail.com">veratus.ltda@gmail.com</a><a href="https://www.instagram.com/veratus_oficial/" target="_blank" rel="noopener">Instagram @veratus_oficial <span aria-hidden="true">↗</span></a></nav><p><a href="condicoes-de-compra.html">CONDIÇÕES</a> · <a href="privacy.html">PRIVACIDADE</a></p><p>© 2026 VERATUS</p></footer>
+  <div class="mobile-cta" aria-label="Ações rápidas"><a href="#colecao">Ver modelos</a><a class="purchase-link" href="https://wa.me/5511958323612" target="_blank" rel="noopener">WhatsApp</a></div>
+  <footer class="footer shell"><a class="brand footer-brand" href="#topo"><img src="assets/veratus-emblem.jpeg" alt="Veratus" width="128" height="128"></a><p>Seu tempo. Seu estilo.</p><nav aria-label="Links do rodapé"><a href="#colecao">Coleção</a><a href="https://www.instagram.com/veratus_oficial/" target="_blank" rel="noopener">Instagram</a><a href="privacy.html">Privacidade</a><a href="condicoes-de-compra.html">Condições</a></nav><small>© <span id="year"></span> Veratus</small></footer>
   <script src="site.js"></script>
 </body>
 </html>
+
