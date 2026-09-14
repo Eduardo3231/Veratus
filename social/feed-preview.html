@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Prévia do perfil — Veratus</title>
+  <style>
+    :root{--bg:#050505;--panel:#111;--line:#2b2b2b;--gold:#c8a56a;--ivory:#f6f4f0;--muted:#9b978f}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#272015 0,#090909 34%,#050505 100%);color:var(--ivory);font:14px/1.5 Arial,sans-serif}
+    main{width:min(960px,100%);margin:auto;background:var(--bg);min-height:100vh}
+    .notice{padding:12px 20px;text-align:center;background:#15110b;color:#d8bd8d;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+    .profile{display:grid;grid-template-columns:160px 1fr;gap:36px;padding:42px 54px 28px;border-bottom:1px solid var(--line)}
+    .avatar{width:150px;height:150px;border-radius:50%;padding:6px;border:1px solid var(--gold);object-fit:cover}
+    .top{display:flex;align-items:center;gap:18px}.top h1{font-size:22px;font-weight:500;margin:0}.button{border:1px solid #48443d;border-radius:8px;padding:8px 16px;color:var(--ivory);text-decoration:none}
+    .stats{display:flex;gap:34px;margin:24px 0}.stats span{color:var(--muted)}.bio strong{display:block}.bio p{margin:5px 0}.bio a{color:#e5c78e;text-decoration:none}
+    .highlights{display:flex;gap:30px;padding:24px 54px 30px;overflow:auto}.highlight{min-width:76px;text-align:center;color:#d8d4cd;font-size:12px}.highlight img{display:block;width:72px;height:72px;border-radius:50%;object-fit:cover;border:1px solid #4b4235;padding:3px;margin:0 auto 7px}
+    .tabs{display:flex;justify-content:center;gap:60px;border-top:1px solid var(--line);height:54px;align-items:center;color:var(--muted);font-size:11px;letter-spacing:.15em}.tabs b{color:var(--ivory)}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}.tile{position:relative;aspect-ratio:3/4;overflow:hidden;background:#151515}.tile img{width:100%;height:100%;object-fit:cover;display:block}.tile.contain img{object-fit:contain}.reel:after{content:'▶';position:absolute;right:13px;top:12px;color:white;text-shadow:0 2px 8px #000;font-size:18px}
+    .legend{padding:24px 30px 42px;color:var(--muted);text-align:center}.legend strong{color:var(--gold)}
+    @media(max-width:620px){.profile{grid-template-columns:90px 1fr;gap:18px;padding:26px 18px}.avatar{width:88px;height:88px}.top{flex-wrap:wrap}.stats{gap:14px;font-size:12px}.highlights{padding-inline:16px;gap:16px}.highlight{min-width:66px}.highlight img{width:62px;height:62px}.grid{gap:2px}}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="notice">Prévia planejada · os números aparecem somente após a conexão da conta</div>
+    <section class="profile">
+      <img class="avatar" src="../landing/assets/veratus-emblem.jpeg" alt="Emblema Veratus">
+      <div>
+        <div class="top"><h1>veratus_oficial</h1><a class="button" href="#">Editar perfil</a></div>
+        <div class="stats"><div><strong>9</strong> <span>publicações</span></div><div><strong>—</strong> <span>seguidores</span></div><div><strong>—</strong> <span>seguindo</span></div></div>
+        <div class="bio"><strong>VERATUS | Relógios</strong><p>Seu tempo. Seu estilo.<br>Relógios selecionados para diferentes momentos.<br>Atendimento direto no WhatsApp.<br>↓ Explore a coleção</p><a href="https://veratus.onrender.com/">veratus.onrender.com</a></div>
+      </div>
+    </section>
+    <section class="highlights" aria-label="Destaques">
+      <div class="highlight"><img src="assets/highlights/comece.svg" alt="">Comece</div>
+      <div class="highlight"><img src="assets/highlights/colecao.svg" alt="">Coleção</div>
+      <div class="highlight"><img src="assets/highlights/estilos.svg" alt="">Estilos</div>
+      <div class="highlight"><img src="assets/highlights/como-pedir.svg" alt="">Como pedir</div>
+      <div class="highlight"><img src="assets/highlights/atendimento.svg" alt="">Atendimento</div>
+    </section>
+    <nav class="tabs"><b>GRADE</b><span>REELS</span><span>MARCADOS</span></nav>
+    <section class="grid" aria-label="Prévia da grade">
+      <div class="tile"><img src="../landing/assets/campaign/silver-jubilee-editorial.webp" alt="Silver Jubilee"></div>
+      <div class="tile reel"><img src="assets/reels/veratus-reel-colecao-01-cover.jpg" alt="Capa do Reel da coleção"></div>
+      <div class="tile"><img src="../landing/assets/campaign/royal-blue-editorial.webp" alt="Royal Blue"></div>
+      <div class="tile"><img src="../landing/assets/campaign/emerald-editorial.webp" alt="Emerald"></div>
+      <div class="tile contain"><img src="../landing/assets/products/veratus-selection-grid.png" alt="Escolha por estilo"></div>
+      <div class="tile"><img src="../landing/assets/campaign/ocean-blue-editorial.webp" alt="Ocean Blue"></div>
+      <div class="tile"><img src="../landing/assets/campaign/silver-black-box.webp" alt="Silver Onyx"></div>
+      <div class="tile contain"><img src="../landing/assets/products/veratus-collection-showcase.png" alt="Visão da coleção"></div>
+      <div class="tile contain"><img src="../landing/assets/products/veratus-modelo-navy-gold.png" alt="Navy Gold"></div>
+    </section>
+    <p class="legend"><strong>Ordem final da grade.</strong> Publicar seguindo a numeração de fila-publicacao.csv.</p>
+  </main>
+</body>
+</html>
