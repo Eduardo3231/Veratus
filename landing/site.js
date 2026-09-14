@@ -4,6 +4,7 @@ const header = document.querySelector('.site-header');
 const menuButton = document.querySelector('.menu-toggle');
 const menu = document.querySelector('.main-nav');
 const heroContent = document.querySelector('.hero-content');
+const scrollProgress = document.querySelector('.scroll-progress span');
 
 function createWhatsAppLink(productName = '') {
   const detail = productName ? ` o modelo ${productName}` : ' os modelos da coleção';
@@ -68,6 +69,46 @@ document.querySelectorAll('.style-button').forEach((button) => {
   });
 });
 
+const productCards = [...document.querySelectorAll('.product-card')];
+const productDialog = document.querySelector('#product-dialog');
+const dialogImage = document.querySelector('#dialog-image');
+const dialogName = document.querySelector('#dialog-name');
+const dialogEyebrow = document.querySelector('#dialog-eyebrow');
+const dialogDescription = document.querySelector('#dialog-description');
+const dialogCta = document.querySelector('#dialog-cta');
+let activeProductIndex = 0;
+
+function showProduct(index) {
+  const normalizedIndex = (index + productCards.length) % productCards.length;
+  const card = productCards[normalizedIndex];
+  if (!card) return;
+  activeProductIndex = normalizedIndex;
+  dialogImage.src = card.dataset.image;
+  dialogImage.alt = card.dataset.alt;
+  dialogName.textContent = card.dataset.name;
+  dialogEyebrow.textContent = card.dataset.eyebrow;
+  dialogDescription.textContent = card.dataset.description;
+  dialogCta.href = createWhatsAppLink(card.dataset.name);
+  if (!reducedMotion && dialogImage.animate) {
+    dialogImage.animate([
+      { opacity: .35, transform: 'scale(1.015)' },
+      { opacity: 1, transform: 'scale(1)' },
+    ], { duration: 420, easing: 'cubic-bezier(.2,.75,.25,1)' });
+  }
+}
+
+productCards.forEach((card, index) => {
+  card.querySelector('.product-open')?.addEventListener('click', () => {
+    showProduct(index);
+    productDialog?.showModal();
+  });
+});
+productDialog?.querySelector('.dialog-close')?.addEventListener('click', () => productDialog.close());
+productDialog?.querySelector('.dialog-next')?.addEventListener('click', () => showProduct(activeProductIndex + 1));
+productDialog?.addEventListener('click', (event) => {
+  if (event.target === productDialog) productDialog.close();
+});
+
 const revealItems = document.querySelectorAll('.reveal');
 if (reducedMotion || !('IntersectionObserver' in window)) {
   revealItems.forEach((item) => item.classList.add('is-visible'));
@@ -85,7 +126,9 @@ if (reducedMotion || !('IntersectionObserver' in window)) {
 let ticking = false;
 function updateScrollEffects() {
   const y = window.scrollY;
+  const scrollable = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
   header?.classList.toggle('is-scrolled', y > 25);
+  if (scrollProgress) scrollProgress.style.transform = `scaleX(${Math.min(y / scrollable, 1)})`;
   if (!reducedMotion && heroContent) {
     const progress = Math.min(y / Math.max(window.innerHeight, 1), 1);
     heroContent.style.opacity = String(1 - progress * .7);
