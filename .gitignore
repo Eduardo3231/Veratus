@@ -4,3 +4,4 @@ __pycache__/
 *.py[cod]
 leads.csv
 .pytest_cache/
+social/publishing-state.json

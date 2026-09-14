@@ -13,6 +13,8 @@ Pacote preparado para organizar Instagram, reaproveitar vídeos no TikTok e cond
 - `feed-preview.html`: prévia visual da grade 3 × 3.
 - `assets/highlights/`: cinco capas de destaques.
 - `assets/reels/`: Reel vertical e capa.
+- `publishing-payloads.json`: textos, descrições acessíveis e URLs da automação.
+- `../integrations/meta_content_publisher.py`: validação e publicação pela API oficial.
 
 ## Aplicação
 
@@ -21,5 +23,7 @@ Pacote preparado para organizar Instagram, reaproveitar vídeos no TikTok e cond
 3. Agendar a fila de 1 a 9 sem inverter a sequência.
 4. Reaproveitar o Reel no TikTok e no Facebook, se as contas estiverem conectadas.
 5. Preencher `medicao.csv` 24 horas e 7 dias após cada publicação.
+
+Os arquivos finais aceitos pela automação também estão em `landing/social/`, para que a Meta consiga buscá-los por HTTPS.
 
 O pacote não presume valores, estoque, prazos ou características que ainda precisam ser confirmados para cada item.

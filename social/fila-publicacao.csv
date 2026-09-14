@@ -1,12 +1,12 @@
 ordem;data_sugerida_brt;canal;formato;conteudo;arquivo;legenda;objetivo;cta;status
-1;2026-09-14 19:30;Instagram;Imagem;Navy Gold;landing/assets/products/veratus-modelo-navy-gold.png;1;Apresentar estilo;Visitar link da bio;pronto_para_agendar
-2;2026-09-16 12:30;Instagram;Imagem;Visão da coleção;landing/assets/products/veratus-collection-showcase.png;2;Gerar comentários;Comentar um estilo;pronto_para_agendar
-3;2026-09-18 19:30;Instagram;Imagem;Silver Onyx;landing/assets/campaign/silver-black-box.webp;3;Gerar salvamentos;Salvar publicação;pronto_para_agendar
-4;2026-09-21 19:30;Instagram;Imagem;Ocean Blue;landing/assets/campaign/ocean-blue-editorial.webp;4;Levar ao site;Visitar link da bio;pronto_para_agendar
-5;2026-09-23 12:30;Instagram;Imagem;Escolha por estilo;landing/assets/products/veratus-selection-grid.png;5;Aprender preferência;Comentar um estilo;pronto_para_agendar
-6;2026-09-25 19:30;Instagram;Imagem;Emerald;landing/assets/campaign/emerald-editorial.webp;6;Gerar compartilhamentos;Enviar para alguém;pronto_para_agendar
-7;2026-09-28 19:30;Instagram;Imagem;Royal Blue;landing/assets/campaign/royal-blue-editorial.webp;7;Levar ao site;Visitar link da bio;pronto_para_agendar
-8;2026-09-30 19:30;Instagram;Reel;Quatro universos;social/assets/reels/veratus-reel-colecao-01.mp4;8;Alcance e comentários;Escolher um modelo;pronto_para_agendar
-9;2026-10-02 19:30;Instagram;Imagem;Silver Jubilee;landing/assets/campaign/silver-jubilee-editorial.webp;9;Iniciar atendimento;Abrir link da bio;pronto_para_agendar
-10;2026-10-01 20:00;TikTok;Vídeo vertical;Quatro universos;social/assets/reels/veratus-reel-colecao-01.mp4;8;Descoberta;Comentar um modelo;aguarda_conexao
-11;2026-10-01 20:00;Facebook;Reel;Quatro universos;social/assets/reels/veratus-reel-colecao-01.mp4;8;Alcance;Visitar o perfil;aguarda_conexao
+1;2026-09-14 19:30;Instagram;Imagem;Navy Gold;landing/social/posts/navy-gold.jpg;1;Apresentar estilo;Visitar link da bio;pronto_para_agendar
+2;2026-09-16 12:30;Instagram;Imagem;Visão da coleção;landing/social/posts/collection-showcase.jpg;2;Gerar comentários;Comentar um estilo;pronto_para_agendar
+3;2026-09-18 19:30;Instagram;Imagem;Silver Onyx;landing/social/posts/silver-onyx.jpg;3;Gerar salvamentos;Salvar publicação;pronto_para_agendar
+4;2026-09-21 19:30;Instagram;Imagem;Ocean Blue;landing/social/posts/ocean-blue.jpg;4;Levar ao site;Visitar link da bio;pronto_para_agendar
+5;2026-09-23 12:30;Instagram;Imagem;Escolha por estilo;landing/social/posts/selection-grid.jpg;5;Aprender preferência;Comentar um estilo;pronto_para_agendar
+6;2026-09-25 19:30;Instagram;Imagem;Emerald;landing/social/posts/emerald.jpg;6;Gerar compartilhamentos;Enviar para alguém;pronto_para_agendar
+7;2026-09-28 19:30;Instagram;Imagem;Royal Blue;landing/social/posts/royal-blue.jpg;7;Levar ao site;Visitar link da bio;pronto_para_agendar
+8;2026-09-30 19:30;Instagram;Reel;Quatro universos;landing/social/reels/veratus-reel-colecao-01.mp4;8;Alcance e comentários;Escolher um modelo;pronto_para_agendar
+9;2026-10-02 19:30;Instagram;Imagem;Silver Jubilee;landing/social/posts/silver-jubilee.jpg;9;Iniciar atendimento;Abrir link da bio;pronto_para_agendar
+10;2026-10-01 20:00;TikTok;Vídeo vertical;Quatro universos;landing/social/reels/veratus-reel-colecao-01.mp4;8;Descoberta;Comentar um modelo;aguarda_conexao
+11;2026-10-01 20:00;Facebook;Reel;Quatro universos;landing/social/reels/veratus-reel-colecao-01.mp4;8;Alcance;Visitar o perfil;aguarda_conexao
