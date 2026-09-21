@@ -19,9 +19,16 @@ jobs:
       - name: Test
         run: python -m pytest -q
       - name: Lint and format
+        shell: bash
         run: |
           python -m ruff check . --output-format=github
-          python -m ruff format --check --diff .
+          output="$(python -m ruff format --check . 2>&1)" || {
+            output="${output//'%'/'%25'}"
+            output="${output//$'\n'/'%0A'}"
+            output="${output//$'\r'/'%0D'}"
+            echo "::error file=.github/workflows/verify.yml,line=24::$output"
+            exit 1
+          }
       - name: Check Python bytecode compilation
         run: python -m compileall -q api integrations veratus_agents tests
       - name: Build webhook image
