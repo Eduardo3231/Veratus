@@ -1,0 +1,367 @@
+[
+  {
+    "id": "arctic-white",
+    "name": "Arctic White",
+    "eyebrow": "Clássico / Versátil",
+    "description": "Uma composição clara, equilibrada e direta para diferentes momentos.",
+    "image": "assets/catalog/arctic-white.webp",
+    "styles": [
+      "classico"
+    ],
+    "collection": "watches",
+    "category": "watches",
+    "subcategory": "watch",
+    "status": "ACTIVE",
+    "alt": "Arctic White da coleção Veratus"
+  },
+  {
+    "id": "ocean-blue",
+    "name": "Ocean Blue",
+    "eyebrow": "Esportivo / Versátil",
+    "description": "Tons profundos e contraste preciso em uma leitura esportiva.",
+    "image": "assets/catalog/ocean-blue.webp",
+    "styles": [
+      "esportivo"
+    ],
+    "collection": "watches",
+    "category": "watches",
+    "subcategory": "watch",
+    "status": "ACTIVE",
+    "alt": "Ocean Blue da coleção Veratus"
+  },
+  {
+    "id": "royal-blue",
+    "name": "Royal Blue",
+    "eyebrow": "Marcante / Esportivo",
+    "description": "Azul intenso e acabamento dourado para uma escolha de destaque.",
+    "image": "assets/catalog/royal-blue.webp",
+    "styles": [
+      "marcante",
+      "esportivo"
+    ],
+    "collection": "watches",
+    "category": "watches",
+    "subcategory": "watch",
+    "status": "ACTIVE",
+    "alt": "Royal Blue da coleção Veratus"
+  },
+  {
+    "id": "platinum-classic",
+    "name": "Platinum Classic",
+    "eyebrow": "Clássico / Versátil",
+    "description": "Mostrador claro e linhas sóbrias em uma composição atemporal.",
+    "image": "assets/catalog/platinum-classic.webp",
+    "styles": [
+      "classico"
+    ],
+    "collection": "watches",
+    "category": "watches",
+    "subcategory": "watch",
+    "status": "ACTIVE",
+    "alt": "Platinum Classic da coleção Veratus"
+  },
+  {
+    "id": "emerald-signature",
+    "name": "Emerald Signature",
+    "eyebrow": "Marcante",
+    "description": "Verde profundo em uma composição de personalidade visual.",
+    "image": "assets/catalog/emerald-signature.webp",
+    "styles": [
+      "marcante"
+    ],
+    "collection": "watches",
+    "category": "watches",
+    "subcategory": "watch",
+    "status": "ACTIVE",
+    "alt": "Emerald Signature da coleção Veratus"
+  },
+  {
+    "id": "silver-prestige",
+    "name": "Silver Prestige",
+    "eyebrow": "Clássico",
+    "description": "Uma leitura monocromática com presença discreta e refinada.",
+    "image": "assets/catalog/silver-prestige.webp",
+    "styles": [
+      "classico"
+    ],
+    "collection": "watches",
+    "category": "watches",
+    "subcategory": "watch",
+    "status": "ACTIVE",
+    "alt": "Silver Prestige da coleção Veratus"
+  },
+  {
+    "id": "polar-blue",
+    "name": "Polar Blue",
+    "eyebrow": "Esportivo / Versátil",
+    "description": "Azul polar e mostrador claro em uma composição de contraste leve.",
+    "image": "assets/catalog/polar-blue.webp",
+    "styles": [
+      "esportivo"
+    ],
+    "collection": "watches",
+    "category": "watches",
+    "subcategory": "watch",
+    "status": "ACTIVE",
+    "alt": "Polar Blue da coleção Veratus"
+  },
+  {
+    "id": "bronze-heritage",
+    "name": "Bronze Heritage",
+    "eyebrow": "Clássico / Marcante",
+    "description": "Tons quentes e acabamento metálico em uma composição de presença.",
+    "image": "assets/catalog/bronze-heritage.webp",
+    "styles": [
+      "classico",
+      "marcante"
+    ],
+    "collection": "watches",
+    "category": "watches",
+    "subcategory": "watch",
+    "status": "ACTIVE",
+    "alt": "Bronze Heritage da coleção Veratus"
+  },
+  {
+    "id": "celeste-anklet",
+    "sku": "VRT-JWL-ANK-001",
+    "name": "Celeste Anklet",
+    "editorial_name": "Celeste Anklet",
+    "product_type": "Tornozeleira prateada com elementos azuis estilo olho",
+    "category": "jewelry_accessories",
+    "subcategory": "anklet",
+    "collection": "feminine",
+    "status": "DRAFT",
+    "site_visibility": "PREVIEW",
+    "eyebrow": "Veratus Feminino / Tornozeleira",
+    "short_description": "Elementos azuis e elos circulares em uma composição leve.",
+    "description": "Elementos em azul-turquesa se alternam com elos circulares em uma composição visual leve e gráfica.",
+    "image": "assets/feminine/celeste-anklet.webp",
+    "images": [
+      "assets/feminine/celeste-anklet.webp"
+    ],
+    "primary_image": "assets/feminine/celeste-anklet.webp",
+    "alt": "Tornozeleira de aparência prateada com elementos azuis no tornozelo",
+    "styles": [
+      "feminino",
+      "tornozeleira"
+    ],
+    "finish_color": "silver_tone",
+    "color": "prateado e azul-turquesa"
+  },
+  {
+    "id": "halo-verde",
+    "sku": "VRT-JWL-NCK-001",
+    "name": "Halo Verde",
+    "editorial_name": "Halo Verde",
+    "product_type": "Colar prateado com elemento verde e halo",
+    "category": "jewelry_accessories",
+    "subcategory": "necklace",
+    "collection": "feminine",
+    "status": "DRAFT",
+    "site_visibility": "PREVIEW",
+    "eyebrow": "Veratus Feminino / Colar",
+    "short_description": "Um ponto verde emoldurado por uma linha luminosa.",
+    "description": "Um elemento oval verde ganha destaque em uma moldura de pequenos pontos transparentes sobre corrente de aparência prateada.",
+    "image": "assets/feminine/halo-verde-necklace.webp",
+    "images": [
+      "assets/feminine/halo-verde-necklace.webp"
+    ],
+    "primary_image": "assets/feminine/halo-verde-necklace.webp",
+    "alt": "Colar de aparência prateada com elemento oval verde e halo",
+    "styles": [
+      "feminino",
+      "colar"
+    ],
+    "finish_color": "silver_tone",
+    "color": "prateado e verde"
+  },
+  {
+    "id": "eclat-duo",
+    "sku": "VRT-JWL-NCK-002",
+    "name": "Éclat Duo",
+    "editorial_name": "Éclat Duo",
+    "product_type": "Colar prateado duplo com elementos transparentes",
+    "category": "jewelry_accessories",
+    "subcategory": "necklace",
+    "collection": "feminine",
+    "status": "DRAFT",
+    "site_visibility": "PREVIEW",
+    "eyebrow": "Veratus Feminino / Colar",
+    "short_description": "Duas linhas delicadas, dois pontos de luz.",
+    "description": "Duas camadas finas e dois elementos ovais transparentes criam um desenho vertical delicado.",
+    "image": "assets/feminine/eclat-duo-necklace.webp",
+    "images": [
+      "assets/feminine/eclat-duo-necklace.webp"
+    ],
+    "primary_image": "assets/feminine/eclat-duo-necklace.webp",
+    "alt": "Colar de aparência prateada em duas camadas com elementos transparentes",
+    "styles": [
+      "feminino",
+      "colar"
+    ],
+    "finish_color": "silver_tone",
+    "color": "prateado e transparente"
+  },
+  {
+    "id": "rosa-aurea",
+    "sku": "VRT-JWL-NCK-003",
+    "name": "Rosa Áurea",
+    "editorial_name": "Rosa Áurea",
+    "product_type": "Colar dourado com elemento floral vazado",
+    "category": "jewelry_accessories",
+    "subcategory": "necklace",
+    "collection": "feminine",
+    "status": "DRAFT",
+    "site_visibility": "PREVIEW",
+    "eyebrow": "Veratus Feminino / Colar",
+    "short_description": "Geometria floral com um ponto luminoso central.",
+    "description": "Um elemento floral vazado de aparência dourada conduz o olhar a um ponto transparente central.",
+    "image": "assets/feminine/rosa-aurea-necklace.webp",
+    "images": [
+      "assets/feminine/rosa-aurea-necklace.webp"
+    ],
+    "primary_image": "assets/feminine/rosa-aurea-necklace.webp",
+    "alt": "Colar de aparência dourada com pingente floral vazado",
+    "styles": [
+      "feminino",
+      "colar"
+    ],
+    "finish_color": "gold_tone",
+    "color": "dourado e transparente"
+  },
+  {
+    "id": "lumiere",
+    "sku": "VRT-JWL-BRC-001",
+    "name": "Lumière",
+    "editorial_name": "Lumière",
+    "product_type": "Pulseira dourada ponto de luz",
+    "category": "jewelry_accessories",
+    "subcategory": "bracelet",
+    "collection": "feminine",
+    "status": "DRAFT",
+    "site_visibility": "PREVIEW",
+    "eyebrow": "Veratus Feminino / Pulseira",
+    "short_description": "Uma linha fina e um único ponto de destaque.",
+    "description": "A linha delicada de aparência dourada encontra um elemento transparente central em uma composição essencial.",
+    "image": "assets/feminine/lumiere-bracelet.webp",
+    "images": [
+      "assets/feminine/lumiere-bracelet.webp"
+    ],
+    "primary_image": "assets/feminine/lumiere-bracelet.webp",
+    "alt": "Pulseira fina de aparência dourada com elemento circular transparente",
+    "styles": [
+      "feminino",
+      "pulseira"
+    ],
+    "finish_color": "gold_tone",
+    "color": "dourado e transparente"
+  },
+  {
+    "id": "celeste-link",
+    "sku": "VRT-JWL-BRC-002",
+    "name": "Celeste Link",
+    "editorial_name": "Celeste Link",
+    "product_type": "Pulseira dourada com elementos azuis estilo olho",
+    "category": "jewelry_accessories",
+    "subcategory": "bracelet",
+    "collection": "feminine",
+    "status": "DRAFT",
+    "site_visibility": "PREVIEW",
+    "eyebrow": "Veratus Feminino / Pulseira",
+    "short_description": "Azul intenso entre elos de presença gráfica.",
+    "description": "Elementos azuis estilo olho e elos retangulares de aparência dourada criam um ritmo visual marcante.",
+    "image": "assets/feminine/celeste-link-bracelet.webp",
+    "images": [
+      "assets/feminine/celeste-link-bracelet.webp"
+    ],
+    "primary_image": "assets/feminine/celeste-link-bracelet.webp",
+    "alt": "Pulseira de aparência dourada com elementos azuis e elos retangulares",
+    "styles": [
+      "feminino",
+      "pulseira"
+    ],
+    "finish_color": "gold_tone",
+    "color": "dourado e azul"
+  },
+  {
+    "id": "essenza-anklet",
+    "sku": "VRT-JWL-ANK-002",
+    "name": "Essenza",
+    "editorial_name": "Essenza",
+    "product_type": "Tornozeleira prateada com pingentes",
+    "category": "jewelry_accessories",
+    "subcategory": "anklet",
+    "collection": "feminine",
+    "status": "DRAFT",
+    "site_visibility": "PREVIEW",
+    "eyebrow": "Veratus Feminino / Tornozeleira",
+    "short_description": "Pequenos pingentes acompanham cada movimento.",
+    "description": "Pingentes de aparência prateada e elementos transparentes formam uma sequência leve ao redor do tornozelo.",
+    "image": "assets/feminine/essenza-anklet.webp",
+    "images": [
+      "assets/feminine/essenza-anklet.webp"
+    ],
+    "primary_image": "assets/feminine/essenza-anklet.webp",
+    "alt": "Tornozeleira de aparência prateada com pequenos pingentes",
+    "styles": [
+      "feminino",
+      "tornozeleira"
+    ],
+    "finish_color": "silver_tone",
+    "color": "prateado e transparente"
+  },
+  {
+    "id": "verde-aura",
+    "sku": "VRT-JWL-NCK-004",
+    "name": "Verde Aura",
+    "editorial_name": "Verde Aura",
+    "product_type": "Colar dourado com elemento verde oval",
+    "category": "jewelry_accessories",
+    "subcategory": "necklace",
+    "collection": "feminine",
+    "status": "DRAFT",
+    "site_visibility": "PREVIEW",
+    "eyebrow": "Veratus Feminino / Colar",
+    "short_description": "Um verde vibrante em uma composição essencial.",
+    "description": "Um elemento oval verde-limão concentra a cor sobre uma corrente de aparência dourada e desenho limpo.",
+    "image": "assets/feminine/verde-aura-necklace.webp",
+    "images": [
+      "assets/feminine/verde-aura-necklace.webp"
+    ],
+    "primary_image": "assets/feminine/verde-aura-necklace.webp",
+    "alt": "Colar de aparência dourada com elemento oval verde-limão",
+    "styles": [
+      "feminino",
+      "colar"
+    ],
+    "finish_color": "gold_tone",
+    "color": "dourado e verde-limão"
+  },
+  {
+    "id": "noir-clover",
+    "sku": "VRT-JWL-NCK-005",
+    "name": "Noir Clover",
+    "editorial_name": "Noir Clover",
+    "product_type": "Colar dourado com elemento preto em formato de trevo",
+    "category": "jewelry_accessories",
+    "subcategory": "necklace",
+    "collection": "feminine",
+    "status": "DRAFT",
+    "site_visibility": "PREVIEW",
+    "eyebrow": "Veratus Feminino / Colar",
+    "short_description": "Contraste preto e dourado em uma forma emblemática.",
+    "description": "Um elemento preto em formato de trevo cria contraste preciso com a corrente de aparência dourada.",
+    "image": "assets/feminine/noir-clover-necklace.webp",
+    "images": [
+      "assets/feminine/noir-clover-necklace.webp"
+    ],
+    "primary_image": "assets/feminine/noir-clover-necklace.webp",
+    "alt": "Colar de aparência dourada com elemento preto em formato de trevo",
+    "styles": [
+      "feminino",
+      "colar"
+    ],
+    "finish_color": "gold_tone",
+    "color": "dourado e preto"
+  }
+]

@@ -4,4 +4,9 @@ __pycache__/
 *.py[cod]
 leads.csv
 .pytest_cache/
+api/*.sqlite3
+api/*.sqlite3-*
+runtime/
+*.sqlite3
+*.sqlite3-*
 social/publishing-state.json

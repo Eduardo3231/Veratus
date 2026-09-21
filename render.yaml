@@ -1,3 +1,7 @@
+databases:
+  - name: veratus-agent-db
+    plan: free
+
 services:
   - type: web
     name: veratus-leads
@@ -8,9 +12,115 @@ services:
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
-      - key: MAILERLITE_API_KEY
-        sync: false
-      - key: MAILERLITE_GROUP_ID
+      - key: GEMINI_API_KEY
         sync: false
       - key: FRONTEND_ORIGINS
+        value: "https://veratus.onrender.com,http://localhost:5000,http://127.0.0.1:5000"
+      - key: LEADS_CSV_PATH
+        value: /tmp/veratus-leads.csv
+      - key: PORT
+        value: "5000"
+      - key: RATE_LIMIT_REQUESTS
+        value: "10"
+      - key: RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+      - key: RATE_LIMIT_MAX_BUCKETS
+        value: "10000"
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: WEB_THREADS
+        value: "4"
+      - key: OPENAI_API_KEY
         sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: veratus-agent-db
+          property: connectionString
+      - key: MARKETPLACE_MODE
+        value: LOCAL
+      - key: PUBLISH_ENABLED
+        value: "false"
+      - key: MERCADO_LIVRE_ACCESS_TOKEN
+        sync: false
+      - key: MERCADO_LIVRE_CLIENT_ID
+        sync: false
+      - key: MERCADO_LIVRE_CLIENT_SECRET
+        sync: false
+      - key: MERCADO_LIVRE_REFRESH_TOKEN
+        sync: false
+      - key: MERCADO_LIVRE_REDIRECT_URI
+        value: https://veratus.onrender.com/integrations/mercado-livre/oauth/callback
+      - key: MERCADO_LIVRE_NOTIFICATION_URL
+        value: https://veratus.onrender.com/integrations/mercado-livre/notifications
+      - key: MERCADO_LIVRE_NOTIFICATION_IP_ALLOWLIST
+        value: 44.212.211.213,52.1.149.176,52.44.99.39,52.2.210.204,52.6.145.31,54.205.100.116,184.73.213.131,52.6.10.186,52.73.233.211,3.223.169.202,34.206.9.12,34.238.55.98,3.227.34.138,3.229.206.80,34.238.221.21,13.223.211.78,44.215.49.123,54.159.49.50,13.223.10.233,13.223.33.60,3.93.112.28,13.223.124.243,3.233.174.68,50.16.251.125,50.16.65.64,54.81.195.49,54.82.205.180,3.94.30.241,54.242.75.139,98.82.195.215,34.196.28.113,44.208.170.246,52.23.122.60,13.223.232.16,13.223.236.125,44.193.180.190,13.223.107.11,3.219.157.78,3.230.160.247,13.223.154.1,44.214.161.82,54.196.88.69,100.24.130.185,3.230.190.19,35.172.55.95,23.22.202.234,3.95.35.84,54.146.232.68
+      - key: MERCADO_LIVRE_OAUTH_STATE_TTL_SECONDS
+        value: "600"
+      - key: SHOPEE_ACCESS_TOKEN
+        sync: false
+      - key: SHOPEE_PARTNER_ID
+        sync: false
+      - key: SHOPEE_PARTNER_KEY
+        sync: false
+      - key: SHOPEE_REFRESH_TOKEN
+        sync: false
+      - key: SHOPEE_SHOP_ID
+        sync: false
+      - key: TIKTOK_SHOP_ACCESS_TOKEN
+        sync: false
+      - key: TIKTOK_SHOP_APP_KEY
+        sync: false
+      - key: TIKTOK_SHOP_APP_SECRET
+        sync: false
+      - key: TIKTOK_SHOP_REFRESH_TOKEN
+        sync: false
+      - key: TIKTOK_SHOP_SHOP_CIPHER
+        sync: false
+      - key: META_ACCESS_TOKEN
+        sync: false
+      - key: META_BUSINESS_ID
+        sync: false
+      - key: META_CATALOG_ID
+        sync: false
+      - key: META_PAGE_ACCESS_TOKEN
+        sync: false
+      - key: META_IG_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: META_GRAPH_API_VERSION
+        sync: false
+      - key: VERATUS_AGENT_MODEL
+        value: "gpt-4.1-mini"
+      - key: VERATUS_AGENT_SHARED_SECRET
+        sync: false
+      - key: VERATUS_ADMIN_TOKEN
+        sync: false
+      - key: VERATUS_SESSION_SALT
+        sync: false
+      - key: VERATUS_TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: VERATUS_AGENT_RUNTIME_DIR
+        value: /tmp/veratus-agent
+      - key: VERATUS_AGENT_MAX_TURNS
+        value: "8"
+      - key: VERATUS_AGENT_MAX_OUTPUT_TOKENS
+        value: "900"
+      - key: VERATUS_AGENT_REQUEST_TIMEOUT_SECONDS
+        value: "45"
+      - key: VERATUS_AGENT_WORKFLOW_TIMEOUT_SECONDS
+        value: "90"
+      - key: VERATUS_AGENT_MODEL_MAX_RETRIES
+        value: "1"
+      - key: VERATUS_AGENT_MAX_TOTAL_TOKENS
+        value: "12000"
+      - key: VERATUS_AGENT_SESSION_HISTORY_LIMIT
+        value: "30"
+      - key: VERATUS_AGENT_TRACE_SENSITIVE_DATA
+        value: "false"
+      - key: OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA
+        value: "0"
+      - key: OPENAI_AGENTS_DONT_LOG_MODEL_DATA
+        value: "1"
+      - key: OPENAI_AGENTS_DONT_LOG_TOOL_DATA
+        value: "1"

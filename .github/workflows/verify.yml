@@ -13,9 +13,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
       - name: Install dependencies
-        run: pip install -r integrations/requirements.txt
-      - name: Check Python syntax
-        run: python -m py_compile integrations/webhook.py integrations/push_to_mailerlite.py
+        run: python -m pip install -r requirements-dev.txt
+      - name: Test
+        run: python -m pytest -q
+      - name: Lint and format
+        run: |
+          python -m ruff check .
+          python -m ruff format --check .
+      - name: Check Python bytecode compilation
+        run: python -m compileall -q api integrations veratus_agents tests
       - name: Build webhook image
         run: docker build -f integrations/Dockerfile -t veratus-webhook .
