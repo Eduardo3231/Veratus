@@ -22,13 +22,11 @@ jobs:
         shell: bash
         run: |
           python -m ruff check . --output-format=github
-          output="$(python -m ruff format --check . 2>&1)" || {
-            output="${output//'%'/'%25'}"
-            output="${output//$'\n'/'%0A'}"
-            output="${output//$'\r'/'%0D'}"
-            echo "::error file=.github/workflows/verify.yml,line=24::$output"
+          if ! python -m ruff format --check . > /tmp/ruff-format.log 2>&1; then
+            cat /tmp/ruff-format.log
+            python -c 'from pathlib import Path; message=Path("/tmp/ruff-format.log").read_text().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"); print(f"::error file=.github/workflows/verify.yml,line=24::{message}")'
             exit 1
-          }
+          fi
       - name: Check Python bytecode compilation
         run: python -m compileall -q api integrations veratus_agents tests
       - name: Build webhook image
