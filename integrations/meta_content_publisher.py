@@ -13,7 +13,6 @@ from typing import Any
 
 import requests
 
-
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 if hasattr(sys.stderr, "reconfigure"):
@@ -37,7 +36,7 @@ def required_env(name: str) -> str:
 def load_payloads(path: Path) -> list[dict[str, Any]]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
-        raise ValueError("O arquivo de publicações precisa conter uma lista.")
+        raise TypeError("O arquivo de publicações precisa conter uma lista.")
     orders = [item.get("order") for item in data]
     if len(orders) != len(set(orders)):
         raise ValueError("Há números de ordem repetidos.")
@@ -135,7 +134,9 @@ def wait_until_ready(
         if code == "FINISHED":
             return
         if code in {"ERROR", "EXPIRED"}:
-            raise RuntimeError(f"Contêiner recusado pela Meta: {status.get('status', code)}")
+            raise RuntimeError(
+                f"Contêiner recusado pela Meta: {status.get('status', code)}"
+            )
         time.sleep(interval)
     raise TimeoutError("A Meta ainda não concluiu o processamento do arquivo.")
 
@@ -201,7 +202,9 @@ def main() -> int:
     args = parser.parse_args()
 
     payloads = load_payloads(args.payloads)
-    selected = payloads if args.order is None else [select_payload(payloads, args.order)]
+    selected = (
+        payloads if args.order is None else [select_payload(payloads, args.order)]
+    )
     failed = False
     for item in selected:
         errors = validate_payload(item, check_url=not args.skip_url_check)
@@ -217,7 +220,9 @@ def main() -> int:
         print("Validação concluída. Nenhuma publicação foi enviada.")
         return 0
     if args.order is None:
-        raise ValueError("Use --order junto com --publish para enviar uma peça por vez.")
+        raise ValueError(
+            "Use --order junto com --publish para enviar uma peça por vez."
+        )
 
     access_token = required_env("META_PAGE_ACCESS_TOKEN")
     ig_user_id = required_env("META_IG_BUSINESS_ACCOUNT_ID")
