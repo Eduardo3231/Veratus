@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -25,6 +26,18 @@ class OAuthStateError(RuntimeError):
 
 class TokenStorageError(RuntimeError):
     pass
+
+
+def _valid_postgres_url(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    return bool(
+        parsed.scheme in {"postgres", "postgresql"}
+        and parsed.hostname
+        and parsed.path not in {"", "/"}
+    )
 
 
 def _utcnow() -> datetime:
@@ -102,6 +115,8 @@ class MercadoLivreOAuthStore:
             self._cipher = Fernet(encryption_key.encode("ascii"))
         except (ValueError, UnicodeEncodeError) as exc:
             raise OAuthConfigurationError("TOKEN_ENCRYPTION_KEY_INVALID") from exc
+        if database_url and not _valid_postgres_url(database_url):
+            raise OAuthConfigurationError("DATABASE_URL_INVALID")
         self.database_url = database_url
         self.sqlite_path = Path(sqlite_path or "runtime/mercado-livre-oauth.sqlite3")
         if not self.database_url:
@@ -124,7 +139,7 @@ class MercadoLivreOAuthStore:
             import psycopg
         except ImportError as exc:
             raise OAuthConfigurationError("POSTGRES_DRIVER_MISSING") from exc
-        return psycopg.connect(self.database_url)
+        return psycopg.connect(self.database_url, connect_timeout=5)
 
     def _ensure_schema(self) -> None:
         if self.database_url:

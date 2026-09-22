@@ -14,6 +14,7 @@ from veratus_agents.marketplace_clients import (
 )
 from veratus_agents.mercado_livre_oauth import (
     MercadoLivreOAuthStore,
+    OAuthConfigurationError,
     OAuthStateError,
 )
 
@@ -87,6 +88,15 @@ def test_state_is_random_single_use_and_expires(tmp_path):
         store.consume_state(first)
     with pytest.raises(OAuthStateError):
         store.consume_state("not-a-real-state")
+
+
+def test_store_rejects_invalid_postgres_url_before_connecting(tmp_path):
+    with pytest.raises(OAuthConfigurationError, match="DATABASE_URL_INVALID"):
+        MercadoLivreOAuthStore(
+            encryption_key=Fernet.generate_key().decode("ascii"),
+            database_url="not-a-postgres-url",
+            sqlite_path=tmp_path / "oauth.sqlite3",
+        )
 
 
 def test_oauth_start_requires_admin_and_returns_official_url(oauth_env):

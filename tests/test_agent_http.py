@@ -19,6 +19,8 @@ def test_agent_api_auth_validation_and_decision(tmp_path):
         health = client.get("/agent/health")
         assert health.status_code == 200
         assert health.json["external_sending_enabled"] is False
+        assert health.json["status"] == "not_configured"
+        assert "DATABASE_URL" in health.json["missing_configuration"]
         assert client.post("/agent/sales/draft", json={}).status_code == 401
         assert client.get("/agent/runs/missing").status_code == 401
         inbound = {"X-Veratus-Agent-Key": "inbound-test-key"}

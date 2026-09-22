@@ -12,6 +12,7 @@ from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
+from urllib.parse import urlsplit
 
 from flask import Flask, jsonify, redirect, request, send_from_directory
 from pydantic import ValidationError
@@ -320,6 +321,18 @@ def _agent_json():
     return data, None
 
 
+def _valid_postgres_url(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    return bool(
+        parsed.scheme in {"postgres", "postgresql"}
+        and parsed.hostname
+        and parsed.path not in {"", "/"}
+    )
+
+
 @app.route("/agent/health", methods=["GET"])
 def agent_health():
     try:
@@ -328,19 +341,22 @@ def agent_health():
         sdk_installed = True
     except ImportError:
         sdk_installed = False
-    ready = all(
-        (
-            sdk_installed,
-            bool((os.getenv("OPENAI_API_KEY") or "").strip()),
-            bool((os.getenv("VERATUS_AGENT_SHARED_SECRET") or "").strip()),
-            bool((os.getenv("VERATUS_ADMIN_TOKEN") or "").strip()),
-            bool((os.getenv("VERATUS_SESSION_SALT") or "").strip()),
-            bool((os.getenv("DATABASE_URL") or "").strip()),
-        )
-    )
+    database_url = (os.getenv("DATABASE_URL") or "").strip()
+    checks = {
+        "agents_sdk": sdk_installed,
+        "OPENAI_API_KEY": bool((os.getenv("OPENAI_API_KEY") or "").strip()),
+        "VERATUS_AGENT_SHARED_SECRET": bool(
+            (os.getenv("VERATUS_AGENT_SHARED_SECRET") or "").strip()
+        ),
+        "VERATUS_ADMIN_TOKEN": bool((os.getenv("VERATUS_ADMIN_TOKEN") or "").strip()),
+        "VERATUS_SESSION_SALT": bool((os.getenv("VERATUS_SESSION_SALT") or "").strip()),
+        "DATABASE_URL": _valid_postgres_url(database_url),
+    }
+    missing = [name for name, configured in checks.items() if not configured]
     return jsonify(
         {
-            "status": "configured" if ready else "not_configured",
+            "status": "configured" if not missing else "not_configured",
+            "missing_configuration": missing,
             "external_sending_enabled": False,
         }
     ), 200

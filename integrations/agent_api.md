@@ -6,7 +6,7 @@ O serviço Flask existente agora expõe uma camada protegida para o agente. Ela 
 
 `GET /agent/health`
 
-Retorna `configured` ou `not_configured` e confirma que envio externo está desabilitado. Esse status verifica presença de configuração, não faz uma chamada ao modelo. Não revela credenciais. O serviço principal também expõe `GET /health`.
+Retorna `configured` ou `not_configured`, informa em `missing_configuration` somente os nomes das configurações ausentes ou inválidas e confirma que envio externo está desabilitado. Esse status valida a forma da URL PostgreSQL, mas não faz uma chamada ao banco ou ao modelo. Não revela credenciais. O serviço principal também expõe `GET /health`.
 
 ## Criar rascunho
 
