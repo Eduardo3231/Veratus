@@ -621,6 +621,17 @@ def _admin_required():
     return None
 
 
+def _oauth_persistence_unavailable(context: str, exc: Exception):
+    app.logger.error(
+        "mercado_livre_oauth_persistence_unavailable context=%s error_type=%s",
+        context,
+        type(exc).__name__,
+    )
+    return jsonify(
+        {"status": "blocked", "message": "oauth_persistence_unavailable"}
+    ), 503
+
+
 @app.route("/integrations/mercado-livre/oauth/start", methods=["GET"])
 def mercado_livre_oauth_start():
     denied = _admin_required()
@@ -641,6 +652,8 @@ def mercado_livre_oauth_start():
         return jsonify(
             {"status": "blocked", "message": "oauth_configuration_incomplete"}
         ), 503
+    except Exception as exc:  # noqa: BLE001 - public boundary sanitizes storage errors
+        return _oauth_persistence_unavailable("oauth_start", exc)
     if (
         request.args.get("format") == "json"
         or request.accept_mimetypes.best == "application/json"
@@ -674,6 +687,8 @@ def mercado_livre_oauth_callback():
         return jsonify(
             {"status": "blocked", "message": "oauth_storage_not_configured"}
         ), 503
+    except Exception as exc:  # noqa: BLE001 - public boundary sanitizes storage errors
+        return _oauth_persistence_unavailable("oauth_callback", exc)
 
     if request.args.get("error"):
         return jsonify(
@@ -761,6 +776,8 @@ def mercado_livre_notifications():
         return jsonify(
             {"status": "blocked", "message": "notification_storage_not_configured"}
         ), 503
+    except Exception as exc:  # noqa: BLE001 - public boundary sanitizes storage errors
+        return _oauth_persistence_unavailable("notification", exc)
     return jsonify(
         {
             "status": "accepted" if inserted else "duplicate",
@@ -796,6 +813,8 @@ def mercado_livre_integration_status():
         return jsonify(
             {"status": "blocked", "message": "oauth_storage_not_configured"}
         ), 503
+    except Exception as exc:  # noqa: BLE001 - public boundary sanitizes storage errors
+        return _oauth_persistence_unavailable("status", exc)
 
 
 @app.route("/os/pricing/calculate", methods=["POST"])

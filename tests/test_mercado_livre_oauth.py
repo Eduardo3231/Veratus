@@ -122,6 +122,23 @@ def test_oauth_callback_rejects_invalid_state_without_exchange(oauth_env):
     exchange.assert_not_called()
 
 
+def test_oauth_callback_sanitizes_persistence_failure(oauth_env):
+    client = app.test_client()
+    with patch.object(
+        webhook_module, "_mercado_oauth_store", side_effect=RuntimeError("db-secret")
+    ):
+        response = client.get(
+            "/integrations/mercado-livre/oauth/callback?state=invalid&code=valid-code-123"
+        )
+
+    assert response.status_code == 503
+    assert response.json == {
+        "status": "blocked",
+        "message": "oauth_persistence_unavailable",
+    }
+    assert "db-secret" not in response.get_data(as_text=True)
+
+
 def test_oauth_callback_persists_tokens_without_exposing_them(oauth_env):
     client = app.test_client()
     start = client.get(
