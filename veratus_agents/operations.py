@@ -537,29 +537,63 @@ class CommandEngine:
         self.idempotency: dict[str, str] = {}
         self.approvals = ApprovalEngine()
         self.overrides: set[str] = set()
-        self.persistence_path = persistence_path
+        self.persistence_url = (
+            persistence_path
+            if persistence_path
+            and persistence_path.startswith(("postgresql://", "postgres://"))
+            else None
+        )
+        self.persistence_path = None if self.persistence_url else persistence_path
         self.tasks.persist_callback = self._persist
         self._load()
 
-    def _persist(self) -> None:
-        if not self.persistence_path:
-            return
-        payload = json.dumps(
-            self.snapshot(),
-            default=lambda value: value.value if isinstance(value, StrEnum) else value,
-        )
-        with sqlite3.connect(self.persistence_path) as db:
-            db.execute(
-                "CREATE TABLE IF NOT EXISTS runtime_snapshot (id INTEGER PRIMARY KEY CHECK (id=1), payload TEXT NOT NULL)"
-            )
-            db.execute(
-                "INSERT OR REPLACE INTO runtime_snapshot VALUES (1, ?)", (payload,)
-            )
-            db.commit()
+    def _write_snapshot(self, payload: str) -> None:
+        if self.persistence_url:
+            import psycopg
+            from psycopg.types.json import Jsonb
 
-    def _load(self) -> None:
-        if not self.persistence_path:
+            with psycopg.connect(self.persistence_url) as db:
+                db.execute(
+                    """CREATE TABLE IF NOT EXISTS operational_runtime_snapshot (
+                    id INTEGER PRIMARY KEY CHECK (id=1), payload JSONB NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"""
+                )
+                db.execute(
+                    """INSERT INTO operational_runtime_snapshot (id, payload)
+                    VALUES (1, %s) ON CONFLICT (id) DO UPDATE SET
+                    payload=EXCLUDED.payload, updated_at=NOW()""",
+                    (Jsonb(json.loads(payload)),),
+                )
             return
+        if self.persistence_path:
+            with sqlite3.connect(self.persistence_path) as db:
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS runtime_snapshot (id INTEGER PRIMARY KEY CHECK (id=1), payload TEXT NOT NULL)"
+                )
+                db.execute(
+                    "INSERT OR REPLACE INTO runtime_snapshot VALUES (1, ?)",
+                    (payload,),
+                )
+                db.commit()
+
+    def _read_snapshot(self) -> dict[str, Any] | None:
+        if self.persistence_url:
+            import psycopg
+
+            with psycopg.connect(self.persistence_url) as db:
+                db.execute(
+                    """CREATE TABLE IF NOT EXISTS operational_runtime_snapshot (
+                    id INTEGER PRIMARY KEY CHECK (id=1), payload JSONB NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"""
+                )
+                row = db.execute(
+                    "SELECT payload FROM operational_runtime_snapshot WHERE id=1"
+                ).fetchone()
+            if not row:
+                return None
+            return row[0] if isinstance(row[0], dict) else json.loads(row[0])
+        if not self.persistence_path:
+            return None
         with sqlite3.connect(self.persistence_path) as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS runtime_snapshot (id INTEGER PRIMARY KEY CHECK (id=1), payload TEXT NOT NULL)"
@@ -567,9 +601,23 @@ class CommandEngine:
             row = db.execute(
                 "SELECT payload FROM runtime_snapshot WHERE id=1"
             ).fetchone()
-        if not row:
+        return json.loads(row[0]) if row else None
+
+    def _persist(self) -> None:
+        if not self.persistence_path and not self.persistence_url:
             return
-        raw = json.loads(row[0])
+        payload = json.dumps(
+            self.snapshot(),
+            default=lambda value: value.value if isinstance(value, StrEnum) else value,
+        )
+        self._write_snapshot(payload)
+
+    def _load(self) -> None:
+        if not self.persistence_path and not self.persistence_url:
+            return
+        raw = self._read_snapshot()
+        if raw is None:
+            return
         for item in raw.get("commands", []):
             command = Command(
                 item["command_id"],
@@ -847,6 +895,18 @@ class OperationalRuntime:
         normalized = " ".join(message.casefold().strip().split())
         if not normalized:
             raise ValueError("command is required")
+        if (
+            any(
+                token in normalized
+                for token in ("analise", "analisar", "diagnóstico", "diagnostico")
+            )
+            and "estado atual" in normalized
+            and "produto" in normalized
+            and "marketplace" in normalized
+        ):
+            return ParsedCommand(
+                "operational_audit", tuple(OperationalRuntime.CHANNEL_AGENTS)
+            )
         if "cadastre" in normalized and "feminin" in normalized:
             return ParsedCommand("intake_feminine", collection="feminine")
         if (
@@ -1008,13 +1068,51 @@ class OperationalRuntime:
         self.engine.tasks.complete(task.task_id, result)
         return task
 
+    def _product_readiness(self, product: dict[str, Any]) -> tuple[bool, list[str]]:
+        required = {
+            "identifier": product.get("sku") or product.get("id"),
+            "name": self._field_value(product, "name"),
+            "category": self._field_value(product, "category"),
+            "sale_price": self._field_value(product, "sale_price")
+            or self._field_value(product, "price_brl"),
+            "cost": self._field_value(product, "cost")
+            or self._field_value(product, "cost_brl"),
+        }
+        images = self._field_value(product, "images")
+        if not images:
+            image = self._field_value(product, "image")
+            images = [image] if image else []
+        required["images"] = images
+        missing = [name for name, value in required.items() if value in (None, "", [])]
+        status = str(product.get("status", "ACTIVE")).upper()
+        if status not in {"ACTIVE", "APPROVED", "PUBLISHED"}:
+            missing.append("approved_status")
+        return not missing, missing
+
+    def _readiness_inventory(
+        self, products: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        eligible: list[dict[str, Any]] = []
+        blocked: list[dict[str, Any]] = []
+        for product in products:
+            ready, missing = self._product_readiness(product)
+            identifier = str(
+                product.get("sku") or product.get("id") or product.get("name")
+            )
+            if ready:
+                eligible.append(product)
+            else:
+                blocked.append({"product": identifier, "missing_fields": missing})
+        return eligible, blocked
+
     def _execute_prepare(self, command: Command, channels: tuple[str, ...]) -> None:
-        products = [
+        candidates = [
             item
             for item in self._products()
             if str(item.get("status", "ACTIVE")).upper()
             in {"ACTIVE", "APPROVED", "PUBLISHED"}
         ]
+        products, readiness_blocked = self._readiness_inventory(candidates)
         identifiers = [
             str(item.get("sku") or item.get("id") or item.get("name"))
             for item in products
@@ -1090,8 +1188,17 @@ class OperationalRuntime:
             "active-watches",
             {
                 "processed": len(products),
-                "confirmed_sale_price_brl": "289.90",
-                "confirmed_cost_brl": "65.00",
+                "products": [
+                    {
+                        "product": str(item.get("sku") or item.get("id")),
+                        "sale_price_brl": self._field_value(item, "sale_price")
+                        or self._field_value(item, "price_brl"),
+                        "cost_brl": self._field_value(item, "cost")
+                        or self._field_value(item, "cost_brl"),
+                    }
+                    for item in products
+                ],
+                "blocked": readiness_blocked,
                 "fees": "ESTIMATED",
             },
             parent_task_id=product_supervisor.task_id,
@@ -1105,7 +1212,8 @@ class OperationalRuntime:
             {
                 "processed": len(products),
                 "eligible": identifiers,
-                "state": "PRODUCT_READY",
+                "blocked": readiness_blocked,
+                "state": "PRODUCT_READY" if identifiers else "NO_ELIGIBLE_PRODUCTS",
             },
             parent_task_id=product_supervisor.task_id,
             depends_on=[copy.task_id, creative.task_id, pricing.task_id],
@@ -1197,6 +1305,8 @@ class OperationalRuntime:
                 "distribution_supervisor": distribution.task_id,
                 "sync": sync.task_id,
                 "status": "COMPLETED",
+                "eligible_products": identifiers,
+                "blocked_products": readiness_blocked,
             },
             parent_task_id=manager.task_id,
             depends_on=[sync.task_id],
@@ -1444,6 +1554,9 @@ class OperationalRuntime:
 
     def _execute_report(self, command: Command, parsed: ParsedCommand) -> None:
         products = self._products()
+        if parsed.handler == "operational_audit":
+            self._execute_operational_audit(command, products, parsed.channels)
+            return
         if parsed.handler == "refresh_mercado_livre":
             manager = self._run_task(
                 command,
@@ -1580,23 +1693,11 @@ class OperationalRuntime:
             "sync-monitor-agent" if parsed.handler == "sync" else "general-manager"
         )
         if parsed.handler == "products_incomplete":
-            result = {
-                "products": [
-                    p.get("sku") or p.get("id")
-                    for p in products
-                    if str(p.get("status", "")).upper()
-                    in {"NEW", "NEEDS_INFORMATION", "ENRICHING", "QA_REJECTED"}
-                ]
-            }
+            _, blocked = self._readiness_inventory(products)
+            result = {"products": blocked}
         elif parsed.handler == "products_ready":
-            result = {
-                "products": [
-                    p.get("sku") or p.get("id")
-                    for p in products
-                    if str(p.get("status", "ACTIVE")).upper()
-                    in {"ACTIVE", "APPROVED", "PUBLISHED"}
-                ]
-            }
+            eligible, _ = self._readiness_inventory(products)
+            result = {"products": [p.get("sku") or p.get("id") for p in eligible]}
         elif parsed.handler == "channels":
             result = {
                 "channels": {channel: "NOT_TESTED" for channel in self.CHANNEL_AGENTS}
@@ -1630,6 +1731,149 @@ class OperationalRuntime:
             parsed.handler.upper(),
             parsed.channels[0] if parsed.channels else "veratus-os",
             result,
+        )
+
+    def _execute_operational_audit(
+        self,
+        command: Command,
+        products: list[dict[str, Any]],
+        channels: tuple[str, ...],
+    ) -> None:
+        eligible, blocked = self._readiness_inventory(products)
+        identifiers = [str(item.get("sku") or item.get("id")) for item in eligible]
+        manager = self._run_task(
+            command,
+            "general-manager",
+            "PLAN_OPERATIONAL_AUDIT",
+            "veratus",
+            {
+                "mode": "READ_ONLY",
+                "products_total": len(products),
+                "external_writes": "BLOCKED",
+            },
+        )
+        product_supervisor = self._run_task(
+            command,
+            "product-supervisor",
+            "COORDINATE_PRODUCT_AUDIT",
+            "product-master",
+            {"eligible": len(eligible), "blocked": len(blocked)},
+            parent_task_id=manager.task_id,
+            depends_on=[manager.task_id],
+        )
+        product_tasks = [
+            self._run_task(
+                command,
+                agent,
+                action,
+                "product-master",
+                result,
+                parent_task_id=product_supervisor.task_id,
+                depends_on=[product_supervisor.task_id],
+            )
+            for agent, action, result in (
+                ("product-intake", "AUDIT_ACTIVE_PRODUCTS", {"active": len(products)}),
+                (
+                    "copy-agent",
+                    "AUDIT_PRODUCT_COPY",
+                    {
+                        "missing_description": [
+                            str(item.get("sku") or item.get("id"))
+                            for item in products
+                            if not self._field_value(item, "description")
+                        ]
+                    },
+                ),
+                (
+                    "creative-agent",
+                    "AUDIT_PRODUCT_ASSETS",
+                    {
+                        "missing_assets": [
+                            item["product"]
+                            for item in blocked
+                            if "images" in item["missing_fields"]
+                        ]
+                    },
+                ),
+                (
+                    "pricing-agent",
+                    "AUDIT_PRODUCT_PRICING",
+                    {
+                        "missing_pricing": [
+                            item["product"]
+                            for item in blocked
+                            if any(
+                                field in item["missing_fields"]
+                                for field in ("sale_price", "cost")
+                            )
+                        ]
+                    },
+                ),
+                (
+                    "quality-agent",
+                    "AUDIT_PRODUCT_READINESS",
+                    {"eligible": identifiers, "blocked": blocked},
+                ),
+            )
+        ]
+        distribution = self._run_task(
+            command,
+            "distribution-supervisor",
+            "COORDINATE_CONNECTION_AUDIT",
+            "marketplaces",
+            {"channels": list(channels), "external_writes": "BLOCKED"},
+            parent_task_id=manager.task_id,
+            depends_on=[task.task_id for task in product_tasks],
+        )
+        if self.connection_service is not None:
+            statuses = self.connection_service.inspect_all(products)
+        else:
+            from .marketplace_clients import connection_status
+
+            statuses = connection_status()
+        channel_tasks = [
+            self._run_task(
+                command,
+                self.CHANNEL_AGENTS[channel],
+                "READ_ONLY_CONNECTION_CHECK",
+                channel,
+                statuses[channel],
+                parent_task_id=distribution.task_id,
+                depends_on=[distribution.task_id],
+            )
+            for channel in channels
+        ]
+        sync = self._run_task(
+            command,
+            "sync-monitor-agent",
+            "AUDIT_SYNC_STATE",
+            "marketplaces",
+            {"checked_channels": list(channels), "external_write": False},
+            parent_task_id=distribution.task_id,
+            depends_on=[task.task_id for task in channel_tasks],
+        )
+        next_actions = []
+        if blocked:
+            next_actions.append("COMPLETE_BLOCKING_PRODUCT_DATA")
+        for channel, status in statuses.items():
+            if status.get("readiness") != "CONNECTED_READ_ONLY":
+                next_actions.append(f"CONNECT_{channel.upper().replace('-', '_')}")
+        next_actions.append("KEEP_EXTERNAL_WRITE_GUARD_ENABLED")
+        self._run_task(
+            command,
+            "general-manager",
+            "CONSOLIDATE_OPERATIONAL_AUDIT",
+            "veratus",
+            {
+                "products_total": len(products),
+                "eligible_products": identifiers,
+                "blocked_products": blocked,
+                "connections": statuses,
+                "next_actions": list(dict.fromkeys(next_actions)),
+                "external_writes": False,
+            },
+            parent_task_id=manager.task_id,
+            depends_on=[sync.task_id],
         )
 
     def _report(self, command: Command) -> dict[str, Any]:

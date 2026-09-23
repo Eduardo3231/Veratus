@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from veratus_agents.marketplace_adapters import Marketplace, build_distribution_draft
 from veratus_agents.marketplace_ops import (
     CategoryMappingStatus,
@@ -10,6 +12,7 @@ from veratus_agents.marketplace_ops import (
     SyncConflict,
     apply_founder_confirmed_defaults,
     channel_readiness,
+    make_marketplace_store,
     prepare_listing,
 )
 
@@ -160,3 +163,17 @@ def test_founder_defaults_preserve_confirmed_sku_data_and_mark_estimates():
             "shared_default": "289.90",
         }
     ]
+
+
+def test_marketplace_store_factory_prefers_postgres_when_configured(tmp_path):
+    marker = object()
+    with patch(
+        "veratus_agents.postgres_marketplace.PostgresMarketplaceStore",
+        return_value=marker,
+    ) as postgres:
+        store = make_marketplace_store(
+            tmp_path / "marketplace.sqlite3", "postgresql://example"
+        )
+
+    assert store is marker
+    postgres.assert_called_once_with("postgresql://example")

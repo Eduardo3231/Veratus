@@ -561,6 +561,13 @@ class MarketplaceStore:
             db.commit()
         return result
 
+    def recalled(self, key: str) -> dict[str, Any] | None:
+        with sqlite3.connect(self.path) as db:
+            existing = db.execute(
+                "SELECT result_json FROM marketplace_idempotency WHERE key=?", (key,)
+            ).fetchone()
+        return json.loads(existing[0]) if existing else None
+
     def event(self, action: str, target: str, data: dict[str, Any]) -> None:
         with sqlite3.connect(self.path) as db:
             db.execute(
@@ -756,12 +763,9 @@ def prepare_listing(
         return result
     key = f"{channel.value}:{product['sku']}:CREATE_DRAFT:{product.get('updated_at', '1')}"
     existing = store.listing(channel.value, product["sku"])
-    with sqlite3.connect(store.path) as db:
-        remembered = db.execute(
-            "SELECT result_json FROM marketplace_idempotency WHERE key=?", (key,)
-        ).fetchone()
+    remembered = store.recalled(key)
     if remembered:
-        return json.loads(remembered[0])
+        return remembered
     result = store.remember(
         key,
         store.upsert_listing(
@@ -775,6 +779,16 @@ def prepare_listing(
             {"channel": channel.value, "external_write": False},
         )
     return result
+
+
+def make_marketplace_store(
+    path: str | Path, database_url: str | None = None
+) -> MarketplaceStore:
+    if database_url:
+        from .postgres_marketplace import PostgresMarketplaceStore
+
+        return PostgresMarketplaceStore(database_url)  # type: ignore[return-value]
+    return MarketplaceStore(path)
 
 
 FOUNDER_CONFIRMED_DEFAULTS: dict[str, Any] = {

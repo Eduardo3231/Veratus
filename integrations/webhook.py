@@ -268,15 +268,17 @@ def _product_store():
 
 
 @lru_cache(maxsize=4)
-def _marketplace_store_cached(path: str):
-    from veratus_agents.marketplace_ops import MarketplaceStore
+def _marketplace_store_cached(path: str, database_url: str | None):
+    from veratus_agents.marketplace_ops import make_marketplace_store
 
-    return MarketplaceStore(path)
+    return make_marketplace_store(path, database_url)
 
 
 def _marketplace_store():
     settings = AgentSettings.from_env()
-    return _marketplace_store_cached(str(settings.runtime_dir / "marketplace.sqlite3"))
+    return _marketplace_store_cached(
+        str(settings.runtime_dir / "marketplace.sqlite3"), settings.database_url
+    )
 
 
 @lru_cache(maxsize=4)
@@ -1386,7 +1388,7 @@ def _operational_runtime():
                     status=CategoryMappingStatus.CATEGORY_DISCOVERY_BLOCKED_BY_CREDENTIALS,
                 )
         _operational_runtime_instance = OperationalRuntime(
-            str(settings.runtime_dir / "runtime.sqlite3"),
+            settings.database_url or str(settings.runtime_dir / "runtime.sqlite3"),
             product_source=discover_products,
             marketplace_store=store,
             connection_service=MarketplaceConnectionService(store),

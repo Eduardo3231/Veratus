@@ -14,14 +14,28 @@ def _products() -> list[dict[str, object]]:
             "name": "Black GMT",
             "status": "ACTIVE",
             "image": "black.png",
+            "category": "Relógios",
+            "cost": "65.00",
+            "sale_price": "289.90",
         },
         {
             "id": "ocean-blue",
             "name": "Ocean Blue",
             "status": "ACTIVE",
             "image": "blue.png",
+            "category": "Relógios",
+            "cost": "65.00",
+            "sale_price": "289.90",
         },
-        {"id": "paused", "name": "Paused", "status": "PAUSED", "image": "paused.png"},
+        {
+            "id": "paused",
+            "name": "Paused",
+            "status": "PAUSED",
+            "image": "paused.png",
+            "category": "Relógios",
+            "cost": "65.00",
+            "sale_price": "289.90",
+        },
     ]
 
 
@@ -109,3 +123,65 @@ def test_external_writes_cannot_be_enabled(tmp_path: Path) -> None:
             product_source=_products,
             external_writes_enabled=True,
         )
+
+
+def test_exact_production_audit_command_invokes_all_agents_without_writes(
+    tmp_path: Path,
+) -> None:
+    runtime = OperationalRuntime(
+        str(tmp_path / "runtime.sqlite3"), product_source=_products
+    )
+
+    report = runtime.execute(
+        "Gerente, analise o estado atual da Veratus, os produtos ativos e as "
+        "conexões dos marketplaces. Identifique as próximas ações operacionais "
+        "sem publicar nada."
+    )
+
+    assert report["status"] == "COMPLETED"
+    assert set(report["agents_invoked"]) == set(AGENT_REGISTRY)
+    assert report["external_writes"] == "BLOCKED"
+    consolidated = next(
+        task
+        for task in report["tasks"]
+        if task["action"] == "CONSOLIDATE_OPERATIONAL_AUDIT"
+    )
+    assert consolidated["result"]["eligible_products"] == [
+        "black-gmt",
+        "ocean-blue",
+    ]
+    assert consolidated["result"]["external_writes"] is False
+
+
+def test_prepare_blocks_product_with_unconfirmed_commercial_data(
+    tmp_path: Path,
+) -> None:
+    def products():
+        return [
+            {
+                "id": "unpriced",
+                "name": "Unpriced",
+                "status": "ACTIVE",
+                "image": "asset.png",
+                "category": "Relógios",
+            }
+        ]
+
+    runtime = OperationalRuntime(
+        str(tmp_path / "runtime.sqlite3"), product_source=products
+    )
+    report = runtime.execute(
+        "Gerente, prepare todos os produtos tecnicamente aptos para distribuição "
+        "e atualize a prontidão dos marketplaces."
+    )
+
+    quality = next(task for task in report["tasks"] if task["agent"] == "quality-agent")
+    assert quality["result"]["eligible"] == []
+    assert quality["result"]["blocked"] == [
+        {"product": "unpriced", "missing_fields": ["sale_price", "cost"]}
+    ]
+    assert all(
+        task["result"].get("drafts") == []
+        for task in report["tasks"]
+        if task["agent"] in OperationalRuntime.CHANNEL_AGENTS.values()
+    )
