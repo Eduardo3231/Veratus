@@ -1488,6 +1488,7 @@ def os_simulate_distribution():
 
 _runtime_engine = None
 _operational_runtime_instance = None
+_paid_media_worker_instance = None
 
 
 def _json_safe(value):
@@ -1541,6 +1542,184 @@ def _operational_runtime():
             connection_service=MarketplaceConnectionService(store),
         )
     return _operational_runtime_instance
+
+
+def _paid_media_worker():
+    global _paid_media_worker_instance
+    if _paid_media_worker_instance is None:
+        from veratus_agents.paid_media import (
+            MetaAdsAdapter,
+            PaidAcquisitionWorker,
+            PaidMediaConfig,
+            PaidMediaStore,
+        )
+
+        settings = AgentSettings.from_env()
+        persistence = settings.database_url or str(
+            settings.runtime_dir / "paid-media.sqlite3"
+        )
+        _paid_media_worker_instance = PaidAcquisitionWorker(
+            PaidMediaStore(persistence),
+            _operational_runtime().engine,
+            adapter=MetaAdsAdapter(),
+            config=PaidMediaConfig.from_env(),
+        )
+    return _paid_media_worker_instance
+
+
+@app.route("/os/paid-media/status", methods=["GET"])
+def os_paid_media_status():
+    denied = _admin_required()
+    if denied:
+        return denied
+    return jsonify(_json_safe(_paid_media_worker().status())), 200
+
+
+@app.route("/os/paid-media/accounts", methods=["GET"])
+def os_paid_media_accounts():
+    denied = _admin_required()
+    if denied:
+        return denied
+    health = _paid_media_worker().adapter.health()
+    return jsonify({"accounts": [_json_safe(health)]}), 200
+
+
+@app.route("/os/paid-media/experiments", methods=["GET"])
+def os_paid_media_experiments():
+    denied = _admin_required()
+    if denied:
+        return denied
+    return jsonify(
+        {"experiments": _json_safe(_paid_media_worker().store.snapshot.experiments)}
+    ), 200
+
+
+@app.route("/os/paid-media/creative-review", methods=["POST"])
+def os_paid_media_creative_review():
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    if set(data) != {"sku", "creative"} or not isinstance(data["creative"], dict):
+        return jsonify({"status": "error", "message": "invalid_creative_review"}), 400
+    from veratus_agents.data_discovery import discover_products
+
+    product = next(
+        (item for item in discover_products() if item["sku"] == data["sku"]), None
+    )
+    if product is None:
+        return jsonify({"status": "error", "message": "product_not_found"}), 404
+    result = _paid_media_worker().creative_review(product, data["creative"])
+    return jsonify(_json_safe(result)), 201
+
+
+@app.route("/os/paid-media/plan", methods=["POST"])
+def os_paid_media_plan():
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    allowed = {"creative", "idempotency_key"}
+    if not set(data).issubset(allowed):
+        return jsonify({"status": "error", "message": "invalid_plan_request"}), 400
+    if "creative" in data and not isinstance(data["creative"], dict):
+        return jsonify({"status": "error", "message": "invalid_plan_request"}), 400
+    from veratus_agents.data_discovery import discover_products
+
+    try:
+        result = _paid_media_worker().plan(
+            discover_products(),
+            data.get("creative"),
+            idempotency_key=data.get("idempotency_key"),
+        )
+    except ValueError as exc:
+        return jsonify({"status": "blocked", "message": str(exc)}), 409
+    return jsonify(_json_safe(result)), 201
+
+
+@app.route("/os/paid-media/approve", methods=["POST"])
+def os_paid_media_approve():
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    required = {"experiment_id", "approval_request_id", "actor"}
+    if set(data) != required or not all(
+        isinstance(data[key], str) and data[key].strip() for key in required
+    ):
+        return jsonify({"status": "error", "message": "invalid_approval_request"}), 400
+    try:
+        result = _paid_media_worker().approve(
+            data["experiment_id"],
+            data["approval_request_id"],
+            actor=data["actor"].strip()[:80],
+        )
+    except ValueError as exc:
+        code = 409 if str(exc) == "plan_has_open_blockers" else 404
+        return jsonify({"status": "error", "message": str(exc)}), code
+    return jsonify(_json_safe(result)), 200
+
+
+@app.route("/os/paid-media/execute", methods=["POST"])
+def os_paid_media_execute():
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    required = {"experiment_id", "approval_request_id", "idempotency_key"}
+    if set(data) != required or not all(isinstance(data[key], str) for key in required):
+        return jsonify({"status": "error", "message": "invalid_execution_request"}), 400
+    try:
+        result = _paid_media_worker().execute(
+            data["experiment_id"],
+            data["approval_request_id"],
+            idempotency_key=data["idempotency_key"],
+        )
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 404
+    return jsonify(_json_safe(result)), 200 if result["status"] != "BLOCKED" else 409
+
+
+@app.route("/os/paid-media/sync", methods=["POST"])
+def os_paid_media_sync():
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    if data:
+        return jsonify({"status": "error", "message": "sync_body_must_be_empty"}), 400
+    return jsonify(_json_safe(_paid_media_worker().sync())), 200
+
+
+@app.route("/os/paid-media/incidents", methods=["GET"])
+def os_paid_media_incidents():
+    denied = _admin_required()
+    if denied:
+        return denied
+    return jsonify(
+        {"incidents": _json_safe(_paid_media_worker().store.snapshot.incidents)}
+    ), 200
+
+
+@app.route("/os/paid-media/shift-report", methods=["GET"])
+def os_paid_media_shift_report():
+    denied = _admin_required()
+    if denied:
+        return denied
+    report = _paid_media_worker().latest_shift_report()
+    if report is None:
+        return jsonify({"status": "empty", "report": None}), 200
+    return jsonify({"status": "ok", "report": _json_safe(report)}), 200
 
 
 @app.route("/os/agents", methods=["GET"])
@@ -1615,8 +1794,18 @@ def os_commands():
         return jsonify({"status": "error", "message": error[0]}), error[1]
     if set(data) != {"message"} or not isinstance(data["message"], str):
         return jsonify({"status": "error", "message": "invalid_command_request"}), 400
+    from veratus_agents.operations import CommandRoutedElsewhere
+
     try:
         execution = _operational_runtime().execute(data["message"])
+    except CommandRoutedElsewhere as exc:
+        return jsonify(
+            {
+                "status": "error",
+                "message": "command_routed_elsewhere",
+                "endpoint": exc.endpoint,
+            }
+        ), 400
     except ValueError:
         return jsonify({"status": "error", "message": "unsupported_command"}), 400
     command = engine.commands[execution["command_id"]]

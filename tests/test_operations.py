@@ -5,6 +5,7 @@ from veratus_agents.operations import (
     ApprovalStatus,
     ApprovalType,
     CommandEngine,
+    CommandRoutedElsewhere,
     CommandType,
     DependencyError,
     OperationalRuntime,
@@ -23,10 +24,38 @@ def test_parse_mercado_livre_readiness_command():
     assert parsed.channels == ("mercado-livre",)
 
 
-def test_registry_has_thirteen_operational_agents():
-    assert len(AGENT_REGISTRY) == 13
+def test_paid_acquisition_command_is_not_misrouted_to_catalogue_drafts():
+    with pytest.raises(CommandRoutedElsewhere) as routed:
+        OperationalRuntime.parse_command(
+            "Gerente, acione o trabalhador de aquisição paga em modo SHADOW. "
+            "Analise o Product Master, escolha um único produto e prepare um "
+            "plano de campanha Meta Ads de R$20/dia. Não publique nada."
+        )
+
+    assert routed.value.endpoint == "/os/paid-media/plan"
+    assert OperationalRuntime.parse_command(
+        "Gerente, prepare todos os relógios ativos para Meta."
+    ).channels == ("meta",)
+    assert (
+        OperationalRuntime.parse_command(
+            "Quais aprovações pendentes de meta ads?"
+        ).handler
+        == "approvals"
+    )
+    assert (
+        OperationalRuntime.parse_command(
+            "Gerente, analise o estado atual da Veratus, os produtos ativos e as "
+            "conexões dos marketplaces, incluindo tráfego pago."
+        ).handler
+        == "operational_audit"
+    )
+
+
+def test_registry_has_fourteen_operational_agents():
+    assert len(AGENT_REGISTRY) == 14
     assert AGENT_REGISTRY["general-manager"].level == 1
     assert AGENT_REGISTRY["shopee-agent"].external_write is False
+    assert AGENT_REGISTRY["paid-acquisition-worker"].external_write is False
 
 
 def test_command_is_idempotent_and_ceo_has_priority(tmp_path):

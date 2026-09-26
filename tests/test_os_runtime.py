@@ -39,8 +39,9 @@ def _products() -> list[dict[str, object]]:
     ]
 
 
-def test_registry_has_exactly_thirteen_agents() -> None:
-    assert len(AGENT_REGISTRY) == 13
+def test_registry_preserves_thirteen_agents_and_adds_paid_acquisition() -> None:
+    assert len(AGENT_REGISTRY) == 14
+    assert AGENT_REGISTRY["paid-acquisition-worker"].supervisor == "general-manager"
 
 
 def test_manager_command_traverses_real_hierarchy_and_blocks_external_writes(
@@ -56,7 +57,9 @@ def test_manager_command_traverses_real_hierarchy_and_blocks_external_writes(
     )
 
     assert report["status"] == "COMPLETED"
-    assert set(report["agents_invoked"]) == set(AGENT_REGISTRY)
+    assert set(report["agents_invoked"]) == set(AGENT_REGISTRY) - {
+        "paid-acquisition-worker"
+    }
     assert report["external_writes"] == "BLOCKED"
     tasks = report["tasks"]
     assert all(item["status"] == TaskStatus.COMPLETED for item in tasks)
@@ -151,6 +154,32 @@ def test_exact_production_audit_command_invokes_all_agents_without_writes(
         "ocean-blue",
     ]
     assert consolidated["result"]["external_writes"] is False
+
+
+def test_operational_audit_reports_live_paid_media_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PAID_MEDIA_DEFAULT_DAILY_BUDGET_BRL", "0")
+    monkeypatch.delenv("META_PURCHASE_EVENT_VERIFIED", raising=False)
+    runtime = OperationalRuntime(
+        str(tmp_path / "runtime.sqlite3"), product_source=_products
+    )
+
+    report = runtime.execute(
+        "Gerente, analise o estado atual da Veratus, os produtos ativos e as "
+        "conexões dos marketplaces. Identifique as próximas ações operacionais "
+        "sem publicar nada."
+    )
+
+    audit = next(
+        task
+        for task in report["tasks"]
+        if task["action"] == "AUDIT_PAID_ACQUISITION_READINESS"
+    )["result"]
+    assert audit["daily_cap_brl"] == "0.00"
+    assert audit["tracking"] == "UNVERIFIED"
+    assert audit["live_writes"] is False
+    assert set(audit["economics"].values()) == {"INCOMPLETE"}
 
 
 def test_prepare_blocks_product_with_unconfirmed_commercial_data(

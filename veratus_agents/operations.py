@@ -292,6 +292,45 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
         "distribution-supervisor",
         frozenset({"READ_APPROVED_PRODUCT", "REPORT"}),
     ),
+    "paid-acquisition-worker": AgentDefinition(
+        "paid-acquisition-worker",
+        "Paid Acquisition Worker",
+        2,
+        "growth",
+        "general-manager",
+        frozenset(
+            {
+                "READ_PRODUCT",
+                "READ_COST",
+                "READ_ORDERS",
+                "READ_PAID_MEDIA",
+                "CREATE_DRAFT",
+                "REPORT",
+            }
+        ),
+        mission=(
+            "planejar, monitorar e reconciliar aquisição paga sob limites "
+            "financeiros e aprovação humana"
+        ),
+        capabilities=(
+            "economics",
+            "creative-review",
+            "experiment-planning",
+            "attribution-reconciliation",
+            "incident-management",
+            "shift-report",
+        ),
+        tools=("task-engine", "approval-engine", "audit-log", "paid-media-adapter"),
+        read_scope=("product-master", "orders", "paid-media-readback"),
+        write_scope=("paid-media-draft",),
+        escalation_rules=(
+            "tracking-failure",
+            "economics-incomplete",
+            "overspend",
+            "auth-failure",
+            "attribution-anomaly",
+        ),
+    ),
 }
 
 _TEAM_CONTRACTS = {
@@ -850,6 +889,26 @@ class ProductSource(Protocol):
     ) -> list[dict[str, Any]]: ...
 
 
+class CommandRoutedElsewhere(ValueError):
+    """The command belongs to a dedicated endpoint, not to this runtime."""
+
+    def __init__(self, endpoint: str) -> None:
+        super().__init__(f"use_endpoint:{endpoint}")
+        self.endpoint = endpoint
+
+
+_PAID_ACQUISITION_TOKENS = (
+    "aquisição paga",
+    "aquisicao paga",
+    "mídia paga",
+    "midia paga",
+    "tráfego pago",
+    "trafego pago",
+    "meta ads",
+)
+_PAID_PLANNING_VERBS = ("acione", "prepare", "planeje", "plano", "campanha", "monte")
+
+
 @dataclass(frozen=True)
 class ParsedCommand:
     handler: str
@@ -858,7 +917,7 @@ class ParsedCommand:
 
 
 class OperationalRuntime:
-    """Deterministic 13-agent runtime.
+    """Deterministic 14-agent runtime.
 
     The runtime deliberately stops at persisted local drafts. An external API write is
     never performed here; publishing belongs behind the approval and write guard.
@@ -907,6 +966,15 @@ class OperationalRuntime:
             return ParsedCommand(
                 "operational_audit", tuple(OperationalRuntime.CHANNEL_AGENTS)
             )
+        # Paid media has its own worker: a planning order such as "prepare um
+        # plano Meta Ads" must not fall through to marketplace catalogue drafts.
+        # Questions ("quais...", "pendentes") keep their read-only handlers.
+        if (
+            any(token in normalized for token in _PAID_ACQUISITION_TOKENS)
+            and any(verb in normalized for verb in _PAID_PLANNING_VERBS)
+            and not any(query in normalized for query in ("quais", "pendente"))
+        ):
+            raise CommandRoutedElsewhere("/os/paid-media/plan")
         if "cadastre" in normalized and "feminin" in normalized:
             return ParsedCommand("intake_feminine", collection="feminine")
         if (
@@ -1852,6 +1920,31 @@ class OperationalRuntime:
             parent_task_id=distribution.task_id,
             depends_on=[task.task_id for task in channel_tasks],
         )
+        # Imported here: paid_media imports this module at load time.
+        from .paid_media import MetaAdsAdapter, PaidMediaConfig, calculate_economics
+
+        paid_config = PaidMediaConfig.from_env()
+        paid_media = self._run_task(
+            command,
+            "paid-acquisition-worker",
+            "AUDIT_PAID_ACQUISITION_READINESS",
+            "meta-ads",
+            {
+                "mode": paid_config.autonomy_mode.value,
+                "live_writes": paid_config.live_writes,
+                "daily_cap_brl": f"{paid_config.daily_budget_brl:.2f}",
+                "tracking": MetaAdsAdapter().get_tracking_status()["status"],
+                "economics": {
+                    str(item.get("sku") or item.get("id")): calculate_economics(
+                        item, paid_config.safety_factor
+                    )["status"]
+                    for item in eligible
+                },
+                "external_write": False,
+            },
+            parent_task_id=manager.task_id,
+            depends_on=[task.task_id for task in product_tasks],
+        )
         next_actions = []
         if blocked:
             next_actions.append("COMPLETE_BLOCKING_PRODUCT_DATA")
@@ -1873,7 +1966,7 @@ class OperationalRuntime:
                 "external_writes": False,
             },
             parent_task_id=manager.task_id,
-            depends_on=[sync.task_id],
+            depends_on=[sync.task_id, paid_media.task_id],
         )
 
     def _report(self, command: Command) -> dict[str, Any]:
