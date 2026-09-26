@@ -256,6 +256,18 @@ def _metrics_store():
 
 
 @lru_cache(maxsize=4)
+def _order_ledger_cached(operations_db: str, database_url: str | None):
+    from veratus_agents.orders import make_order_ledger
+
+    return make_order_ledger(operations_db, database_url)
+
+
+def _order_ledger():
+    settings = AgentSettings.from_env()
+    return _order_ledger_cached(str(settings.operations_db), settings.database_url)
+
+
+@lru_cache(maxsize=4)
 def _product_store_cached(operations_db: str, database_url: str | None):
     from veratus_agents.product_master import make_product_repository
 
@@ -850,6 +862,141 @@ def os_calculate_pricing():
     except ValidationError:
         return jsonify({"status": "error", "message": "invalid_pricing_input"}), 400
     return jsonify({"status": "ok", "pricing": result}), 200
+
+
+def _validation_errors(exc: ValidationError) -> list[dict[str, str]]:
+    # Field and reason only: submitted values are never echoed back.
+    return [
+        {
+            "field": ".".join(str(part) for part in error["loc"]) or "body",
+            "reason": error["msg"],
+        }
+        for error in exc.errors()
+    ]
+
+
+def _known_product_ids() -> set[str]:
+    from veratus_agents.data_discovery import discover_products
+
+    return {
+        str(value)
+        for product in discover_products()
+        for value in (product.get("sku"), product.get("id"))
+        if value
+    }
+
+
+@app.route("/os/orders", methods=["GET", "POST"])
+def os_orders():
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.orders import (
+        OrderChannel,
+        OrderConflictError,
+        OrderRecord,
+        OrderStatus,
+        local_day_bounds,
+    )
+
+    if request.method == "GET":
+        # from/to are inclusive calendar days in São Paulo time.
+        try:
+            status = request.args.get("status")
+            channel = request.args.get("channel")
+            first_day = request.args.get("from")
+            last_day = request.args.get("to")
+            date_from, date_to = local_day_bounds(
+                datetime.date.fromisoformat(first_day) if first_day else None,
+                datetime.date.fromisoformat(last_day) if last_day else None,
+            )
+            filters = {
+                "status": OrderStatus(status) if status else None,
+                "channel": OrderChannel(channel) if channel else None,
+                "date_from": date_from,
+                "date_to": date_to,
+            }
+            limit = int(request.args.get("limit", "200"))
+        except ValueError:
+            return jsonify({"status": "error", "message": "invalid_filter"}), 400
+        ledger = _order_ledger()
+        orders = ledger.list_orders(**filters, limit=limit)
+        summary = ledger.summary(**filters)
+        return jsonify(
+            {
+                "status": "ok",
+                "summary": summary,
+                "orders": orders,
+                "truncated": summary["orders"] > len(orders),
+            }
+        ), 200
+
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    try:
+        order = OrderRecord.model_validate(data)
+    except ValidationError as exc:
+        return jsonify(
+            {
+                "status": "error",
+                "message": "invalid_order",
+                "errors": _validation_errors(exc),
+            }
+        ), 400
+    if order.sku not in _known_product_ids():
+        return jsonify({"status": "error", "message": "unknown_sku"}), 400
+    try:
+        result, stored = _order_ledger().record(order)
+    except OrderConflictError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 409
+    return jsonify({"status": result, "order": stored}), (
+        201 if result == "created" else 200
+    )
+
+
+@app.route("/os/orders/<order_id>", methods=["GET"])
+def os_order_detail(order_id):
+    denied = _admin_required()
+    if denied:
+        return denied
+    order = _order_ledger().get(order_id)
+    if order is None:
+        return jsonify({"status": "error", "message": "order_not_found"}), 404
+    return jsonify({"status": "ok", "order": order}), 200
+
+
+@app.route("/os/orders/<order_id>/status", methods=["POST"])
+def os_order_status(order_id):
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    from veratus_agents.orders import (
+        OrderConflictError,
+        OrderTransitionError,
+        StatusChange,
+    )
+
+    try:
+        change = StatusChange.model_validate(data)
+    except ValidationError as exc:
+        return jsonify(
+            {
+                "status": "error",
+                "message": "invalid_status_change",
+                "errors": _validation_errors(exc),
+            }
+        ), 400
+    try:
+        result, stored = _order_ledger().change_status(order_id, change)
+    except KeyError:
+        return jsonify({"status": "error", "message": "order_not_found"}), 404
+    except (OrderConflictError, OrderTransitionError) as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 409
+    return jsonify({"status": result, "order": stored}), 200
 
 
 @app.route("/os/products", methods=["GET", "POST"])
