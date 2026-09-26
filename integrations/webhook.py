@@ -1899,5 +1899,292 @@ def os_status():
     ), 200
 
 
+# --- Meta webhooks: WhatsApp Cloud API e comentários do Instagram -------------
+# Nada é enviado sem WHATSAPP_SEND_ENABLED / INSTAGRAM_DM_ENABLED = "true".
+
+_META_WEBHOOK_MAX_BYTES = 256 * 1024
+
+
+def _meta_subscription(verify_token_env):
+    from veratus_agents.meta_webhooks import verify_subscription
+
+    challenge = verify_subscription(
+        request.args.get("hub.mode"),
+        request.args.get("hub.verify_token"),
+        request.args.get("hub.challenge"),
+        os.getenv(verify_token_env, "").strip(),
+    )
+    if challenge is None:
+        return jsonify({"status": "error", "message": "forbidden"}), 403
+    return challenge, 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+
+def _meta_signed_payload(app_secret_env):
+    """Return (payload, None) for a genuine Meta POST, or (None, response)."""
+    from veratus_agents.meta_webhooks import verify_signature
+
+    if (request.content_length or 0) > _META_WEBHOOK_MAX_BYTES:
+        return None, (jsonify({"status": "error", "message": "payload_too_large"}), 413)
+    raw = request.get_data(cache=True)
+    if len(raw) > _META_WEBHOOK_MAX_BYTES:
+        return None, (jsonify({"status": "error", "message": "payload_too_large"}), 413)
+    if not verify_signature(
+        raw,
+        request.headers.get("X-Hub-Signature-256"),
+        os.getenv(app_secret_env, "").strip(),
+    ):
+        app.logger.warning("meta_webhook_bad_signature channel=%s", app_secret_env)
+        return None, (jsonify({"status": "error", "message": "invalid_signature"}), 401)
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return None, (jsonify({"status": "error", "message": "invalid_json"}), 400)
+    if not isinstance(payload, dict):
+        return None, (
+            jsonify({"status": "error", "message": "json_object_required"}),
+            400,
+        )
+    return payload, None
+
+
+@lru_cache(maxsize=4)
+def _whatsapp_channel_cached(operations_db, database_url, salt, encryption_key):
+    from veratus_agents.whatsapp import WhatsAppChannel
+
+    return WhatsAppChannel(
+        operations_db, database_url, salt=salt, encryption_key=encryption_key
+    )
+
+
+def _whatsapp_channel():
+    settings = AgentSettings.from_env()
+    return _whatsapp_channel_cached(
+        str(settings.operations_db),
+        settings.database_url,
+        os.getenv("VERATUS_SESSION_SALT", "").strip(),
+        os.getenv("VERATUS_TOKEN_ENCRYPTION_KEY", "").strip(),
+    )
+
+
+def _whatsapp_unavailable(exc):
+    app.logger.error("whatsapp_not_configured missing=%s", exc)
+    return jsonify({"status": "blocked", "message": "whatsapp_not_configured"}), 503
+
+
+@app.route("/integrations/whatsapp/webhook", methods=["GET", "POST"])
+def whatsapp_webhook():
+    if request.method == "GET":
+        return _meta_subscription("WHATSAPP_VERIFY_TOKEN")
+    payload, error = _meta_signed_payload("WHATSAPP_APP_SECRET")
+    if error:
+        return error
+    from veratus_agents.whatsapp import WhatsAppConfigurationError
+
+    try:
+        counts = _whatsapp_channel().receive(payload)
+    except WhatsAppConfigurationError as exc:
+        # 503 makes Meta retry for up to 7 days instead of losing the message.
+        return _whatsapp_unavailable(exc)
+    return jsonify({"status": "received", **counts}), 200
+
+
+@app.route("/integrations/whatsapp/drafts/process", methods=["POST"])
+def whatsapp_process_drafts():
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    limit = data.get("limit", 20)
+    if set(data) - {"limit"} or not isinstance(limit, int):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    from veratus_agents import run_sales_workflow
+    from veratus_agents.whatsapp import WhatsAppConfigurationError
+
+    try:
+        result = _whatsapp_channel().draft_pending(run_sales_workflow, limit=limit)
+    except WhatsAppConfigurationError as exc:
+        return _whatsapp_unavailable(exc)
+    return jsonify({"status": "ok", **result, "external_message_sent": False}), 200
+
+
+@app.route("/integrations/whatsapp/conversations", methods=["GET"])
+def whatsapp_conversations():
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.whatsapp import STATES, WhatsAppConfigurationError
+
+    state = request.args.get("state") or None
+    if state and state not in STATES:
+        return jsonify({"status": "error", "message": "invalid_state"}), 400
+    try:
+        conversations = _whatsapp_channel().list_conversations(state=state)
+    except WhatsAppConfigurationError as exc:
+        return _whatsapp_unavailable(exc)
+    return jsonify({"conversations": conversations}), 200
+
+
+@app.route("/integrations/whatsapp/conversations/<conversation_id>", methods=["GET"])
+def whatsapp_conversation_detail(conversation_id):
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.whatsapp import WhatsAppConfigurationError
+
+    try:
+        conversation = _whatsapp_channel().get(conversation_id)
+    except WhatsAppConfigurationError as exc:
+        return _whatsapp_unavailable(exc)
+    if conversation is None:
+        return jsonify({"status": "error", "message": "conversation_not_found"}), 404
+    return jsonify({"conversation": conversation}), 200
+
+
+@app.route(
+    "/integrations/whatsapp/conversations/<conversation_id>/state", methods=["POST"]
+)
+def whatsapp_conversation_state(conversation_id):
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    if set(data) != {"state", "actor"} or not all(
+        isinstance(data[key], str) and data[key].strip() for key in ("state", "actor")
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    from veratus_agents.whatsapp import WhatsAppConfigurationError
+
+    try:
+        conversation = _whatsapp_channel().set_state(
+            conversation_id, data["state"], actor=data["actor"].strip()
+        )
+    except WhatsAppConfigurationError as exc:
+        return _whatsapp_unavailable(exc)
+    except KeyError:
+        return jsonify({"status": "error", "message": "conversation_not_found"}), 404
+    except ValueError:
+        return jsonify({"status": "error", "message": "invalid_state"}), 400
+    return jsonify({"conversation": conversation}), 200
+
+
+@app.route(
+    "/integrations/whatsapp/conversations/<conversation_id>/send", methods=["POST"]
+)
+def whatsapp_conversation_send(conversation_id):
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    allowed = {"actor", "run_id", "text", "idempotency_key"}
+    if (
+        set(data) - allowed
+        or not isinstance(data.get("actor"), str)
+        or not data["actor"].strip()
+        or any(
+            key in data and not isinstance(data[key], str)
+            for key in ("run_id", "text", "idempotency_key")
+        )
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    from veratus_agents.whatsapp import (
+        WhatsAppCloudClient,
+        WhatsAppConfigurationError,
+        send_enabled,
+    )
+
+    try:
+        result = _whatsapp_channel().send(
+            conversation_id,
+            actor=data["actor"].strip()[:100],
+            run_lookup=_agent_store().get_run,
+            client=WhatsAppCloudClient.from_env(),
+            enabled=send_enabled(),
+            run_id=data.get("run_id") or None,
+            text=data.get("text") or None,
+            idempotency_key=data.get("idempotency_key") or None,
+        )
+    except WhatsAppConfigurationError as exc:
+        return _whatsapp_unavailable(exc)
+    except KeyError:
+        return jsonify({"status": "error", "message": "conversation_not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    code = {"SENT": 200, "duplicate": 200, "BLOCKED": 409, "FAILED": 502}[
+        result["status"]
+    ]
+    return jsonify(result), code
+
+
+@lru_cache(maxsize=4)
+def _instagram_queue_cached(operations_db, database_url):
+    from veratus_agents.instagram_comments import CommentReplyQueue
+
+    return CommentReplyQueue(operations_db, database_url)
+
+
+def _instagram_queue():
+    settings = AgentSettings.from_env()
+    return _instagram_queue_cached(str(settings.operations_db), settings.database_url)
+
+
+@app.route("/integrations/instagram/webhook", methods=["GET", "POST"])
+def instagram_webhook():
+    if request.method == "GET":
+        return _meta_subscription("INSTAGRAM_VERIFY_TOKEN")
+    payload, error = _meta_signed_payload("INSTAGRAM_APP_SECRET")
+    if error:
+        return error
+    from veratus_agents.instagram_comments import load_rules
+
+    _, rules = load_rules()
+    counts = _instagram_queue().enqueue(
+        payload, rules, own_account_id=os.getenv("INSTAGRAM_USER_ID", "").strip()
+    )
+    return jsonify({"status": "received", **counts}), 200
+
+
+@app.route("/integrations/instagram/replies", methods=["GET"])
+def instagram_replies():
+    denied = _admin_required()
+    if denied:
+        return denied
+    status = request.args.get("status") or None
+    if status and status not in {"PENDING", "SENDING", "SENT", "FAILED", "EXPIRED"}:
+        return jsonify({"status": "error", "message": "invalid_status"}), 400
+    return jsonify({"replies": _instagram_queue().list_replies(status=status)}), 200
+
+
+@app.route("/integrations/instagram/replies/process", methods=["POST"])
+def instagram_process_replies():
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    if data:
+        return jsonify({"status": "error", "message": "body_must_be_empty"}), 400
+    from veratus_agents.instagram_comments import (
+        InstagramClient,
+        dm_enabled,
+        load_rules,
+    )
+
+    landing_url, rules = load_rules()
+    result = _instagram_queue().process(
+        client=InstagramClient.from_env(),
+        enabled=dm_enabled(),
+        landing_url=landing_url,
+        rules=rules,
+    )
+    return jsonify({"status": "ok", **result}), 200
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, debug=False)

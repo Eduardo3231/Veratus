@@ -1,0 +1,11 @@
+{
+  "landing_url": "https://veratus.onrender.com/",
+  "rules": [
+    {
+      "id": "colecao",
+      "keywords": ["colecao", "coleção", "catalogo", "catálogo", "link"],
+      "utm_campaign": "comentario_colecao",
+      "message": "Olá! Obrigado pelo comentário. Aqui está a coleção Veratus: {link}\nNo site você escolhe o modelo e fala direto com a nossa equipe pelo WhatsApp."
+    }
+  ]
+}
