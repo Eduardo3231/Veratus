@@ -74,7 +74,7 @@ function createWhatsAppLink(productName = '', productId = '') {
 }
 
 document.querySelectorAll('.purchase-link:not(#dialog-cta)').forEach((link) => {
-  link.href = createWhatsAppLink();
+  link.href = createWhatsAppLink(link.dataset.productName, link.dataset.productId);
 });
 
 function productImage(product) {
@@ -259,7 +259,16 @@ async function loadCatalog() {
       // The static projection is attempted after an unavailable API.
     }
   }
-  catalogGrid.innerHTML = '<p class="catalog-loading">A coleção não pôde ser carregada agora.</p>';
+  const failure = document.createElement('p');
+  failure.className = 'catalog-loading';
+  const fallbackLink = document.createElement('a');
+  fallbackLink.className = 'text-link purchase-link';
+  fallbackLink.href = createWhatsAppLink();
+  fallbackLink.target = '_blank';
+  fallbackLink.rel = 'noopener';
+  fallbackLink.innerHTML = 'Consultar pelo WhatsApp <span aria-hidden="true">↗</span>';
+  failure.append('A coleção não pôde ser carregada agora. ', fallbackLink);
+  catalogGrid.replaceChildren(failure);
 }
 
 const inspectionContent = {
