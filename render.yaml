@@ -42,6 +42,22 @@ services:
         value: LOCAL
       - key: PUBLISH_ENABLED
         value: "false"
+      - key: MERCADO_LIVRE_ENABLED
+        value: "false"
+      - key: SHOPEE_ENABLED
+        value: "false"
+      - key: TIKTOK_SHOP_ENABLED
+        value: "false"
+      - key: META_ENABLED
+        value: "false"
+      - key: MERCADO_LIVRE_PUBLISH_ENABLED
+        value: "false"
+      - key: SHOPEE_PUBLISH_ENABLED
+        value: "false"
+      - key: TIKTOK_SHOP_PUBLISH_ENABLED
+        value: "false"
+      - key: META_PUBLISH_ENABLED
+        value: "false"
       - key: MERCADO_LIVRE_ACCESS_TOKEN
         sync: false
       - key: MERCADO_LIVRE_CLIENT_ID
@@ -90,6 +106,52 @@ services:
         sync: false
       - key: META_GRAPH_API_VERSION
         sync: false
+      - key: META_AD_ACCOUNT_ID
+        sync: false
+      - key: META_DATASET_ID
+        sync: false
+      - key: META_PIXEL_ID
+        sync: false
+      - key: META_PURCHASE_EVENT_VERIFIED
+        value: "false"
+      - key: WHATSAPP_SEND_ENABLED
+        value: "false"
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: INSTAGRAM_DM_ENABLED
+        value: "false"
+      - key: INSTAGRAM_ACCESS_TOKEN
+        sync: false
+      - key: INSTAGRAM_USER_ID
+        sync: false
+      - key: INSTAGRAM_APP_SECRET
+        sync: false
+      - key: INSTAGRAM_VERIFY_TOKEN
+        sync: false
+      - key: PAID_MEDIA_WORKER_ENABLED
+        value: "true"
+      - key: PAID_MEDIA_AUTONOMY_MODE
+        value: SHADOW
+      - key: PAID_MEDIA_LIVE_WRITES
+        value: "false"
+      - key: PAID_MEDIA_DEFAULT_DAILY_BUDGET_BRL
+        value: "20"
+      - key: PAID_MEDIA_TEST_MAX_SPEND_BRL
+        value: "140"
+      - key: PAID_MEDIA_MAX_BUDGET_DELTA_PCT
+        value: "0"
+      - key: PAID_MEDIA_RECONCILIATION_REQUIRED
+        value: "true"
+      - key: PAID_MEDIA_CIRCUIT_BREAKER_ENABLED
+        value: "true"
+      - key: PAID_MEDIA_SAFETY_FACTOR
+        value: "0.70"
       - key: VERATUS_AGENT_MODEL
         value: "gpt-4.1-mini"
       - key: VERATUS_AGENT_SHARED_SECRET
