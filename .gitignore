@@ -11,3 +11,5 @@ runtime/
 *.sqlite3-*
 social/publishing-state.json
 .agent-lock.json
+# Fotos originais (com EXIF) antes do tratamento.
+incoming/

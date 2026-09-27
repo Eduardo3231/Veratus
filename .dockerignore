@@ -23,3 +23,5 @@ tmp-*
 *.zip
 *.pdf
 quarantine
+# Fotos originais (com EXIF) antes do tratamento.
+incoming
