@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /os
+Disallow: /agent
+Disallow: /integrations
+
+Sitemap: https://veratus.onrender.com/sitemap.xml
