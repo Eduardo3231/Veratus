@@ -5,13 +5,14 @@
 
 ## Estado do repositório
 
-- **Publicado em 27/09 com autorização do fundador:** `git push origin claude/site-referencias:main` (`38f50be..9f13118`, 28 commits das rodadas de 25, 26 e 27/09).
+- **Publicado em 27/09 com autorização do fundador:** `git push origin main` até `4f9cb2f`, incluindo a restauração das imagens dos nove relógios.
 - Produção (`https://veratus.onrender.com`) conferida depois do deploy:
   - `/health` 200;
   - `/catalog.json` com `price_brl` nos 9 relógios;
-  - `/assets/catalog/black-gmt.webp` e `/social/posts/navy-gold.jpg` 404 (a mídia com marca saiu do ar);
+  - `/catalog.json` aponta os nove relógios para imagens distintas em `assets/catalog/`;
+  - os nove arquivos WebP respondem 200; o MIME explícito `image/webp` foi acrescentado ao servidor na rodada final;
   - `VERATUS_LANDING_URL=https://veratus.onrender.com pytest tests/test_landing_browser.py`: 12 passed, 1 skipped.
-- Pasta principal: `main` local em `9f13118` (fast-forward), `pytest -q` 221 passed.
+- Pasta principal: `main`; `pytest -q` 221 passed e teste de produção da landing 12 passed, 1 skipped.
 - Flags: `PUBLISH_ENABLED=false`, `PAID_MEDIA_LIVE_WRITES=false`, `PAID_MEDIA_AUTONOMY_MODE=SHADOW`, `WHATSAPP_SEND_ENABLED=false`, `INSTAGRAM_DM_ENABLED=false`, e as 8 flags de canal `false`.
 
 ## Arquivos de outro processo na pasta principal
@@ -39,16 +40,17 @@ O Codex (PID 5968) estava em execução desde 10:34 de 27/09, sem escrever na pa
 | `3e92e54` | **Relógios à venda.** 9 relógios, Black GMT incluído, com R$ 289,90, "Frete grátis · até 7 dias" e o botão "Pedir" (WhatsApp com produto, referência e intenção de pedido). Sem foto real, cada relógio aparece como **ilustração da própria paleta** (`palette` no Product Master), identificada como "Ilustração da cor". O ponteiro de segundos segue a hora de São Paulo. Hero com R$ 289,90, frete grátis e até 7 dias. |
 | `f7855d5` | **Agente de vendas.** Antes, o gate bloqueava qualquer R$, frete grátis e prazo, então o agente não respondia "quanto custa?". Agora `CONFIRMED_SALES_FACTS` libera exatamente preço dos relógios, sem taxas, frete grátis, entrega em até 7 dias e desistência em 7 dias, cada um com `evidence_ref`. Continuam bloqueados: outro valor ou prazo, preço de relógio para joia, marca de terceiros, "réplica", estoque, parcelamento e garantia. As ferramentas não entregam mais custo, fornecedor nem material ao agente. |
 | `31cd3c9` | **Fotos reais em um comando**, descrito abaixo. |
+| `4f9cb2f` | **Imagens dos nove relógios restauradas.** Cada criativo voltou ao modelo correspondente; o Product Master distingue o criativo de vitrine da foto real exigida para canais externos. |
 
 ## Fotos reais dos relógios
 
-**Ajuste local pronto em 27/09, aguardando publicação:** por ordem direta do fundador, os nove criativos de catálogo voltaram à vitrine e foram religados aos modelos Arctic White, Ocean Blue, Black GMT, Royal Blue, Platinum Classic, Emerald Signature, Silver Prestige, Polar Blue e Bronze Heritage. Eles ficam em `landing/assets/catalog/`, todos com 1122×1402. O Product Master os classifica como `CATALOG_CREATIVE` e mantém `image_status: NEEDS_REAL_PHOTO`; assim, aparecem no site sem liberar anúncios, posts ou listings como se fossem fotos reais da peça.
+**Publicado e verificado em 27/09:** por ordem direta do fundador, os nove criativos de catálogo voltaram à vitrine e foram religados aos modelos Arctic White, Ocean Blue, Black GMT, Royal Blue, Platinum Classic, Emerald Signature, Silver Prestige, Polar Blue e Bronze Heritage. Eles ficam em `landing/assets/catalog/`, todos com 1122×1402. O Product Master os classifica como `CATALOG_CREATIVE` e mantém `image_status: NEEDS_REAL_PHOTO`; assim, aparecem no site sem liberar anúncios, posts ou listings como se fossem fotos reais da peça.
 
 1. Salve uma foto por modelo em `incoming/relogios/<id>.jpg`, por exemplo `ocean-blue.jpg` ou `black-gmt.jpg`. A pasta fica fora do Git.
 2. Rode `python scripts/import_watch_photos.py --sem-marca-de-terceiros`.
 3. O script recorta em 4:5, salva WebP sem EXIF e marca `REAL_PHOTO` no Product Master. O cartão troca a ilustração pela foto.
 
-Anúncio pago e post de relógio continuam bloqueados até a foto real do item exato (`STOREFRONT_BLOCKERS`). A mídia antiga com marca segue em `quarantine/third-party-marks/`: não restaurar, não editar para apagar a marca.
+Anúncio pago e post de relógio continuam bloqueados até a foto real do item exato (`STOREFRONT_BLOCKERS`). As demais mídias antigas seguem em `quarantine/third-party-marks/`: não restaurar nem editar para apagar marcas.
 
 ## Verificar
 
@@ -64,12 +66,12 @@ Anúncio pago e post de relógio continuam bloqueados até a foto real do item e
 ## Decisões abertas do fundador
 
 1. Fotos reais dos 9 relógios para anúncio, post e listings externos. Os criativos antigos voltaram somente à vitrine por decisão direta do fundador; continuam bloqueados nos canais automáticos.
-3. Origem registrada com manuseio de 2 dias úteis vs entrega em até 7 dias. Quando o prazo começa a contar?
-4. `product_master.py` (material obrigatório para joias no QA): manter ou reverter.
-5. Economics: frete pago pela Veratus, taxa de pagamento e tributo (UNVERIFIED).
-6. Preços das joias: nenhuma fonte real (9 × NEEDS_PRICING).
-7. Fornecedor e mídia com marca no histórico do Git: reescrever ou não.
-8. `VERATUS_SELLER_DOCUMENT`, `INSTAGRAM_ACCESS_TOKEN` e `OPENAI_API_KEY` no Render; número do WhatsApp Cloud API; formas de pagamento, que o agente ainda manda confirmar com a equipe.
+2. Origem registrada com manuseio de 2 dias úteis vs entrega em até 7 dias. Quando o prazo começa a contar?
+3. `product_master.py` (material obrigatório para joias no QA): manter ou reverter.
+4. Economics: frete pago pela Veratus, taxa de pagamento e tributo (UNVERIFIED).
+5. Preços das joias: nenhuma fonte real (9 × NEEDS_PRICING).
+6. Fornecedor e mídia com marca no histórico do Git: reescrever ou não.
+7. `VERATUS_SELLER_DOCUMENT`, `INSTAGRAM_ACCESS_TOKEN` e `OPENAI_API_KEY` no Render; número do WhatsApp Cloud API; formas de pagamento, que o agente ainda manda confirmar com a equipe.
 
 ## Não faça
 
@@ -80,5 +82,4 @@ Anúncio pago e post de relógio continuam bloqueados até a foto real do item e
 
 ## Próximo passo sugerido
 
-1. Publicar a restauração dos nove criativos após confirmação explícita do fundador no momento do push/deploy.
-2. Depois, receber as fotos das peças (`incoming/relogios/<id>.jpg`) e rodar o importador para liberar canais externos.
+1. Receber as fotos das peças (`incoming/relogios/<id>.jpg`) e rodar o importador para liberar canais externos.

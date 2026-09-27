@@ -74,3 +74,10 @@ def test_flask_serves_robots_and_sitemap() -> None:
     assert robots.status_code == 200 and robots.mimetype == "text/plain"
     assert sitemap.status_code == 200 and "xml" in sitemap.mimetype
     assert b"Disallow: /os" in robots.data
+
+
+def test_flask_serves_watch_creatives_as_webp() -> None:
+    response = app.test_client().get("/assets/catalog/arctic-white.webp")
+
+    assert response.status_code == 200
+    assert response.mimetype == "image/webp"

@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import mimetypes
 import os
 import re
 import time
@@ -22,6 +23,7 @@ from veratus_agents.config import AgentSettings
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 LANDING_DIR = Path(BASE_DIR) / "landing"
+mimetypes.add_type("image/webp", ".webp")
 app = Flask(__name__, static_folder=str(LANDING_DIR), static_url_path="")
 app.config["MAX_CONTENT_LENGTH"] = 8192
 
