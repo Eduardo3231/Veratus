@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from veratus_agents.catalog import (
@@ -46,6 +47,21 @@ def test_feminine_product_identity_and_claim_safety() -> None:
         for item in products
         for claim in forbidden_claims
     )
+
+
+def test_jewelry_copy_only_names_the_tone() -> None:
+    # Material is UNVERIFIED (FOUNDER_CONFIRMED 2026-09-26): only "tom dourado"
+    # or "tom prateado" may describe the metal.
+    material_claims = re.compile(
+        r"(?i)\b(ouro|prata|banh\w*|folhead\w*|zirc[ôo]nia|hipoalerg\w*|a[çc]o|"
+        r"r[óo]dio|lat[ãa]o|cristal|pedra)\b"
+    )
+    bare_tone = re.compile(r"(?i)(?<!tom )\b(dourad\w*|pratead\w*)")
+    for item in feminine_products():
+        for key, value in item.items():
+            if isinstance(value, str):
+                assert not material_claims.search(value), (item["id"], key, value)
+                assert not bare_tone.search(value), (item["id"], key, value)
 
 
 def test_feminine_assets_are_unique_and_exist() -> None:

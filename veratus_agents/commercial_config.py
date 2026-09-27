@@ -11,14 +11,9 @@ SUPPLIER_VISIBILITY = "PRIVATE"
 DEFAULT_CHANNEL_STOCK_CAP = None
 CHANNEL_STOCK_CAP_FALLBACK = 20
 HANDLING_TIME_BUSINESS_DAYS = 2
-SHIP_FROM = {
-    "establishment": "Galerie Inauen",
-    "address": "Schifflände 12",
-    "postal_code": "8001",
-    "city": "Zürich",
-    "country": "Switzerland",
-    "country_code": "CH",
-}
+# Origem, nome e endereço do fornecedor ficam fora do repositório, do site, dos
+# marketplaces, da copy, de metadados e de logs (FOUNDER_CONFIRMED 2026-09-26).
+SHIP_FROM = {"visibility": SUPPLIER_VISIBILITY}
 PACKAGE_PROFILE = {
     "package_weight_g": 350,
     "package_length_cm": 18,
@@ -36,6 +31,100 @@ ESTIMATED_WATCH_DIMENSIONS = {
     "product_height_cm": 1.25,
     "status": "ESTIMATED",
     "physically_verified": False,
+}
+
+# --- Decisões do fundador: FOUNDER_CONFIRMED 2026-09-26 -----------------------
+FOUNDER_CONFIRMED_AT = "2026-09-26"
+DELIVERY_MAX_DAYS = 7
+FREE_SHIPPING = True
+CUSTOMER_SHIPPING_BRL = Decimal("0.00")
+CUSTOMER_EXTRA_FEES_BRL = Decimal("0.00")
+SELLER = {
+    "name": "Veratus",
+    "city": "São Paulo/SP",
+    "email": "veratus.ltda@gmail.com",
+    "whatsapp": "(11) 95832-3612",
+    # O CPF autorizado só existe na variável de ambiente, nunca no repositório.
+    "document_env": "VERATUS_SELLER_DOCUMENT",
+}
+FOUNDER_DECISIONS = {
+    "black_gmt_storefront": (
+        "Black GMT volta à vitrine e segue ativo no Product Master, API e agentes."
+    ),
+    "seller_identification": (
+        "São Paulo/SP, veratus.ltda@gmail.com e (11) 95832-3612; "
+        "CPF do vendedor via VERATUS_SELLER_DOCUMENT."
+    ),
+    "supplier": (
+        "PRIVATE: origem, nome e endereço nunca aparecem em site, marketplace, "
+        "copy, metadados ou logs."
+    ),
+    "delivery": f"Entrega em até {DELIVERY_MAX_DAYS} dias para todos os produtos.",
+    "shipping": "Frete grátis para o cliente; nenhuma taxa extra cobrada do cliente.",
+    "prices": (
+        "Preço de todos os produtos no site; relógios R$ 289,90. Joias só com "
+        "preço de fonte real, senão NEEDS_PRICING."
+    ),
+    "jewelry_material": "UNVERIFIED: a copy usa apenas tom dourado ou tom prateado.",
+}
+FOUNDER_OPEN_QUESTIONS = (
+    {
+        "id": "delivery-vs-registered-origin",
+        "status": "PENDING_FOUNDER",
+        "question": (
+            "O Product Master registra origem internacional (PRIVATE) e manuseio "
+            f"de {HANDLING_TIME_BUSINESS_DAYS} dias úteis; o fundador confirmou "
+            f"entrega em até {DELIVERY_MAX_DAYS} dias. A entrega porta a porta em "
+            f"{DELIVERY_MAX_DAYS} dias é viável a partir da origem registrada?"
+        ),
+    },
+)
+
+# Verificado em 2026-09-26: as imagens dos 9 relógios mostram marca de terceiro
+# no mostrador (ROLEX, coroa e nomes de modelo). Enquanto isso valer, o preço
+# público, o botão de pedido e o retorno do Black GMT à vitrine não são aplicados.
+STOREFRONT_BLOCKERS = (
+    {
+        "id": "third-party-trademarks-in-watch-images",
+        "status": "BLOCKING",
+        "scope": "watches",
+        "blocks": (
+            "watch_public_price",
+            "watch_order_cta",
+            "black_gmt_storefront",
+            "paid_media_launch",
+        ),
+        "evidence": "landing/assets/catalog/*.webp: mostrador com marca de terceiro",
+        "unblock": (
+            "fotos do item exato sem marca de terceiros e confirmação do fundador "
+            "de que as peças físicas não levam marca de terceiros"
+        ),
+    },
+)
+
+# EconomicsSnapshot dos relógios. Os três custos UNVERIFIED mantêm o status
+# INCOMPLETE; nenhum CPA de equilíbrio é final até que tenham fonte.
+WATCH_ECONOMICS_SNAPSHOT = {
+    "scope": "watches",
+    "recorded_at": FOUNDER_CONFIRMED_AT,
+    "fields": {
+        "price": {"value": f"{OFFICIAL_SALE_PRICE_BRL:.2f}", "status": "CONFIRMED"},
+        "unit_cost": {
+            "value": f"{OFFICIAL_PRODUCT_COST_BRL:.2f}",
+            "status": "CONFIRMED",
+        },
+        "customer_shipping": {
+            "value": f"{CUSTOMER_SHIPPING_BRL:.2f}",
+            "status": "FOUNDER_CONFIRMED",
+        },
+        "customer_fees": {
+            "value": f"{CUSTOMER_EXTRA_FEES_BRL:.2f}",
+            "status": "FOUNDER_CONFIRMED",
+        },
+        "shipping_cost_paid_by_veratus": {"value": None, "status": "UNVERIFIED"},
+        "payment_fee": {"value": None, "status": "UNVERIFIED"},
+        "tax": {"value": None, "status": "UNVERIFIED"},
+    },
 }
 
 
