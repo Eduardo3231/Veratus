@@ -20,6 +20,7 @@ class CommercialClaim(BaseModel):
         "payment",
         "specification",
         "scarcity",
+        "returns",
     ]
     value: str = Field(min_length=1, max_length=300)
     evidence_ref: str | None = Field(default=None, max_length=200)

@@ -72,6 +72,42 @@ FOUNDER_DECISIONS = {
         "só nas fotos do fornecedor, retiradas do site."
     ),
 }
+# O que o agente de vendas pode afirmar ao cliente. A chave é o evidence_ref
+# exigido pelo gate (veratus_agents/policy.py) em cada commercial_claim.
+CONFIRMED_SALES_FACTS = {
+    "preco-relogios": {
+        "claim_type": "price",
+        "scope": "watches",
+        "text": "Todos os relógios Veratus custam R$ 289,90.",
+    },
+    "sem-taxas": {
+        "claim_type": "price",
+        "scope": "all",
+        "text": "Nenhuma taxa adicional é cobrada do cliente.",
+    },
+    "frete-gratis": {
+        "claim_type": "shipping",
+        "scope": "all",
+        "text": "Frete grátis para o cliente.",
+    },
+    "entrega-7-dias": {
+        "claim_type": "delivery",
+        "scope": "all",
+        "text": f"Entrega em até {DELIVERY_MAX_DAYS} dias.",
+    },
+    "desistencia-7-dias": {
+        "claim_type": "returns",
+        "scope": "all",
+        "text": "O cliente pode desistir em até 7 dias após o recebimento.",
+    },
+}
+SALES_MUST_CONFIRM_WITH_TEAM = (
+    "disponibilidade real do modelo",
+    "formas e condições de pagamento",
+    "preço e material das joias",
+    "garantia",
+    "especificações técnicas (movimento, resistência à água, medidas)",
+)
 FOUNDER_OPEN_QUESTIONS = (
     {
         "id": "delivery-vs-registered-origin",
