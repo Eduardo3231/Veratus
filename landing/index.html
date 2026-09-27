@@ -97,11 +97,24 @@
       </div>
       <div class="inspection-layout shell">
         <div class="inspection-stage scroll-reveal">
-          <div class="inspection-product inspection-product--brand">
-            <img id="inspection-image" src="assets/veratus-v-wheat-720.webp" alt="Símbolo Veratus: V dourado com espiga de trigo" width="720" height="720" loading="lazy">
-            <button class="hotspot is-active hotspot-precision" type="button" aria-expanded="true" aria-controls="inspection-panel" data-hotspot="precision"><span>1</span><b>Precisão</b></button>
-            <button class="hotspot hotspot-balance" type="button" aria-expanded="false" aria-controls="inspection-panel" data-hotspot="balance"><span>2</span><b>Equilíbrio</b></button>
-            <button class="hotspot hotspot-permanence" type="button" aria-expanded="false" aria-controls="inspection-panel" data-hotspot="permanence"><span>3</span><b>Permanência</b></button>
+          <div class="inspection-product inspection-product--brand brand-3d">
+            <div class="brand-3d__halo" aria-hidden="true"></div>
+            <div class="brand-3d__orbit" aria-hidden="true"><i></i></div>
+            <div class="brand-3d__tilt">
+              <div class="brand-3d__body">
+                <img class="brand-3d__layer" src="assets/veratus-v-wheat-720.webp" alt="" aria-hidden="true" style="--depth: 7" width="720" height="720" loading="lazy">
+                <img class="brand-3d__layer" src="assets/veratus-v-wheat-720.webp" alt="" aria-hidden="true" style="--depth: 6" width="720" height="720" loading="lazy">
+                <img class="brand-3d__layer" src="assets/veratus-v-wheat-720.webp" alt="" aria-hidden="true" style="--depth: 5" width="720" height="720" loading="lazy">
+                <img class="brand-3d__layer" src="assets/veratus-v-wheat-720.webp" alt="" aria-hidden="true" style="--depth: 4" width="720" height="720" loading="lazy">
+                <img class="brand-3d__layer" src="assets/veratus-v-wheat-720.webp" alt="" aria-hidden="true" style="--depth: 3" width="720" height="720" loading="lazy">
+                <img class="brand-3d__layer" src="assets/veratus-v-wheat-720.webp" alt="" aria-hidden="true" style="--depth: 2" width="720" height="720" loading="lazy">
+                <img class="brand-3d__layer" src="assets/veratus-v-wheat-720.webp" alt="" aria-hidden="true" style="--depth: 1" width="720" height="720" loading="lazy">
+                <img id="inspection-image" class="brand-3d__face" src="assets/veratus-v-wheat-720.webp" alt="Símbolo Veratus: V dourado com espiga de trigo" width="720" height="720" loading="lazy">
+                <button class="hotspot is-active hotspot-precision" type="button" aria-expanded="true" aria-controls="inspection-panel" data-hotspot="precision"><span>1</span><b>Precisão</b></button>
+                <button class="hotspot hotspot-balance" type="button" aria-expanded="false" aria-controls="inspection-panel" data-hotspot="balance"><span>2</span><b>Equilíbrio</b></button>
+                <button class="hotspot hotspot-permanence" type="button" aria-expanded="false" aria-controls="inspection-panel" data-hotspot="permanence"><span>3</span><b>Permanência</b></button>
+              </div>
+            </div>
           </div>
         </div>
         <aside class="inspection-panel scroll-reveal" id="inspection-panel" aria-live="polite">

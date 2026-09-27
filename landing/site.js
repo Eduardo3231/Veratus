@@ -305,6 +305,21 @@ hotspots.forEach((button) => button.addEventListener('click', () => {
   document.querySelector('[data-inspection-copy]').textContent = content.copy;
 }));
 
+// The 3D brand mark follows the pointer; scrolling turns it through CSS alone.
+const brand3d = document.querySelector('.brand-3d');
+const brand3dTilt = brand3d?.querySelector('.brand-3d__tilt');
+if (brand3dTilt && !reducedMotion && window.matchMedia('(pointer: fine)').matches) {
+  brand3d.addEventListener('pointermove', (event) => {
+    const bounds = brand3d.getBoundingClientRect();
+    brand3dTilt.style.setProperty('--tilt-x', `${((event.clientY - bounds.top) / bounds.height - 0.5) * -12}deg`);
+    brand3dTilt.style.setProperty('--tilt-y', `${((event.clientX - bounds.left) / bounds.width - 0.5) * 16}deg`);
+  });
+  brand3d.addEventListener('pointerleave', () => {
+    brand3dTilt.style.removeProperty('--tilt-x');
+    brand3dTilt.style.removeProperty('--tilt-y');
+  });
+}
+
 const intro = document.querySelector('#intro-gate');
 let introSeen = false;
 try { introSeen = sessionStorage.getItem('veratus-intro-seen') === '1'; } catch (_) { /* storage unavailable */ }

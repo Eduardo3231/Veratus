@@ -643,3 +643,25 @@ button { color: inherit; font: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .hero-still { inset: 0; animation: none; }
 }
+
+/* Capítulo 3D da marca (referências: @meshworkstudio, @designby.abhay). Só transform: o símbolo nunca some. */
+.brand-3d { position: relative; perspective: 1400px; }
+.brand-3d__halo { position: absolute; inset: 6%; border-radius: 50%; background: radial-gradient(circle, rgba(200,165,106,.2), transparent 62%); filter: blur(10px); pointer-events: none; }
+.brand-3d__orbit { position: absolute; inset: -6%; border: 1px solid rgba(200,165,106,.26); border-radius: 50%; pointer-events: none; transform: rotateX(72deg); animation: brand-3d-orbit 24s linear infinite; }
+.brand-3d__orbit i { position: absolute; top: 50%; left: -4px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); }
+@keyframes brand-3d-orbit { to { transform: rotateX(72deg) rotateZ(360deg); } }
+.brand-3d__tilt { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transition: transform .5s cubic-bezier(.2, .75, .25, 1); }
+.brand-3d__body { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateY(-16deg) rotateX(6deg); }
+.brand-3d__body > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.brand-3d__layer { transform: translateZ(calc(var(--depth) * -3px)); filter: brightness(.42) sepia(.35); }
+.brand-3d__face { transform: translateZ(1px); filter: drop-shadow(0 30px 40px rgba(0,0,0,.55)); }
+.brand-3d .hotspot { transform: translate3d(-13px, -50%, 14px); }
+@supports (animation-timeline: view()) {
+  .brand-3d__body { animation: brand-3d-turn linear both; animation-timeline: view(); animation-range: entry 0% exit 100%; }
+  @keyframes brand-3d-turn { from { transform: rotateY(-34deg) rotateX(12deg); } to { transform: rotateY(30deg) rotateX(-8deg); } }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-3d__body { animation: none !important; transform: rotateY(-12deg) rotateX(4deg); }
+  .brand-3d__orbit { animation: none !important; }
+  .brand-3d__tilt { transition: none; }
+}

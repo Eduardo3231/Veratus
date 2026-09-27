@@ -168,4 +168,19 @@ def test_every_image_has_alternative_text() -> None:
         html = (LANDING / page).read_text(encoding="utf-8")
         for tag in re.findall(r"<img\b[^>]*>", html):
             alt = re.search(r'alt="([^"]*)"', tag)
-            assert alt and alt.group(1).strip(), (page, tag)
+            assert alt, (page, tag)
+            # Only purely decorative layers, hidden from assistive tech, may be empty.
+            assert alt.group(1).strip() or 'aria-hidden="true"' in tag, (page, tag)
+
+
+def test_3d_brand_chapter_only_moves_and_respects_reduced_motion() -> None:
+    html = (LANDING / "index.html").read_text(encoding="utf-8")
+    css = (LANDING / "styles.css").read_text(encoding="utf-8")
+    turn = re.search(r"@keyframes brand-3d-turn \{(.*?)\}\s*\}", css, re.DOTALL)
+
+    assert 'id="inspection-image" class="brand-3d__face"' in html
+    assert html.count('class="brand-3d__layer"') >= 5
+    assert turn and "opacity" not in turn.group(1)
+    assert "animation-timeline: view()" in css
+    reduced = css.split("@media (prefers-reduced-motion: reduce)")[-1]
+    assert ".brand-3d__body { animation: none !important;" in reduced
