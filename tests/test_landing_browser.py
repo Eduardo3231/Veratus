@@ -264,3 +264,57 @@ def test_content_is_visible_while_javascript_is_delayed(
         page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
     finally:
         context.close()
+
+
+def test_site_message_reaches_the_whatsapp_agent_attributed(
+    browser, landing_url: str, tmp_path
+) -> None:
+    """Instagram reply link -> site -> WhatsApp message -> agent conversation."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from cryptography.fernet import Fernet
+
+    from veratus_agents.whatsapp import WhatsAppChannel
+
+    campaign = (
+        "?utm_source=instagram&utm_medium=comment_dm&utm_campaign=comentario_colecao"
+    )
+    context, page = _open(browser, landing_url, "desktop")
+    try:
+        page.goto(landing_url + campaign, wait_until="domcontentloaded")
+        href = page.get_attribute(
+            '#feminino a.purchase-link[data-product-id="halo-verde"]', "href"
+        )
+    finally:
+        context.close()
+    text = parse_qs(urlsplit(href).query)["text"][0]
+    channel = WhatsAppChannel(
+        tmp_path / "ops.sqlite3",
+        salt="test-salt",
+        encryption_key=Fernet.generate_key().decode(),
+    )
+    message = {
+        "from": "5511900000000",
+        "id": "wamid.SITE1",
+        "timestamp": "1790000000",
+        "type": "text",
+        "text": {"body": text},
+    }
+    channel.receive(
+        {
+            "object": "whatsapp_business_account",
+            "entry": [
+                {"changes": [{"field": "messages", "value": {"messages": [message]}}]}
+            ],
+        }
+    )
+    [conversation] = channel.list_conversations()
+
+    assert "Halo Verde" in text
+    assert conversation["product_id"] == "halo-verde"
+    assert conversation["visit_ref"].startswith("VT-")
+    assert conversation["utm"] == {
+        "utm_source": "instagram",
+        "utm_medium": "comment_dm",
+        "utm_campaign": "comentario_colecao",
+    }
