@@ -158,6 +158,8 @@ services:
         sync: false
       - key: VERATUS_ADMIN_TOKEN
         sync: false
+      - key: VERATUS_SELLER_DOCUMENT
+        sync: false
       - key: VERATUS_SESSION_SALT
         sync: false
       - key: VERATUS_TOKEN_ENCRYPTION_KEY

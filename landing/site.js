@@ -66,7 +66,7 @@ function createWhatsAppLink(productName = '', productId = '') {
     productName
       ? `Olá! Vim pelo site da Veratus e tenho interesse em ${productName}.`
       : 'Olá! Vim pelo site da Veratus e quero conhecer as coleções.',
-    'Gostaria de confirmar disponibilidade, valores e condições atuais.',
+    'Gostaria de confirmar disponibilidade e valor.',
     `Referência da visita: ${campaignReference()}${productId ? ` | produto=${productId}` : ''}`,
     context ? `Origem da visita: ${context}` : '',
   ].filter(Boolean).join('\n');

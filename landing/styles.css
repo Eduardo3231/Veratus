@@ -610,3 +610,10 @@ button { color: inherit; font: inherit; }
   .feminine-stage__orbit { animation: none !important; }
   .product-card, .product-card:hover { transform: none !important; }
 }
+
+/* Identificação do vendedor (FOUNDER_CONFIRMED 2026-09-26). */
+.footer-seller { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0; font-size: .6rem; font-style: normal; letter-spacing: .08em; }
+.footer-seller b { color: var(--ivory); font-weight: 600; }
+.footer-seller a:hover, .footer-seller a:focus-visible { color: var(--accent); }
+.legal-page { max-width: 760px; padding-top: 48px; padding-bottom: 72px; }
+.legal-seller { display: grid; gap: 4px; margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--line); font-style: normal; }

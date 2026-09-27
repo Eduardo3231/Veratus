@@ -14,7 +14,7 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import urlsplit
 
-from flask import Flask, jsonify, redirect, request, send_from_directory
+from flask import Flask, jsonify, redirect, request
 from pydantic import ValidationError
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -169,9 +169,41 @@ def health():
     return jsonify({"status": "ok"}), 200
 
 
+SELLER_DOCUMENT_MARKER = "<!--seller-document-->"
+_SELLER_CPF = re.compile(r"\d{3}\.\d{3}\.\d{3}-\d{2}")
+
+
+def _seller_document_html() -> str:
+    """CPF line authorized by the founder; the number lives only in the env."""
+    raw = os.getenv("VERATUS_SELLER_DOCUMENT", "").strip()
+    value = re.sub(r"(?i)^cpf:?\s*", "", raw)
+    if not value:
+        return ""
+    if not _SELLER_CPF.fullmatch(value):
+        app.logger.warning("seller_document_ignored reason=unexpected_format")
+        return ""
+    return f'<span class="seller-document">CPF: {value}</span>'
+
+
+def _landing_page(name: str):
+    html = (LANDING_DIR / name).read_text(encoding="utf-8")
+    response = app.response_class(
+        html.replace(SELLER_DOCUMENT_MARKER, _seller_document_html()),
+        mimetype="text/html",
+    )
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.route("/", methods=["GET"])
+@app.route("/index.html", methods=["GET"])
 def landing():
-    return send_from_directory(LANDING_DIR, "index.html")
+    return _landing_page("index.html")
+
+
+@app.route("/condicoes-de-compra.html", methods=["GET"])
+def purchase_conditions():
+    return _landing_page("condicoes-de-compra.html")
 
 
 @app.route("/api/catalog", methods=["GET", "OPTIONS"])
