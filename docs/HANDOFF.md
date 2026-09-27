@@ -5,31 +5,30 @@
 
 ## Estado do repositório
 
-- `origin/main` = `38f50be`. **Nada foi enviado nem publicado.**
-- `claude/site-referencias` contém tudo: rodadas de 25, 26 e 27/09, **27 commits** sobre `origin/main`. Os commits do `main` local (+6) e de `claude/rodada-2609` (+12) já estão nela.
-- Para publicar tudo de uma vez: `git push origin claude/site-referencias:main`. O Render publica o `main` (deploy automático do serviço `veratus-leads`, a conferir no painel). Só com confirmação do fundador no momento da ação.
+- **Publicado em 27/09 com autorização do fundador:** `git push origin claude/site-referencias:main` (`38f50be..9f13118`, 28 commits das rodadas de 25, 26 e 27/09).
+- Produção (`https://veratus.onrender.com`) conferida depois do deploy:
+  - `/health` 200;
+  - `/catalog.json` com `price_brl` nos 9 relógios;
+  - `/assets/catalog/black-gmt.webp` e `/social/posts/navy-gold.jpg` 404 (a mídia com marca saiu do ar);
+  - `VERATUS_LANDING_URL=https://veratus.onrender.com pytest tests/test_landing_browser.py`: 12 passed, 1 skipped.
+- Pasta principal: `main` local em `9f13118` (fast-forward), `pytest -q` 221 passed.
 - Flags: `PUBLISH_ENABLED=false`, `PAID_MEDIA_LIVE_WRITES=false`, `PAID_MEDIA_AUTONOMY_MODE=SHADOW`, `WHATSAPP_SEND_ENABLED=false`, `INSTAGRAM_DM_ENABLED=false`, e as 8 flags de canal `false`.
-- Produção (`https://veratus.onrender.com`) ainda roda `38f50be`, **com as fotos e o vídeo com marca de terceiros no ar** até o push.
 
-## Pasta principal (`C:\Users\PC GAMER\Teste`): ainda no `main` antigo
+## Arquivos de outro processo na pasta principal
 
-O fast-forward da `main` local para `claude/site-referencias` **não foi feito**. Ele esbarra em arquivos que outro processo escreveu e que não são desta sessão:
+Com autorização do fundador (27/09), foram guardados no stash "externo 25-26/09 … autorizado pelo fundador" (`git stash list`; recuperar com `git stash show -p` ou `git stash pop`):
+
+- as versões antigas de `veratus_agents/catalog.py` e `veratus_agents/data_discovery.py`. Elas eram de 26/09, às 20:39 e 20:55, removiam a coleção feminina e a projeção pública e faziam `/os/readiness` dar 500;
+- cópias não versionadas de docs de 25 e 26/09.
+
+Continuam na pasta, sem commit e sem alteração desta sessão:
 
 | Arquivo | Situação |
 | --- | --- |
-| `veratus_agents/catalog.py`, `veratus_agents/data_discovery.py` | versões antigas escritas por outro processo em 26/09 (20:39 e 20:55); removem a coleção feminina e a projeção pública; com elas, `pytest` falha e `/os/readiness` dá 500. `catalog.py` impede o fast-forward. |
-| `docs/evidence/economics-2026-09-25.md`, `docs/evidence/mercado-livre-readiness-2026-09-25.md`, `docs/insights/posts-2026-09-26.md` | cópias não versionadas que diferem das versões da branch; impedem o fast-forward |
-| `veratus_agents/product_master.py` | agente externo em 25/09: exige material também para joias (decisão abaixo) |
+| `veratus_agents/product_master.py` | agente externo em 25/09: exige material também para joias (decisão abaixo); os 221 testes passam com ele |
 | `integrations/zapier_to_sheets.md` | versão antiga que manda colocar a URL do Zapier no HTML público. Não usar |
 | `social/fila-publicacao.csv` | formato alterado, origem desconhecida |
 | `docs/data-discovery-2026-09-19.json` | contém nome e endereço do fornecedor. **Não versionar;** apagar ou guardar fora do repositório |
-
-Guardar esses arquivos num stash e fazer o fast-forward foi bloqueado pela permissão do Claude Code (risco de perda local). **O fundador decide.** Se aprovar:
-
-```powershell
-git stash push -u -m "externo 25-26/09" -- veratus_agents/catalog.py veratus_agents/data_discovery.py docs/HANDOFF.md docs/automation docs/decisions docs/evidence/economics-2026-09-25.md docs/evidence/mercado-livre-readiness-2026-09-25.md docs/evidence/task-contracts-2026-09-25.md docs/evidence/truth-table-2026-09-25.md docs/insights/posts-2026-09-26.md
-git merge --ff-only claude/site-referencias
-```
 
 O Codex (PID 5968) estava em execução desde 10:34 de 27/09, sem escrever na pasta principal durante a rodada.
 
@@ -62,15 +61,14 @@ Anúncio pago e post de relógio continuam bloqueados até a foto real do item e
 
 ## Decisões abertas do fundador
 
-1. **Push para o GitHub, que o Render publica.** Isso tira do ar a mídia com marca e coloca os relógios à venda.
-2. Fast-forward da pasta principal (stash acima).
-3. Fotos reais dos 9 relógios, para anúncio, post e troca da ilustração. Os modelos seguem o desenho de modelos conhecidos. Vale uma avaliação jurídica de conjunto-imagem antes de anunciar.
-4. Origem registrada com manuseio de 2 dias úteis vs entrega em até 7 dias. Quando o prazo começa a contar?
-5. `product_master.py` (material obrigatório para joias no QA): manter ou reverter.
-6. Economics: frete pago pela Veratus, taxa de pagamento e tributo (UNVERIFIED).
-7. Preços das joias: nenhuma fonte real (9 × NEEDS_PRICING).
-8. Fornecedor e mídia com marca no histórico do Git: reescrever ou não.
-9. `VERATUS_SELLER_DOCUMENT`, `INSTAGRAM_ACCESS_TOKEN` e `OPENAI_API_KEY` no Render; número do WhatsApp Cloud API; formas de pagamento, que o agente ainda manda confirmar com a equipe.
+1. O fundador quer as fotos dos relógios de volta na vitrine. As fotos de catálogo (`quarantine/third-party-marks/landing/assets/catalog/`) têm "ROLEX", a coroa, "SUBMARINER" e "DATEJUST" no mostrador. Retocar essas fotos para apagar as marcas foi bloqueado pela permissão do Claude Code em 27/09. Caminho que resta: fotos das peças, com o importador abaixo.
+2. Fotos reais dos 9 relógios, para anúncio, post e troca da ilustração. Os modelos seguem o desenho de modelos conhecidos. Vale uma avaliação jurídica de conjunto-imagem antes de anunciar.
+3. Origem registrada com manuseio de 2 dias úteis vs entrega em até 7 dias. Quando o prazo começa a contar?
+4. `product_master.py` (material obrigatório para joias no QA): manter ou reverter.
+5. Economics: frete pago pela Veratus, taxa de pagamento e tributo (UNVERIFIED).
+6. Preços das joias: nenhuma fonte real (9 × NEEDS_PRICING).
+7. Fornecedor e mídia com marca no histórico do Git: reescrever ou não.
+8. `VERATUS_SELLER_DOCUMENT`, `INSTAGRAM_ACCESS_TOKEN` e `OPENAI_API_KEY` no Render; número do WhatsApp Cloud API; formas de pagamento, que o agente ainda manda confirmar com a equipe.
 
 ## Não faça
 
@@ -81,10 +79,4 @@ Anúncio pago e post de relógio continuam bloqueados até a foto real do item e
 
 ## Próximo passo sugerido
 
-1. Com o push aprovado: `git push origin claude/site-referencias:main`.
-2. Conferir em produção:
-   - `/health`;
-   - a vitrine com 9 relógios e o preço;
-   - `/assets/catalog/black-gmt.webp` e `/social/posts/navy-gold.jpg` devem dar 404;
-   - `VERATUS_LANDING_URL=https://veratus.onrender.com pytest tests/test_landing_browser.py`.
-3. Receber as fotos reais e rodar o importador.
+1. Receber as fotos das peças (`incoming/relogios/<id>.jpg`), rodar o importador, conferir as capturas e publicar com confirmação do fundador.
