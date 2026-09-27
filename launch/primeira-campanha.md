@@ -1,5 +1,7 @@
 # Veratus — Primeira Campanha de Relógios
 
+> **BLOQUEADO em 27/09/2026:** as imagens citadas neste roteiro mostram marca de terceiros e foram para `quarantine/third-party-marks/`. Não use em post nem em anúncio; espere as fotos reais das peças.
+
 ## Objetivo
 
 Validar a procura e converter as primeiras vendas de uma seleção de relógios masculinos, com preço a partir de **R$389,90** e prazo de despacho/entrega informado de **até 7 dias**.

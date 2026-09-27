@@ -93,6 +93,7 @@ def public_catalog(
         "short_description",
         "description",
         "image",
+        "image_status",
         "images",
         "primary_image",
         "alt",

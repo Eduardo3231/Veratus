@@ -82,6 +82,10 @@ function productImage(product) {
   return product.primary_image || product.image || product.images?.[0] || '';
 }
 
+// Watches wait for real photos of the exact item; the brand mark stands in.
+const PENDING_PHOTO_MARK = 'assets/veratus-v-wheat-720.webp';
+const PENDING_PHOTO_LABEL = 'Foto oficial em produção';
+
 function productMatches(product) {
   if (activeFilter === 'todos') return true;
   if (activeCollection === 'feminine') return product.subcategory === activeFilter;
@@ -101,14 +105,21 @@ function createProductCard(product, index) {
   const visual = document.createElement('div');
   visual.className = 'product-visual';
   const image = document.createElement('img');
-  image.src = productImage(product);
-  image.alt = product.alt || `${product.name} da coleção Veratus`;
+  const photo = productImage(product);
+  image.src = photo || PENDING_PHOTO_MARK;
+  image.alt = photo ? product.alt || `${product.name} da coleção Veratus` : '';
   image.loading = 'lazy';
   image.width = 1122;
   image.height = 1402;
   const number = document.createElement('span');
   number.textContent = String(index + 1).padStart(2, '0');
   visual.append(image, number);
+  if (!photo) {
+    visual.classList.add('product-visual--pending');
+    const pending = document.createElement('em');
+    pending.textContent = PENDING_PHOTO_LABEL;
+    visual.append(pending);
+  }
 
   const info = document.createElement('div');
   info.className = 'product-info';
@@ -192,8 +203,11 @@ document.querySelectorAll('[data-nav-collection]').forEach((link) => {
 function openProduct(product) {
   const pool = renderedProducts.length ? renderedProducts : currentCollectionProducts();
   activeProductIndex = Math.max(0, pool.findIndex((item) => item.id === product.id));
-  dialogImage.src = productImage(product);
-  dialogImage.alt = product.alt || `${product.name} da coleção Veratus`;
+  const photo = productImage(product);
+  dialogImage.src = photo || PENDING_PHOTO_MARK;
+  dialogImage.alt = photo ? product.alt || `${product.name} da coleção Veratus` : '';
+  dialogImage.parentElement.classList.toggle('dialog-media--pending', !photo);
+  dialogImage.nextElementSibling.hidden = Boolean(photo);
   dialogName.textContent = product.name;
   dialogEyebrow.textContent = product.eyebrow || product.product_type || 'Veratus';
   dialogDescription.textContent = product.description || product.short_description || '';
@@ -273,9 +287,9 @@ async function loadCatalog() {
 }
 
 const inspectionContent = {
-  dial: { index: '01', label: 'Mostrador', title: 'A presença começa no mostrador.', copy: 'Índices, ponteiros e contraste definem a leitura visual do modelo.' },
-  bezel: { index: '02', label: 'Aro', title: 'O contorno cria profundidade.', copy: 'O aro conduz o olhar e organiza as camadas da composição.' },
-  band: { index: '03', label: 'Pulseira', title: 'O desenho continua no pulso.', copy: 'A pulseira completa a silhueta e conecta o relógio ao seu estilo.' },
+  precision: { index: '01', label: 'Precisão', title: 'Cada linha tem um motivo.', copy: 'O V tem traço firme e proporção exata, para ser reconhecido de perto e à distância.' },
+  balance: { index: '02', label: 'Equilíbrio', title: 'Força e gesto no mesmo símbolo.', copy: 'A espiga de trigo equilibra a geometria do V com um desenho orgânico.' },
+  permanence: { index: '03', label: 'Permanência', title: 'Feito para durar além da tendência.', copy: 'Poucos elementos, bem escolhidos, para que a marca continue atual com o tempo.' },
 };
 const hotspots = [...document.querySelectorAll('.hotspot')];
 hotspots.forEach((button) => button.addEventListener('click', () => {
@@ -335,20 +349,6 @@ renderWatchHands();
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && watchAnimationFrame) window.cancelAnimationFrame(watchAnimationFrame);
   if (!document.hidden && !reducedMotion) renderWatchHands();
-});
-
-const heroVideo = document.querySelector('.hero-video');
-const heroVideoControl = document.querySelector('.hero-video-control');
-heroVideoControl?.addEventListener('click', async () => {
-  if (heroVideo.paused) {
-    await heroVideo.play();
-    heroVideoControl.textContent = 'Pausar filme';
-    heroVideoControl.setAttribute('aria-pressed', 'false');
-  } else {
-    heroVideo.pause();
-    heroVideoControl.textContent = 'Reproduzir filme';
-    heroVideoControl.setAttribute('aria-pressed', 'true');
-  }
 });
 
 const header = document.querySelector('.site-header');

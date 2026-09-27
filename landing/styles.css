@@ -422,7 +422,6 @@ button { color: inherit; font: inherit; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .hero-video { display: none; }
-  .hero { background: #080808 url("assets/video/veratus-hero-poster.webp") center / cover no-repeat; }
   .hero-device { transform: none !important; }
   .model-orbit, .model-option, .orbit-core, .orbit-core span { animation: none !important; }
   .orbit-model-one { transform: rotate(0deg); }
@@ -618,3 +617,29 @@ button { color: inherit; font: inherit; }
 .footer-seller a:hover, .footer-seller a:focus-visible { color: var(--accent); }
 .legal-page { max-width: 760px; padding-top: 48px; padding-bottom: 72px; }
 .legal-seller { display: grid; gap: 4px; margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--line); font-style: normal; }
+
+/* Sem mídia de terceiros (27/09/2026): paisagem fixa no hero, símbolo no lugar das fotos de relógio. */
+.hero-still { position: absolute; z-index: -3; inset: -4%; background: #080808 url("assets/hero/veratus-hero-alpes-1280.webp") center / cover no-repeat; opacity: .42; filter: saturate(.75) contrast(1.05); animation: hero-drift 28s ease-in-out infinite alternate; }
+@keyframes hero-drift { from { transform: scale(1.02) translate3d(0, 0, 0); } to { transform: scale(1.1) translate3d(-2%, -1.5%, 0); } }
+.product-visual--pending { display: grid; place-items: center; background: radial-gradient(circle at 50% 42%, #1c1a17, #0b0b0b 68%); }
+.product-visual--pending img { width: 46%; height: auto; object-fit: contain; opacity: .5; filter: drop-shadow(0 14px 20px rgba(0,0,0,.55)); }
+.product-visual--pending em, .pending-photo { position: absolute; bottom: 18px; left: 50%; margin: 0; color: var(--muted); font-size: .52rem; font-style: normal; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; white-space: nowrap; transform: translateX(-50%); }
+.dialog-media { position: relative; }
+.dialog-media--pending { display: grid; place-items: center; background: radial-gradient(circle at 50% 42%, #1c1a17, #0b0b0b 70%); }
+.dialog-media--pending img { width: 48%; height: auto; object-fit: contain; opacity: .55; }
+.inspection-product--brand { width: min(78%, 520px); height: auto; aspect-ratio: 1; }
+.inspection-product--brand > img { filter: drop-shadow(0 30px 40px rgba(0,0,0,.6)); }
+.hotspot-precision { top: 30%; left: 26%; }
+.hotspot-balance { top: 58%; left: 61%; }
+.hotspot-permanence { top: 84%; left: 49%; }
+/* The circle marks the point; the label opens to its right. */
+.inspection-product--brand .hotspot { transform: translate(-13px, -50%); }
+
+@media (max-width: 680px) {
+  .hero-still { background-image: url("assets/hero/veratus-hero-alpes-720.webp"); background-position: 60% center; }
+  .inspection-product--brand { width: 82%; height: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-still { inset: 0; animation: none; }
+}

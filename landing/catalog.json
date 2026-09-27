@@ -4,7 +4,8 @@
     "name": "Arctic White",
     "eyebrow": "Clássico / Versátil",
     "description": "Uma composição clara, equilibrada e direta para diferentes momentos.",
-    "image": "assets/catalog/arctic-white.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "styles": [
       "classico"
     ],
@@ -19,7 +20,8 @@
     "name": "Ocean Blue",
     "eyebrow": "Esportivo / Versátil",
     "description": "Tons profundos e contraste preciso em uma leitura esportiva.",
-    "image": "assets/catalog/ocean-blue.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "styles": [
       "esportivo"
     ],
@@ -34,7 +36,8 @@
     "name": "Royal Blue",
     "eyebrow": "Marcante / Esportivo",
     "description": "Azul intenso e acabamento dourado para uma escolha de destaque.",
-    "image": "assets/catalog/royal-blue.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "styles": [
       "marcante",
       "esportivo"
@@ -50,7 +53,8 @@
     "name": "Platinum Classic",
     "eyebrow": "Clássico / Versátil",
     "description": "Mostrador claro e linhas sóbrias em uma composição atemporal.",
-    "image": "assets/catalog/platinum-classic.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "styles": [
       "classico"
     ],
@@ -65,7 +69,8 @@
     "name": "Emerald Signature",
     "eyebrow": "Marcante",
     "description": "Verde profundo em uma composição de personalidade visual.",
-    "image": "assets/catalog/emerald-signature.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "styles": [
       "marcante"
     ],
@@ -80,7 +85,8 @@
     "name": "Silver Prestige",
     "eyebrow": "Clássico",
     "description": "Uma leitura monocromática com presença discreta e refinada.",
-    "image": "assets/catalog/silver-prestige.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "styles": [
       "classico"
     ],
@@ -95,7 +101,8 @@
     "name": "Polar Blue",
     "eyebrow": "Esportivo / Versátil",
     "description": "Azul polar e mostrador claro em uma composição de contraste leve.",
-    "image": "assets/catalog/polar-blue.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "styles": [
       "esportivo"
     ],
@@ -110,7 +117,8 @@
     "name": "Bronze Heritage",
     "eyebrow": "Clássico / Marcante",
     "description": "Tons quentes e acabamento metálico em uma composição de presença.",
-    "image": "assets/catalog/bronze-heritage.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "styles": [
       "classico",
       "marcante"
@@ -126,7 +134,7 @@
     "sku": "VRT-JWL-ANK-001",
     "name": "Celeste Anklet",
     "editorial_name": "Celeste Anklet",
-    "product_type": "Tornozeleira prateada com elementos azuis estilo olho",
+    "product_type": "Tornozeleira em tom prateado com elementos azuis estilo olho",
     "category": "jewelry_accessories",
     "subcategory": "anklet",
     "collection": "feminine",
@@ -140,20 +148,20 @@
       "assets/feminine/celeste-anklet.webp"
     ],
     "primary_image": "assets/feminine/celeste-anklet.webp",
-    "alt": "Tornozeleira de aparência prateada com elementos azuis no tornozelo",
+    "alt": "Tornozeleira em tom prateado com elementos azuis no tornozelo",
     "styles": [
       "feminino",
       "tornozeleira"
     ],
     "finish_color": "silver_tone",
-    "color": "prateado e azul-turquesa"
+    "color": "tom prateado e azul-turquesa"
   },
   {
     "id": "halo-verde",
     "sku": "VRT-JWL-NCK-001",
     "name": "Halo Verde",
     "editorial_name": "Halo Verde",
-    "product_type": "Colar prateado com elemento verde e halo",
+    "product_type": "Colar em tom prateado com elemento verde e halo",
     "category": "jewelry_accessories",
     "subcategory": "necklace",
     "collection": "feminine",
@@ -161,26 +169,26 @@
     "site_visibility": "PREVIEW",
     "eyebrow": "Veratus Feminino / Colar",
     "short_description": "Um ponto verde emoldurado por uma linha luminosa.",
-    "description": "Um elemento oval verde ganha destaque em uma moldura de pequenos pontos transparentes sobre corrente de aparência prateada.",
+    "description": "Um elemento oval verde ganha destaque em uma moldura de pequenos pontos transparentes sobre corrente em tom prateado.",
     "image": "assets/feminine/halo-verde-necklace.webp",
     "images": [
       "assets/feminine/halo-verde-necklace.webp"
     ],
     "primary_image": "assets/feminine/halo-verde-necklace.webp",
-    "alt": "Colar de aparência prateada com elemento oval verde e halo",
+    "alt": "Colar em tom prateado com elemento oval verde e halo",
     "styles": [
       "feminino",
       "colar"
     ],
     "finish_color": "silver_tone",
-    "color": "prateado e verde"
+    "color": "tom prateado e verde"
   },
   {
     "id": "eclat-duo",
     "sku": "VRT-JWL-NCK-002",
     "name": "Éclat Duo",
     "editorial_name": "Éclat Duo",
-    "product_type": "Colar prateado duplo com elementos transparentes",
+    "product_type": "Colar duplo em tom prateado com elementos transparentes",
     "category": "jewelry_accessories",
     "subcategory": "necklace",
     "collection": "feminine",
@@ -194,20 +202,20 @@
       "assets/feminine/eclat-duo-necklace.webp"
     ],
     "primary_image": "assets/feminine/eclat-duo-necklace.webp",
-    "alt": "Colar de aparência prateada em duas camadas com elementos transparentes",
+    "alt": "Colar em tom prateado em duas camadas com elementos transparentes",
     "styles": [
       "feminino",
       "colar"
     ],
     "finish_color": "silver_tone",
-    "color": "prateado e transparente"
+    "color": "tom prateado e transparente"
   },
   {
     "id": "rosa-aurea",
     "sku": "VRT-JWL-NCK-003",
     "name": "Rosa Áurea",
     "editorial_name": "Rosa Áurea",
-    "product_type": "Colar dourado com elemento floral vazado",
+    "product_type": "Colar em tom dourado com elemento floral vazado",
     "category": "jewelry_accessories",
     "subcategory": "necklace",
     "collection": "feminine",
@@ -215,26 +223,26 @@
     "site_visibility": "PREVIEW",
     "eyebrow": "Veratus Feminino / Colar",
     "short_description": "Geometria floral com um ponto luminoso central.",
-    "description": "Um elemento floral vazado de aparência dourada conduz o olhar a um ponto transparente central.",
+    "description": "Um elemento floral vazado em tom dourado conduz o olhar a um ponto transparente central.",
     "image": "assets/feminine/rosa-aurea-necklace.webp",
     "images": [
       "assets/feminine/rosa-aurea-necklace.webp"
     ],
     "primary_image": "assets/feminine/rosa-aurea-necklace.webp",
-    "alt": "Colar de aparência dourada com pingente floral vazado",
+    "alt": "Colar em tom dourado com pingente floral vazado",
     "styles": [
       "feminino",
       "colar"
     ],
     "finish_color": "gold_tone",
-    "color": "dourado e transparente"
+    "color": "tom dourado e transparente"
   },
   {
     "id": "lumiere",
     "sku": "VRT-JWL-BRC-001",
     "name": "Lumière",
     "editorial_name": "Lumière",
-    "product_type": "Pulseira dourada ponto de luz",
+    "product_type": "Pulseira em tom dourado com ponto de luz",
     "category": "jewelry_accessories",
     "subcategory": "bracelet",
     "collection": "feminine",
@@ -242,26 +250,26 @@
     "site_visibility": "PREVIEW",
     "eyebrow": "Veratus Feminino / Pulseira",
     "short_description": "Uma linha fina e um único ponto de destaque.",
-    "description": "A linha delicada de aparência dourada encontra um elemento transparente central em uma composição essencial.",
+    "description": "A linha delicada em tom dourado encontra um elemento transparente central em uma composição essencial.",
     "image": "assets/feminine/lumiere-bracelet.webp",
     "images": [
       "assets/feminine/lumiere-bracelet.webp"
     ],
     "primary_image": "assets/feminine/lumiere-bracelet.webp",
-    "alt": "Pulseira fina de aparência dourada com elemento circular transparente",
+    "alt": "Pulseira fina em tom dourado com elemento circular transparente",
     "styles": [
       "feminino",
       "pulseira"
     ],
     "finish_color": "gold_tone",
-    "color": "dourado e transparente"
+    "color": "tom dourado e transparente"
   },
   {
     "id": "celeste-link",
     "sku": "VRT-JWL-BRC-002",
     "name": "Celeste Link",
     "editorial_name": "Celeste Link",
-    "product_type": "Pulseira dourada com elementos azuis estilo olho",
+    "product_type": "Pulseira em tom dourado com elementos azuis estilo olho",
     "category": "jewelry_accessories",
     "subcategory": "bracelet",
     "collection": "feminine",
@@ -269,26 +277,26 @@
     "site_visibility": "PREVIEW",
     "eyebrow": "Veratus Feminino / Pulseira",
     "short_description": "Azul intenso entre elos de presença gráfica.",
-    "description": "Elementos azuis estilo olho e elos retangulares de aparência dourada criam um ritmo visual marcante.",
+    "description": "Elementos azuis estilo olho e elos retangulares em tom dourado criam um ritmo visual marcante.",
     "image": "assets/feminine/celeste-link-bracelet.webp",
     "images": [
       "assets/feminine/celeste-link-bracelet.webp"
     ],
     "primary_image": "assets/feminine/celeste-link-bracelet.webp",
-    "alt": "Pulseira de aparência dourada com elementos azuis e elos retangulares",
+    "alt": "Pulseira em tom dourado com elementos azuis e elos retangulares",
     "styles": [
       "feminino",
       "pulseira"
     ],
     "finish_color": "gold_tone",
-    "color": "dourado e azul"
+    "color": "tom dourado e azul"
   },
   {
     "id": "essenza-anklet",
     "sku": "VRT-JWL-ANK-002",
     "name": "Essenza",
     "editorial_name": "Essenza",
-    "product_type": "Tornozeleira prateada com pingentes",
+    "product_type": "Tornozeleira em tom prateado com pingentes",
     "category": "jewelry_accessories",
     "subcategory": "anklet",
     "collection": "feminine",
@@ -296,26 +304,26 @@
     "site_visibility": "PREVIEW",
     "eyebrow": "Veratus Feminino / Tornozeleira",
     "short_description": "Pequenos pingentes acompanham cada movimento.",
-    "description": "Pingentes de aparência prateada e elementos transparentes formam uma sequência leve ao redor do tornozelo.",
+    "description": "Pingentes em tom prateado e elementos transparentes formam uma sequência leve ao redor do tornozelo.",
     "image": "assets/feminine/essenza-anklet.webp",
     "images": [
       "assets/feminine/essenza-anklet.webp"
     ],
     "primary_image": "assets/feminine/essenza-anklet.webp",
-    "alt": "Tornozeleira de aparência prateada com pequenos pingentes",
+    "alt": "Tornozeleira em tom prateado com pequenos pingentes",
     "styles": [
       "feminino",
       "tornozeleira"
     ],
     "finish_color": "silver_tone",
-    "color": "prateado e transparente"
+    "color": "tom prateado e transparente"
   },
   {
     "id": "verde-aura",
     "sku": "VRT-JWL-NCK-004",
     "name": "Verde Aura",
     "editorial_name": "Verde Aura",
-    "product_type": "Colar dourado com elemento verde oval",
+    "product_type": "Colar em tom dourado com elemento verde oval",
     "category": "jewelry_accessories",
     "subcategory": "necklace",
     "collection": "feminine",
@@ -323,45 +331,45 @@
     "site_visibility": "PREVIEW",
     "eyebrow": "Veratus Feminino / Colar",
     "short_description": "Um verde vibrante em uma composição essencial.",
-    "description": "Um elemento oval verde-limão concentra a cor sobre uma corrente de aparência dourada e desenho limpo.",
+    "description": "Um elemento oval verde-limão concentra a cor sobre uma corrente em tom dourado e desenho limpo.",
     "image": "assets/feminine/verde-aura-necklace.webp",
     "images": [
       "assets/feminine/verde-aura-necklace.webp"
     ],
     "primary_image": "assets/feminine/verde-aura-necklace.webp",
-    "alt": "Colar de aparência dourada com elemento oval verde-limão",
+    "alt": "Colar em tom dourado com elemento oval verde-limão",
     "styles": [
       "feminino",
       "colar"
     ],
     "finish_color": "gold_tone",
-    "color": "dourado e verde-limão"
+    "color": "tom dourado e verde-limão"
   },
   {
     "id": "noir-clover",
     "sku": "VRT-JWL-NCK-005",
     "name": "Noir Clover",
     "editorial_name": "Noir Clover",
-    "product_type": "Colar dourado com elemento preto em formato de trevo",
+    "product_type": "Colar em tom dourado com elemento preto em formato de trevo",
     "category": "jewelry_accessories",
     "subcategory": "necklace",
     "collection": "feminine",
     "status": "DRAFT",
     "site_visibility": "PREVIEW",
     "eyebrow": "Veratus Feminino / Colar",
-    "short_description": "Contraste preto e dourado em uma forma emblemática.",
-    "description": "Um elemento preto em formato de trevo cria contraste preciso com a corrente de aparência dourada.",
+    "short_description": "Contraste entre preto e tom dourado em uma forma emblemática.",
+    "description": "Um elemento preto em formato de trevo cria contraste preciso com a corrente em tom dourado.",
     "image": "assets/feminine/noir-clover-necklace.webp",
     "images": [
       "assets/feminine/noir-clover-necklace.webp"
     ],
     "primary_image": "assets/feminine/noir-clover-necklace.webp",
-    "alt": "Colar de aparência dourada com elemento preto em formato de trevo",
+    "alt": "Colar em tom dourado com elemento preto em formato de trevo",
     "styles": [
       "feminino",
       "colar"
     ],
     "finish_color": "gold_tone",
-    "color": "dourado e preto"
+    "color": "tom dourado e preto"
   }
 ]

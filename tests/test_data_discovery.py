@@ -4,22 +4,26 @@ from veratus_agents.data_discovery import discovery_report, missing_business_dat
 def test_discovery_finds_all_catalog_products_and_sources():
     report = discovery_report()
 
+    # Watch photos showed third-party marks and were quarantined (2026-09-27):
+    # every watch waits for a real photo and is not ready for any channel.
+    watches = [item for item in report["products"] if item["collection"] == "watches"]
     assert report["products_total"] == 18
-    assert report["products_complete"] == 9
-    assert report["products_incomplete"] == 9
+    assert report["products_complete"] == 0
+    assert report["products_incomplete"] == 18
     assert report["segments"] == {
         "watches_total": 9,
         "feminine_total": 9,
         "necklaces": 5,
         "bracelets": 2,
         "anklets": 2,
-        "ready": 9,
-        "needs_information": 9,
+        "ready": 0,
+        "needs_information": 18,
     }
     assert (
         report["products"][0]["source_of_each_field"]["name"] == "catalog/products.json"
     )
-    assert report["products"][0]["fields"]["images"]["value"]
+    assert all(item["missing_fields"] == ["images"] for item in watches)
+    assert all(not item["fields"]["images"]["value"] for item in watches)
 
 
 def test_missing_report_is_channel_specific_and_does_not_invent_values():

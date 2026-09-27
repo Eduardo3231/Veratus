@@ -54,9 +54,8 @@
 
   <main id="conteudo">
     <section class="hero" id="hero" aria-labelledby="hero-title">
-      <video class="hero-video" autoplay muted loop playsinline preload="metadata" poster="assets/video/veratus-hero-poster.webp" aria-hidden="true"><source src="assets/video/veratus-hero-mobile.mp4" type="video/mp4" media="(max-width: 680px)"><source src="assets/video/veratus-hero-desktop.mp4" type="video/mp4"></video>
+      <div class="hero-still" aria-hidden="true"></div>
       <div class="hero-veil" aria-hidden="true"></div>
-      <button class="hero-video-control" type="button" aria-pressed="false">Pausar filme</button>
       <div class="hero-layout shell">
         <div class="hero-copy scroll-reveal">
           <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> Veratus / Tempo e presença</p>
@@ -93,29 +92,29 @@
 
     <section class="inspection section" id="inspecao" aria-labelledby="inspection-title">
       <div class="shell inspection-heading">
-        <div class="scroll-reveal"><p class="section-index">02 / Movimento</p><h2 id="inspection-title">O detalhe<br><em>ganha vida.</em></h2></div>
-        <p class="scroll-reveal">Toque nos pontos e observe a composição. O relógio ao lado acompanha a hora de São Paulo em tempo real.</p>
+        <div class="scroll-reveal"><p class="section-index">02 / Assinatura</p><h2 id="inspection-title">O símbolo<br><em>ganha forma.</em></h2></div>
+        <p class="scroll-reveal">Toque nos pontos e conheça os princípios por trás do V e da espiga. O relógio ao lado acompanha a hora de São Paulo em tempo real.</p>
       </div>
       <div class="inspection-layout shell">
         <div class="inspection-stage scroll-reveal">
-          <div class="inspection-product">
-            <img id="inspection-image" src="assets/catalog/royal-blue.webp" alt="Modelo Royal Blue para inspeção visual" width="1122" height="1402" loading="lazy">
-            <button class="hotspot is-active hotspot-dial" type="button" aria-expanded="true" aria-controls="inspection-panel" data-hotspot="dial"><span>1</span><b>Mostrador</b></button>
-            <button class="hotspot hotspot-bezel" type="button" aria-expanded="false" aria-controls="inspection-panel" data-hotspot="bezel"><span>2</span><b>Aro</b></button>
-            <button class="hotspot hotspot-band" type="button" aria-expanded="false" aria-controls="inspection-panel" data-hotspot="band"><span>3</span><b>Pulseira</b></button>
+          <div class="inspection-product inspection-product--brand">
+            <img id="inspection-image" src="assets/veratus-v-wheat-720.webp" alt="Símbolo Veratus: V dourado com espiga de trigo" width="720" height="720" loading="lazy">
+            <button class="hotspot is-active hotspot-precision" type="button" aria-expanded="true" aria-controls="inspection-panel" data-hotspot="precision"><span>1</span><b>Precisão</b></button>
+            <button class="hotspot hotspot-balance" type="button" aria-expanded="false" aria-controls="inspection-panel" data-hotspot="balance"><span>2</span><b>Equilíbrio</b></button>
+            <button class="hotspot hotspot-permanence" type="button" aria-expanded="false" aria-controls="inspection-panel" data-hotspot="permanence"><span>3</span><b>Permanência</b></button>
           </div>
         </div>
         <aside class="inspection-panel scroll-reveal" id="inspection-panel" aria-live="polite">
           <div class="inspection-count"><span data-inspection-index>01</span> / 03</div>
-          <p class="eyebrow" data-inspection-label>Mostrador</p>
-          <h3 data-inspection-title>A presença começa no mostrador.</h3>
-          <p data-inspection-copy>Índices, ponteiros e contraste definem a leitura visual do modelo.</p>
+          <p class="eyebrow" data-inspection-label>Precisão</p>
+          <h3 data-inspection-title>Cada linha tem um motivo.</h3>
+          <p data-inspection-copy>O V tem traço firme e proporção exata, para ser reconhecido de perto e à distância.</p>
           <div class="time-instrument" aria-label="Relógio demonstrativo sincronizado com a hora local">
             <div class="time-instrument__dial" aria-hidden="true"><i class="time-hand time-hand--hour"></i><i class="time-hand time-hand--minute"></i><i class="time-hand time-hand--second"></i><span></span></div>
             <div><span>Hora local / São Paulo</span><time data-watch-time datetime="">00:00:00</time><b><i></i> Funcionando</b></div>
           </div>
-          <div class="inspection-model"><span>Modelo em cena</span><b data-selected-model>Royal Blue</b></div>
-          <a class="text-link purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Royal%20Blue.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Droyal-blue" target="_blank" rel="noopener" data-product-id="royal-blue" data-product-name="Royal Blue">Consultar modelo <span aria-hidden="true">↗</span></a>
+          <div class="inspection-model"><span>Em cena</span><b>V com espiga de trigo</b></div>
+          <a class="text-link" href="#catalogo">Ver as coleções <span aria-hidden="true">↓</span></a>
         </aside>
       </div>
     </section>
@@ -173,7 +172,7 @@
   <dialog class="product-dialog" id="product-dialog" aria-labelledby="dialog-name">
     <button class="dialog-close" type="button" aria-label="Fechar visualização">Fechar <span aria-hidden="true">×</span></button>
     <div class="dialog-layout">
-      <div class="dialog-media"><img id="dialog-image" src="assets/catalog/arctic-white.webp" alt="Peça Veratus em destaque"></div>
+      <div class="dialog-media"><img id="dialog-image" src="assets/veratus-v-wheat-720.webp" alt="Símbolo Veratus"><p class="pending-photo" hidden>Foto oficial em produção</p></div>
       <div class="dialog-copy">
         <p class="dialog-index">VERATUS / <span id="dialog-collection">RELÓGIOS</span></p>
         <p class="eyebrow" id="dialog-eyebrow">Clássico / Versátil</p>

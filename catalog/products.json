@@ -7,7 +7,8 @@
     ],
     "eyebrow": "Clássico / Versátil",
     "description": "Uma composição clara, equilibrada e direta para diferentes momentos.",
-    "image": "assets/catalog/arctic-white.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "availability": "confirmar_com_equipe"
   },
   {
@@ -18,7 +19,8 @@
     ],
     "eyebrow": "Esportivo / Versátil",
     "description": "Tons profundos e contraste preciso em uma leitura esportiva.",
-    "image": "assets/catalog/ocean-blue.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "availability": "confirmar_com_equipe"
   },
   {
@@ -30,7 +32,8 @@
     ],
     "eyebrow": "Esportivo / Marcante",
     "description": "Preto, aço e uma presença visual definida por contrastes.",
-    "image": "assets/catalog/black-gmt.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "availability": "confirmar_com_equipe"
   },
   {
@@ -42,7 +45,8 @@
     ],
     "eyebrow": "Marcante / Esportivo",
     "description": "Azul intenso e acabamento dourado para uma escolha de destaque.",
-    "image": "assets/catalog/royal-blue.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "availability": "confirmar_com_equipe"
   },
   {
@@ -53,7 +57,8 @@
     ],
     "eyebrow": "Clássico / Versátil",
     "description": "Mostrador claro e linhas sóbrias em uma composição atemporal.",
-    "image": "assets/catalog/platinum-classic.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "availability": "confirmar_com_equipe"
   },
   {
@@ -64,7 +69,8 @@
     ],
     "eyebrow": "Marcante",
     "description": "Verde profundo em uma composição de personalidade visual.",
-    "image": "assets/catalog/emerald-signature.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "availability": "confirmar_com_equipe"
   },
   {
@@ -75,7 +81,8 @@
     ],
     "eyebrow": "Clássico",
     "description": "Uma leitura monocromática com presença discreta e refinada.",
-    "image": "assets/catalog/silver-prestige.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "availability": "confirmar_com_equipe"
   },
   {
@@ -86,7 +93,8 @@
     ],
     "eyebrow": "Esportivo / Versátil",
     "description": "Azul polar e mostrador claro em uma composição de contraste leve.",
-    "image": "assets/catalog/polar-blue.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "availability": "confirmar_com_equipe"
   },
   {
@@ -98,7 +106,8 @@
     ],
     "eyebrow": "Clássico / Marcante",
     "description": "Tons quentes e acabamento metálico em uma composição de presença.",
-    "image": "assets/catalog/bronze-heritage.webp",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
     "availability": "confirmar_com_equipe"
   },
   {

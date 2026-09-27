@@ -146,7 +146,6 @@ def test_content_and_whatsapp_links_are_visible(
         )
         assert hrefs and all(href.startswith(WHATSAPP) for href in hrefs)
         assert all(VISIT_REFERENCE in href for href in hrefs)
-        assert any("produto%3Droyal-blue" in href for href in hrefs)
 
         first = page.locator("#catalog-rail .product-card").first
         product_id = first.get_attribute("data-product-id")
@@ -189,29 +188,33 @@ def test_hidden_whatsapp_links_leave_the_tab_order(browser, landing_url: str) ->
         context.close()
 
 
-HERO_BOXES_JS = """() => Object.fromEntries(
-  ['.hero-video-control', '.brand-universe__caption', '.hero-footer',
-   '.hero-copy .eyebrow', '.hero-actions', '.brand-universe__mark img']
-    .map(selector => {
-      const box = document.querySelector(selector).getBoundingClientRect();
-      return [selector, [box.left, box.top, box.right, box.bottom]];
-    }))"""
+REMOVED_MEDIA = (
+    "/assets/catalog/",
+    "/assets/video/",
+    "/assets/campaign/",
+    "/assets/products/",
+    "/social/",
+)
 
 
-@pytest.mark.parametrize("width", [320, 375, 390, 414, 680])
-def test_hero_video_control_never_covers_text(
-    browser, landing_url: str, width: int
+@pytest.mark.parametrize("viewport", sorted(VIEWPORTS))
+def test_page_loads_no_third_party_media(
+    browser, landing_url: str, viewport: str
 ) -> None:
-    context = browser.new_context(viewport={"width": width, "height": 812})
-    page = context.new_page()
+    context, page = _open(browser, landing_url, viewport)
+    requested: list[str] = []
+    page.on("request", lambda request: requested.append(request.url))
     try:
-        page.goto(landing_url, wait_until="domcontentloaded")
-        page.wait_for_function(INTRO_GONE_JS, timeout=6_000)
-        boxes = page.evaluate(HERO_BOXES_JS)
-        left, top, right, bottom = boxes.pop(".hero-video-control")
-        for selector, (x1, y1, x2, y2) in boxes.items():
-            apart = right <= x1 or left >= x2 or bottom <= y1 or top >= y2
-            assert apart, (width, selector)
+        page.goto(landing_url, wait_until="networkidle")
+        page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
+        page.mouse.wheel(0, 20_000)
+        page.wait_for_timeout(800)
+        pending = page.locator("#catalog-rail .product-visual--pending")
+
+        assert page.locator("video").count() == 0
+        assert pending.count() >= 8
+        assert "Foto oficial em produção" in pending.first.text_content()
+        assert not [url for url in requested if any(p in url for p in REMOVED_MEDIA)]
     finally:
         context.close()
 

@@ -1,5 +1,7 @@
 # Legendas prontas — primeira grade
 
+> **BLOQUEADO em 27/09/2026:** as imagens citadas neste roteiro mostram marca de terceiros e foram para `quarantine/third-party-marks/`. Não use em post nem em anúncio; espere as fotos reais das peças.
+
 Publicar na ordem de 1 a 9. Cada peça tem uma única chamada principal.
 
 ## 1 — Navy Gold

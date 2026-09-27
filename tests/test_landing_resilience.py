@@ -146,17 +146,17 @@ def test_site_js_builds_the_same_default_message() -> None:
     assert "document.querySelectorAll('.purchase-link').forEach" in script
 
 
-def test_mobile_hero_and_brand_mark_stay_light() -> None:
+def test_hero_still_and_brand_mark_stay_light() -> None:
     html = (LANDING / "index.html").read_text(encoding="utf-8")
-    mobile_source = (
-        '<source src="assets/video/veratus-hero-mobile.mp4" type="video/mp4" '
-        'media="(max-width: 680px)">'
-    )
+    css = (LANDING / "styles.css").read_text(encoding="utf-8")
 
-    assert mobile_source in html
-    assert html.index(mobile_source) < html.index("veratus-hero-desktop.mp4")
-    assert 'poster="assets/video/veratus-hero-poster.webp"' in html
-    assert (LANDING / "assets/video/veratus-hero-mobile.mp4").stat().st_size < 1_600_000
+    assert '<div class="hero-still" aria-hidden="true"></div>' in html
+    assert "hero-video-control" not in html
+    assert "assets/hero/veratus-hero-alpes-720.webp" in css
+    assert (
+        LANDING / "assets/hero/veratus-hero-alpes-1280.webp"
+    ).stat().st_size < 80_000
+    assert (LANDING / "assets/hero/veratus-hero-alpes-720.webp").stat().st_size < 40_000
     assert "veratus-v-wheat-alpha.png" not in html
     for size in (160, 720):
         mark = LANDING / f"assets/veratus-v-wheat-{size}.webp"

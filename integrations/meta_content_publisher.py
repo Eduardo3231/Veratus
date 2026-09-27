@@ -10,6 +10,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import requests
 
@@ -50,8 +51,26 @@ def select_payload(payloads: list[dict[str, Any]], order: int) -> dict[str, Any]
     raise ValueError(f"Publicação {order} não encontrada.")
 
 
+QUARANTINE_MANIFEST = ROOT / "quarantine" / "third-party-marks" / "manifest.json"
+
+
+def quarantined_media_paths() -> set[str]:
+    """Public URL paths of media removed for showing third-party marks."""
+    if not QUARANTINE_MANIFEST.exists():
+        return set()
+    manifest = json.loads(QUARANTINE_MANIFEST.read_text(encoding="utf-8"))
+    return {
+        "/" + path.removeprefix("landing/")
+        for path in manifest["original_paths"]
+        if path.startswith("landing/")
+    }
+
+
 def validate_payload(item: dict[str, Any], *, check_url: bool = True) -> list[str]:
     errors: list[str] = []
+    if urlsplit(str(item.get("media_url", ""))).path in quarantined_media_paths():
+        # Checked before any HTTP call: the old URL may still resolve until deploy.
+        return ["mídia em quarentena: mostra marca de terceiros"]
     media_type = item.get("type")
     if media_type not in {"IMAGE", "REELS"}:
         errors.append("type deve ser IMAGE ou REELS")
