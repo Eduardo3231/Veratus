@@ -55,6 +55,7 @@ def test_delivery_promise_and_registered_origin_stay_an_open_question() -> None:
 
 
 def test_watches_are_on_sale_and_only_ads_wait_for_real_photos() -> None:
+    landing = Path(__file__).resolve().parents[1] / "landing"
     discovered = {item["sku"]: item for item in discover_products()}
     blocker = config.STOREFRONT_BLOCKERS[0]
     projection = public_catalog()
@@ -73,7 +74,8 @@ def test_watches_are_on_sale_and_only_ads_wait_for_real_photos() -> None:
     for item in watches:
         assert set(item["palette"]) == {"dial", "bezel", "metal"}
         if item["image_status"] == "NEEDS_REAL_PHOTO":
-            assert item["image"] is None
+            assert item["image"].startswith("assets/catalog/")
+            assert (landing / item["image"]).exists()
 
 
 def test_home_purchase_journey_matches_confirmed_terms() -> None:

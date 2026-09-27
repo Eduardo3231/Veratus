@@ -58,7 +58,14 @@ def discover_products() -> list[dict[str, Any]]:
         sale_price = OFFICIAL_SALE_PRICE_BRL if is_watch else product.get("sale_price")
         material = OFFICIAL_MATERIAL if is_watch else product.get("material")
         asset_candidates = product.get("images") or ([image] if image else [])
-        verified_images = [item for item in asset_candidates if _asset_exists(item)]
+        existing_images = [item for item in asset_candidates if _asset_exists(item)]
+        # Catalogue creatives may appear on the storefront, but only an exact
+        # photo imported as REAL_PHOTO can satisfy a watch channel listing.
+        verified_images = (
+            existing_images
+            if not is_watch or product.get("image_status") == "REAL_PHOTO"
+            else []
+        )
         missing = []
         fields: dict[str, Any] = {
             "sku": _field(sku, catalog_source, "REAL_CONFIRMED"),

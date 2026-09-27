@@ -7,14 +7,17 @@
     ],
     "eyebrow": "Clássico / Versátil",
     "description": "Uma composição clara, equilibrada e direta para diferentes momentos.",
-    "image": null,
+    "image": "assets/catalog/arctic-white.webp",
     "image_status": "NEEDS_REAL_PHOTO",
     "palette": {
       "dial": "#ece8df",
       "bezel": "#c7cacd",
       "metal": "steel"
     },
-    "availability": "confirmar_com_equipe"
+    "availability": "confirmar_com_equipe",
+    "image_role": "CATALOG_CREATIVE",
+    "image_source": "acervo de criativos fornecido pelo fundador",
+    "alt": "Imagem de apresentação do relógio Arctic White"
   },
   {
     "id": "ocean-blue",
@@ -24,14 +27,17 @@
     ],
     "eyebrow": "Esportivo / Versátil",
     "description": "Tons profundos e contraste preciso em uma leitura esportiva.",
-    "image": null,
+    "image": "assets/catalog/ocean-blue.webp",
     "image_status": "NEEDS_REAL_PHOTO",
     "palette": {
       "dial": "#0f2c52",
       "bezel": "#123763",
       "metal": "steel"
     },
-    "availability": "confirmar_com_equipe"
+    "availability": "confirmar_com_equipe",
+    "image_role": "CATALOG_CREATIVE",
+    "image_source": "acervo de criativos fornecido pelo fundador",
+    "alt": "Imagem de apresentação do relógio Ocean Blue"
   },
   {
     "id": "black-gmt",
@@ -42,14 +48,17 @@
     ],
     "eyebrow": "Esportivo / Marcante",
     "description": "Preto, aço e uma presença visual definida por contrastes.",
-    "image": null,
+    "image": "assets/catalog/black-gmt.webp",
     "image_status": "NEEDS_REAL_PHOTO",
     "palette": {
       "dial": "#0c0c0d",
       "bezel": "#161617",
       "metal": "steel"
     },
-    "availability": "confirmar_com_equipe"
+    "availability": "confirmar_com_equipe",
+    "image_role": "CATALOG_CREATIVE",
+    "image_source": "acervo de criativos fornecido pelo fundador",
+    "alt": "Imagem de apresentação do relógio Black GMT"
   },
   {
     "id": "royal-blue",
@@ -60,14 +69,17 @@
     ],
     "eyebrow": "Marcante / Esportivo",
     "description": "Azul intenso e acabamento dourado para uma escolha de destaque.",
-    "image": null,
+    "image": "assets/catalog/royal-blue.webp",
     "image_status": "NEEDS_REAL_PHOTO",
     "palette": {
       "dial": "#15347a",
       "bezel": "#183b86",
       "metal": "two-tone"
     },
-    "availability": "confirmar_com_equipe"
+    "availability": "confirmar_com_equipe",
+    "image_role": "CATALOG_CREATIVE",
+    "image_source": "acervo de criativos fornecido pelo fundador",
+    "alt": "Imagem de apresentação do relógio Royal Blue"
   },
   {
     "id": "platinum-classic",
@@ -77,14 +89,17 @@
     ],
     "eyebrow": "Clássico / Versátil",
     "description": "Mostrador claro e linhas sóbrias em uma composição atemporal.",
-    "image": null,
+    "image": "assets/catalog/platinum-classic.webp",
     "image_status": "NEEDS_REAL_PHOTO",
     "palette": {
       "dial": "#dde2e6",
       "bezel": "#c7cacd",
       "metal": "steel"
     },
-    "availability": "confirmar_com_equipe"
+    "availability": "confirmar_com_equipe",
+    "image_role": "CATALOG_CREATIVE",
+    "image_source": "acervo de criativos fornecido pelo fundador",
+    "alt": "Imagem de apresentação do relógio Platinum Classic"
   },
   {
     "id": "emerald-signature",
@@ -94,14 +109,17 @@
     ],
     "eyebrow": "Marcante",
     "description": "Verde profundo em uma composição de personalidade visual.",
-    "image": null,
+    "image": "assets/catalog/emerald-signature.webp",
     "image_status": "NEEDS_REAL_PHOTO",
     "palette": {
       "dial": "#0e4a35",
       "bezel": "#0f5139",
       "metal": "steel"
     },
-    "availability": "confirmar_com_equipe"
+    "availability": "confirmar_com_equipe",
+    "image_role": "CATALOG_CREATIVE",
+    "image_source": "acervo de criativos fornecido pelo fundador",
+    "alt": "Imagem de apresentação do relógio Emerald Signature"
   },
   {
     "id": "silver-prestige",
@@ -111,14 +129,17 @@
     ],
     "eyebrow": "Clássico",
     "description": "Uma leitura monocromática com presença discreta e refinada.",
-    "image": null,
+    "image": "assets/catalog/silver-prestige.webp",
     "image_status": "NEEDS_REAL_PHOTO",
     "palette": {
       "dial": "#b7bbc0",
       "bezel": "#c7cacd",
       "metal": "steel"
     },
-    "availability": "confirmar_com_equipe"
+    "availability": "confirmar_com_equipe",
+    "image_role": "CATALOG_CREATIVE",
+    "image_source": "acervo de criativos fornecido pelo fundador",
+    "alt": "Imagem de apresentação do relógio Silver Prestige"
   },
   {
     "id": "polar-blue",
@@ -128,14 +149,17 @@
     ],
     "eyebrow": "Esportivo / Versátil",
     "description": "Azul polar e mostrador claro em uma composição de contraste leve.",
-    "image": null,
+    "image": "assets/catalog/polar-blue.webp",
     "image_status": "NEEDS_REAL_PHOTO",
     "palette": {
       "dial": "#e6edf2",
       "bezel": "#5d93bd",
       "metal": "steel"
     },
-    "availability": "confirmar_com_equipe"
+    "availability": "confirmar_com_equipe",
+    "image_role": "CATALOG_CREATIVE",
+    "image_source": "acervo de criativos fornecido pelo fundador",
+    "alt": "Imagem de apresentação do relógio Polar Blue"
   },
   {
     "id": "bronze-heritage",
@@ -146,14 +170,17 @@
     ],
     "eyebrow": "Clássico / Marcante",
     "description": "Tons quentes e acabamento metálico em uma composição de presença.",
-    "image": null,
+    "image": "assets/catalog/bronze-heritage.webp",
     "image_status": "NEEDS_REAL_PHOTO",
     "palette": {
       "dial": "#5e3f24",
       "bezel": "#c8a56a",
       "metal": "gold"
     },
-    "availability": "confirmar_com_equipe"
+    "availability": "confirmar_com_equipe",
+    "image_role": "CATALOG_CREATIVE",
+    "image_source": "acervo de criativos fornecido pelo fundador",
+    "alt": "Imagem de apresentação do relógio Bronze Heritage"
   },
   {
     "collection": "feminine",

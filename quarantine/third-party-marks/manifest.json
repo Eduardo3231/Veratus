@@ -2,7 +2,7 @@
   "reason": "Mídia com marca de terceiros (ROLEX, coroa, selo ROLEX S.A. GENEVE, nomes de modelo).",
   "verified_at": "2026-09-27",
   "founder_confirmation": "2026-09-27: as peças físicas não levam marca de terceiros; só as fotos do fornecedor.",
-  "rule": "Não publicar, anunciar nem restaurar na pasta pública. Substituir por fotos reais do item exato.",
+  "rule": "Os nove criativos de catálogo foram restaurados na vitrine por ordem direta do fundador em 2026-09-27; continuam bloqueados para anúncios e publicação social. As demais mídias não devem ser restauradas.",
   "original_paths": [
     "landing/assets/campaign/bronze-classic-box.webp",
     "landing/assets/campaign/emerald-box.webp",
@@ -51,5 +51,16 @@
     "landing/social/reels/veratus-reel-colecao-01.mp4",
     "social/assets/reels/veratus-reel-colecao-01-cover.jpg",
     "social/assets/reels/veratus-reel-colecao-01.mp4"
+  ],
+  "storefront_exceptions": [
+    "landing/assets/catalog/arctic-white.webp",
+    "landing/assets/catalog/black-gmt.webp",
+    "landing/assets/catalog/bronze-heritage.webp",
+    "landing/assets/catalog/emerald-signature.webp",
+    "landing/assets/catalog/ocean-blue.webp",
+    "landing/assets/catalog/platinum-classic.webp",
+    "landing/assets/catalog/polar-blue.webp",
+    "landing/assets/catalog/royal-blue.webp",
+    "landing/assets/catalog/silver-prestige.webp"
   ]
 }

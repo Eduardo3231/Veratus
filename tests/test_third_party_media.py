@@ -20,7 +20,6 @@ PAGES = (
     "condicoes-de-compra.html",
 )
 REMOVED_FOLDERS = (
-    "assets/catalog/",
     "assets/video/",
     "assets/campaign/",
     "assets/products/",
@@ -39,13 +38,18 @@ def _public_texts() -> dict[str, str]:
     return texts
 
 
-def test_quarantined_media_never_returns_to_the_public_folder() -> None:
+def test_only_founder_approved_catalog_creatives_return_to_public_folder() -> None:
     paths = _manifest()
+    manifest = json.loads((QUARANTINE / "manifest.json").read_text(encoding="utf-8"))
+    storefront_exceptions = set(manifest["storefront_exceptions"])
 
     assert len(paths) >= 40
     for path in paths:
         assert (QUARANTINE / path).exists(), path
-        assert not (ROOT / path).exists(), path
+        if path in storefront_exceptions:
+            assert (ROOT / path).exists(), path
+        else:
+            assert not (ROOT / path).exists(), path
     assert "quarantine" in (ROOT / ".dockerignore").read_text(encoding="utf-8")
 
 
@@ -64,17 +68,19 @@ def test_every_asset_the_site_references_exists() -> None:
             assert (LANDING / asset).exists(), (name, asset)
 
 
-def test_watches_wait_for_real_photos_and_jewelry_keeps_its_own() -> None:
+def test_watches_use_catalog_creatives_while_real_photos_remain_pending() -> None:
     projection = public_catalog()
     watches = [item for item in projection if item["collection"] == "watches"]
     jewelry = [item for item in projection if item["collection"] == "feminine"]
 
     assert watches
     for item in watches:
-        # No photo until the real one arrives through scripts/import_watch_photos.py.
+        # Founder-approved catalogue creatives are visible, but paid/social work
+        # still waits for exact real photos through scripts/import_watch_photos.py.
         assert item["image_status"] in {"NEEDS_REAL_PHOTO", "REAL_PHOTO"}
         if item["image_status"] == "NEEDS_REAL_PHOTO":
-            assert item["image"] is None
+            assert item["image"].startswith("assets/catalog/")
+            assert (LANDING / item["image"]).exists()
         else:
             assert item["image"].startswith("assets/watches/")
             assert (LANDING / item["image"]).exists()

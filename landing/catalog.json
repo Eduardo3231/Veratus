@@ -4,8 +4,9 @@
     "name": "Arctic White",
     "eyebrow": "Clássico / Versátil",
     "description": "Uma composição clara, equilibrada e direta para diferentes momentos.",
-    "image": null,
+    "image": "assets/catalog/arctic-white.webp",
     "image_status": "NEEDS_REAL_PHOTO",
+    "alt": "Imagem de apresentação do relógio Arctic White",
     "styles": [
       "classico"
     ],
@@ -18,7 +19,6 @@
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Arctic White da coleção Veratus",
     "price_brl": "289.90"
   },
   {
@@ -26,8 +26,9 @@
     "name": "Ocean Blue",
     "eyebrow": "Esportivo / Versátil",
     "description": "Tons profundos e contraste preciso em uma leitura esportiva.",
-    "image": null,
+    "image": "assets/catalog/ocean-blue.webp",
     "image_status": "NEEDS_REAL_PHOTO",
+    "alt": "Imagem de apresentação do relógio Ocean Blue",
     "styles": [
       "esportivo"
     ],
@@ -40,7 +41,6 @@
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Ocean Blue da coleção Veratus",
     "price_brl": "289.90"
   },
   {
@@ -48,8 +48,9 @@
     "name": "Black GMT",
     "eyebrow": "Esportivo / Marcante",
     "description": "Preto, aço e uma presença visual definida por contrastes.",
-    "image": null,
+    "image": "assets/catalog/black-gmt.webp",
     "image_status": "NEEDS_REAL_PHOTO",
+    "alt": "Imagem de apresentação do relógio Black GMT",
     "styles": [
       "esportivo",
       "marcante"
@@ -63,7 +64,6 @@
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Black GMT da coleção Veratus",
     "price_brl": "289.90"
   },
   {
@@ -71,8 +71,9 @@
     "name": "Royal Blue",
     "eyebrow": "Marcante / Esportivo",
     "description": "Azul intenso e acabamento dourado para uma escolha de destaque.",
-    "image": null,
+    "image": "assets/catalog/royal-blue.webp",
     "image_status": "NEEDS_REAL_PHOTO",
+    "alt": "Imagem de apresentação do relógio Royal Blue",
     "styles": [
       "marcante",
       "esportivo"
@@ -86,7 +87,6 @@
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Royal Blue da coleção Veratus",
     "price_brl": "289.90"
   },
   {
@@ -94,8 +94,9 @@
     "name": "Platinum Classic",
     "eyebrow": "Clássico / Versátil",
     "description": "Mostrador claro e linhas sóbrias em uma composição atemporal.",
-    "image": null,
+    "image": "assets/catalog/platinum-classic.webp",
     "image_status": "NEEDS_REAL_PHOTO",
+    "alt": "Imagem de apresentação do relógio Platinum Classic",
     "styles": [
       "classico"
     ],
@@ -108,7 +109,6 @@
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Platinum Classic da coleção Veratus",
     "price_brl": "289.90"
   },
   {
@@ -116,8 +116,9 @@
     "name": "Emerald Signature",
     "eyebrow": "Marcante",
     "description": "Verde profundo em uma composição de personalidade visual.",
-    "image": null,
+    "image": "assets/catalog/emerald-signature.webp",
     "image_status": "NEEDS_REAL_PHOTO",
+    "alt": "Imagem de apresentação do relógio Emerald Signature",
     "styles": [
       "marcante"
     ],
@@ -130,7 +131,6 @@
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Emerald Signature da coleção Veratus",
     "price_brl": "289.90"
   },
   {
@@ -138,8 +138,9 @@
     "name": "Silver Prestige",
     "eyebrow": "Clássico",
     "description": "Uma leitura monocromática com presença discreta e refinada.",
-    "image": null,
+    "image": "assets/catalog/silver-prestige.webp",
     "image_status": "NEEDS_REAL_PHOTO",
+    "alt": "Imagem de apresentação do relógio Silver Prestige",
     "styles": [
       "classico"
     ],
@@ -152,7 +153,6 @@
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Silver Prestige da coleção Veratus",
     "price_brl": "289.90"
   },
   {
@@ -160,8 +160,9 @@
     "name": "Polar Blue",
     "eyebrow": "Esportivo / Versátil",
     "description": "Azul polar e mostrador claro em uma composição de contraste leve.",
-    "image": null,
+    "image": "assets/catalog/polar-blue.webp",
     "image_status": "NEEDS_REAL_PHOTO",
+    "alt": "Imagem de apresentação do relógio Polar Blue",
     "styles": [
       "esportivo"
     ],
@@ -174,7 +175,6 @@
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Polar Blue da coleção Veratus",
     "price_brl": "289.90"
   },
   {
@@ -182,8 +182,9 @@
     "name": "Bronze Heritage",
     "eyebrow": "Clássico / Marcante",
     "description": "Tons quentes e acabamento metálico em uma composição de presença.",
-    "image": null,
+    "image": "assets/catalog/bronze-heritage.webp",
     "image_status": "NEEDS_REAL_PHOTO",
+    "alt": "Imagem de apresentação do relógio Bronze Heritage",
     "styles": [
       "classico",
       "marcante"
@@ -197,7 +198,6 @@
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Bronze Heritage da coleção Veratus",
     "price_brl": "289.90"
   },
   {

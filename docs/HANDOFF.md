@@ -1,6 +1,6 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 27/09/2026 (tarde), Claude Code.
+**Última atualização:** 27/09/2026 (tarde), Codex.
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
 
 ## Estado do repositório
@@ -42,6 +42,8 @@ O Codex (PID 5968) estava em execução desde 10:34 de 27/09, sem escrever na pa
 
 ## Fotos reais dos relógios
 
+**Ajuste local pronto em 27/09, aguardando publicação:** por ordem direta do fundador, os nove criativos de catálogo voltaram à vitrine e foram religados aos modelos Arctic White, Ocean Blue, Black GMT, Royal Blue, Platinum Classic, Emerald Signature, Silver Prestige, Polar Blue e Bronze Heritage. Eles ficam em `landing/assets/catalog/`, todos com 1122×1402. O Product Master os classifica como `CATALOG_CREATIVE` e mantém `image_status: NEEDS_REAL_PHOTO`; assim, aparecem no site sem liberar anúncios, posts ou listings como se fossem fotos reais da peça.
+
 1. Salve uma foto por modelo em `incoming/relogios/<id>.jpg`, por exemplo `ocean-blue.jpg` ou `black-gmt.jpg`. A pasta fica fora do Git.
 2. Rode `python scripts/import_watch_photos.py --sem-marca-de-terceiros`.
 3. O script recorta em 4:5, salva WebP sem EXIF e marca `REAL_PHOTO` no Product Master. O cartão troca a ilustração pela foto.
@@ -61,8 +63,7 @@ Anúncio pago e post de relógio continuam bloqueados até a foto real do item e
 
 ## Decisões abertas do fundador
 
-1. O fundador quer as fotos dos relógios de volta na vitrine. As fotos de catálogo (`quarantine/third-party-marks/landing/assets/catalog/`) têm "ROLEX", a coroa, "SUBMARINER" e "DATEJUST" no mostrador. Retocar essas fotos para apagar as marcas foi bloqueado pela permissão do Claude Code em 27/09. Caminho que resta: fotos das peças, com o importador abaixo.
-2. Fotos reais dos 9 relógios, para anúncio, post e troca da ilustração. Os modelos seguem o desenho de modelos conhecidos. Vale uma avaliação jurídica de conjunto-imagem antes de anunciar.
+1. Fotos reais dos 9 relógios para anúncio, post e listings externos. Os criativos antigos voltaram somente à vitrine por decisão direta do fundador; continuam bloqueados nos canais automáticos.
 3. Origem registrada com manuseio de 2 dias úteis vs entrega em até 7 dias. Quando o prazo começa a contar?
 4. `product_master.py` (material obrigatório para joias no QA): manter ou reverter.
 5. Economics: frete pago pela Veratus, taxa de pagamento e tributo (UNVERIFIED).
@@ -73,10 +74,11 @@ Anúncio pago e post de relógio continuam bloqueados até a foto real do item e
 ## Não faça
 
 - Não ligue nenhuma flag de envio ou publicação nem faça push ou deploy sem confirmação explícita no momento da ação.
-- Não use a mídia de `quarantine/third-party-marks/` nem edite fotos para apagar marcas.
+- Não use a mídia de `quarantine/third-party-marks/` fora das nove exceções de vitrine registradas em `manifest.json`; não edite fotos para apagar marcas.
 - Não "restaure" arquivos que você não alterou; registre aqui.
 - Não versione `docs/data-discovery-2026-09-19.json` nem nada com nome, endereço ou cidade do fornecedor.
 
 ## Próximo passo sugerido
 
-1. Receber as fotos das peças (`incoming/relogios/<id>.jpg`), rodar o importador, conferir as capturas e publicar com confirmação do fundador.
+1. Publicar a restauração dos nove criativos após confirmação explícita do fundador no momento do push/deploy.
+2. Depois, receber as fotos das peças (`incoming/relogios/<id>.jpg`) e rodar o importador para liberar canais externos.
