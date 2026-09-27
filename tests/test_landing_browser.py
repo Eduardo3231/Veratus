@@ -20,6 +20,7 @@ sync_api = pytest.importorskip("playwright.sync_api")
 
 LANDING = Path(__file__).resolve().parents[1] / "landing"
 WHATSAPP = "https://wa.me/5511958323612?text="
+VISIT_REFERENCE = "Refer%C3%AAncia%20da%20visita%3A%20VT-"
 VIEWPORTS = {
     "desktop": {"width": 1440, "height": 900},
     "mobile": {"width": 390, "height": 844},
@@ -141,10 +142,10 @@ def test_content_and_whatsapp_links_are_visible(
         assert page.locator("#catalog-rail .product-card").count() >= 8
 
         hrefs = page.eval_on_selector_all(
-            ".purchase-link:not(#dialog-cta)", "links => links.map(a => a.href)"
+            'a[href*="wa.me"]', "links => links.map(a => a.href)"
         )
         assert hrefs and all(href.startswith(WHATSAPP) for href in hrefs)
-        assert all("VT-" in href for href in hrefs)
+        assert all(VISIT_REFERENCE in href for href in hrefs)
         assert any("produto%3Droyal-blue" in href for href in hrefs)
 
         first = page.locator("#catalog-rail .product-card").first
@@ -154,6 +155,63 @@ def test_content_and_whatsapp_links_are_visible(
         assert cta.startswith(WHATSAPP)
         assert f"produto%3D{product_id}" in cta and "VT-" in cta
         assert errors == []
+    finally:
+        context.close()
+
+
+HIDDEN_LINKS_JS = """() => [...document.querySelectorAll('a[href*="wa.me"]')].map(a => {
+  let hidden = false;
+  for (let node = a; node; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (style.display === 'none') return {rendered: false};
+    if (style.visibility === 'hidden' || Number(style.opacity) < 0.05) hidden = true;
+  }
+  return {rendered: true, hidden, inert: Boolean(a.closest('[inert]')),
+          text: a.textContent.trim()};
+})"""
+
+
+def test_hidden_whatsapp_links_leave_the_tab_order(browser, landing_url: str) -> None:
+    context, page = _open(browser, landing_url, "mobile")
+    try:
+        page.goto(landing_url, wait_until="domcontentloaded")
+        page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
+        page.wait_for_function(INTRO_GONE_JS, timeout=6_000)
+        links = page.evaluate(HIDDEN_LINKS_JS)
+        # The closed menu and the not-yet-shown sticky CTA are invisible links.
+        invisible = [item for item in links if item["rendered"] and item["hidden"]]
+        assert len(invisible) >= 2
+        assert all(item["inert"] for item in invisible), invisible
+
+        page.click(".menu-toggle")
+        assert page.evaluate("document.querySelector('.main-nav').inert") is False
+    finally:
+        context.close()
+
+
+HERO_BOXES_JS = """() => Object.fromEntries(
+  ['.hero-video-control', '.brand-universe__caption', '.hero-footer',
+   '.hero-copy .eyebrow', '.hero-actions', '.brand-universe__mark img']
+    .map(selector => {
+      const box = document.querySelector(selector).getBoundingClientRect();
+      return [selector, [box.left, box.top, box.right, box.bottom]];
+    }))"""
+
+
+@pytest.mark.parametrize("width", [320, 375, 390, 414, 680])
+def test_hero_video_control_never_covers_text(
+    browser, landing_url: str, width: int
+) -> None:
+    context = browser.new_context(viewport={"width": width, "height": 812})
+    page = context.new_page()
+    try:
+        page.goto(landing_url, wait_until="domcontentloaded")
+        page.wait_for_function(INTRO_GONE_JS, timeout=6_000)
+        boxes = page.evaluate(HERO_BOXES_JS)
+        left, top, right, bottom = boxes.pop(".hero-video-control")
+        for selector, (x1, y1, x2, y2) in boxes.items():
+            apart = right <= x1 or left >= x2 or bottom <= y1 or top >= y2
+            assert apart, (width, selector)
     finally:
         context.close()
 
@@ -176,7 +234,11 @@ def test_content_survives_blocked_javascript(
         ):
             _assert_visible(page, selector)
         fallback = page.get_attribute("#catalog-rail .purchase-link", "href")
-        assert fallback.startswith("https://wa.me/5511958323612")
+        assert fallback.startswith(WHATSAPP) and VISIT_REFERENCE in fallback
+        static_hrefs = page.eval_on_selector_all(
+            'a[href*="wa.me"]', "links => links.map(a => a.href)"
+        )
+        assert all(VISIT_REFERENCE in href for href in static_hrefs)
     finally:
         context.close()
 

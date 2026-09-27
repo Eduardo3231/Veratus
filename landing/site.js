@@ -73,7 +73,8 @@ function createWhatsAppLink(productName = '', productId = '') {
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
-document.querySelectorAll('.purchase-link:not(#dialog-cta)').forEach((link) => {
+// Every WhatsApp link carries the visit reference, the dialog CTA included.
+document.querySelectorAll('.purchase-link').forEach((link) => {
   link.href = createWhatsAppLink(link.dataset.productName, link.dataset.productId);
 });
 
@@ -355,25 +356,36 @@ const progress = document.querySelector('.scroll-progress span');
 const menuButton = document.querySelector('.menu-toggle');
 const menu = document.querySelector('.main-nav');
 const mobileCta = document.querySelector('#mobile-cta');
+const compactNav = window.matchMedia('(max-width: 980px)');
+// Links hidden by opacity stay out of the tab order and the accessibility tree.
+function syncMenuInert() {
+  menu.inert = compactNav.matches && !menu.classList.contains('is-open');
+}
 function closeMenu() {
   menu.classList.remove('is-open');
   menuButton.setAttribute('aria-expanded', 'false');
   document.body.classList.remove('menu-open');
+  syncMenuInert();
 }
 menuButton.addEventListener('click', () => {
   const open = !menu.classList.contains('is-open');
   menu.classList.toggle('is-open', open);
   menuButton.setAttribute('aria-expanded', String(open));
   document.body.classList.toggle('menu-open', open);
+  syncMenuInert();
 });
 menu.querySelectorAll('a').forEach((link) => link.addEventListener('click', closeMenu));
+compactNav.addEventListener('change', syncMenuInert);
+syncMenuInert();
 
 function updateScrollEffects() {
   const y = window.scrollY;
   const scrollable = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
   header.classList.toggle('is-scrolled', y > 30);
   progress.style.transform = `scaleX(${Math.min(y / scrollable, 1)})`;
-  mobileCta.classList.toggle('is-visible', y > document.querySelector('#hero').offsetHeight - 100);
+  const ctaVisible = y > document.querySelector('#hero').offsetHeight - 100;
+  mobileCta.classList.toggle('is-visible', ctaVisible);
+  mobileCta.inert = !ctaVisible;
 }
 window.addEventListener('scroll', updateScrollEffects, { passive: true });
 document.querySelector('#year').textContent = new Date().getFullYear();

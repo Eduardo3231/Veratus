@@ -6,6 +6,7 @@ import json
 import re
 from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import quote
 
 LANDING = Path(__file__).resolve().parents[1] / "landing"
 WHATSAPP = "https://wa.me/5511958323612"
@@ -90,3 +91,64 @@ def test_purchase_links_use_official_number_and_known_products() -> None:
         if "data-product-id" in link:
             assert link["data-product-id"] in catalog_ids
             assert link.get("data-product-name")
+
+
+def _visit_reference(source: str = "site-direto") -> str:
+    """Python mirror of campaignReference() in site.js (FNV-1a, base 36)."""
+    value = 2166136261
+    for character in source:
+        value = ((value ^ ord(character)) * 16777619) & 0xFFFFFFFF
+    digits, reference = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", ""
+    while value:
+        value, remainder = divmod(value, 36)
+        reference = digits[remainder] + reference
+    return f"VT-{reference}"
+
+
+def _default_whatsapp_link(product_name: str = "", product_id: str = "") -> str:
+    """What createWhatsAppLink() in site.js returns for a visit without UTMs."""
+    opening = (
+        f"Olá! Vim pelo site da Veratus e tenho interesse em {product_name}."
+        if product_name
+        else "Olá! Vim pelo site da Veratus e quero conhecer as coleções."
+    )
+    reference = f"Referência da visita: {_visit_reference()}"
+    if product_id:
+        reference += f" | produto={product_id}"
+    message = f"{opening}\nGostaria de confirmar disponibilidade e valor.\n{reference}"
+    # Characters encodeURIComponent() leaves as they are.
+    unreserved = "-_.!~*'()"
+    return f"{WHATSAPP}?text={quote(message, safe=unreserved)}"
+
+
+def test_every_static_whatsapp_link_carries_the_visit_reference() -> None:
+    anchors = re.compile(r'<a\b[^>]*href="https://wa\.me/[^>]*>')
+    for page in ("index.html", "condicoes-de-compra.html", "privacy.html"):
+        found = anchors.findall((LANDING / page).read_text(encoding="utf-8"))
+        assert found, page
+        for tag in found:
+            href = re.search(r'href="([^"]+)"', tag).group(1)
+            name = re.search(r'data-product-name="([^"]*)"', tag)
+            product = re.search(r'data-product-id="([^"]*)"', tag)
+            expected = _default_whatsapp_link(
+                name.group(1) if name else "", product.group(1) if product else ""
+            )
+            assert href == expected, (page, tag)
+
+
+def test_site_js_builds_the_same_default_message() -> None:
+    script = (LANDING / "site.js").read_text(encoding="utf-8")
+
+    assert "'Gostaria de confirmar disponibilidade e valor.'" in script
+    assert "'site-direto'" in script
+    assert "hash = Math.imul(hash, 16777619)" in script
+    # The dialog CTA is rewritten too, so no WhatsApp link lacks a reference.
+    assert "document.querySelectorAll('.purchase-link').forEach" in script
+
+
+def test_every_image_has_alternative_text() -> None:
+    for page in ("index.html", "condicoes-de-compra.html", "privacy.html"):
+        html = (LANDING / page).read_text(encoding="utf-8")
+        for tag in re.findall(r"<img\b[^>]*>", html):
+            alt = re.search(r'alt="([^"]*)"', tag)
+            assert alt and alt.group(1).strip(), (page, tag)

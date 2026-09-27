@@ -511,7 +511,8 @@ button { color: inherit; font: inherit; }
   .inspection-heading > p { font-size: .84rem; }
   .time-instrument { grid-template-columns: 72px 1fr; gap: 15px; margin: 22px 0; }
   .time-instrument__dial { width: 72px; }
-  .hero-video-control { right: 12px; bottom: 76px; }
+  /* Entre a legenda da marca e o rodapé do hero: não cobre texto em 320–680 px. */
+  .hero-video-control { right: 12px; bottom: 38px; }
   .catalog { padding-top: 105px; padding-bottom: 105px; }
   .catalog-heading { margin-bottom: 45px; }
   .catalog-grid { grid-template-columns: 1fr; gap: 34px; }
