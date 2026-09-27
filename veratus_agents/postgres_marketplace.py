@@ -15,6 +15,7 @@ from .marketplace_ops import (
     SyncConflict,
     _now,
 )
+from .sqlstore import lock_schema
 
 
 class PostgresMarketplaceStore:
@@ -26,6 +27,7 @@ class PostgresMarketplaceStore:
         self.database_url = database_url
         self.locks: dict[str, Lock] = {}
         with self._connect() as db:
+            lock_schema(db)
             db.execute(
                 """CREATE TABLE IF NOT EXISTS marketplace_state (
                 namespace TEXT NOT NULL,

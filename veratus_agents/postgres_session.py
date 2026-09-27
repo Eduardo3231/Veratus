@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from .sqlstore import SCHEMA_LOCK_KEY
+
 
 class PostgresSession:
     """OpenAI Agents SDK session backed by the same durable PostgreSQL database."""
@@ -39,6 +41,10 @@ class PostgresSession:
             async with await psycopg.AsyncConnection.connect(
                 self.database_url
             ) as connection:
+                # Same advisory lock as lock_schema(): DDL runs one worker at a time.
+                await connection.execute(
+                    "SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK_KEY,)
+                )
                 await connection.execute(
                     """CREATE TABLE IF NOT EXISTS agent_session_items (
                         sequence BIGSERIAL PRIMARY KEY,

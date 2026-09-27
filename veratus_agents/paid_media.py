@@ -4,12 +4,14 @@ import hashlib
 import json
 import os
 import sqlite3
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -207,7 +209,50 @@ class PaidMediaSnapshot:
     idempotency: dict[str, str] = field(default_factory=dict)
 
 
+_PAID_MEDIA_LOCK_KEY = 5640914734765076  # advisory lock shared by every web worker
+# Lists keyed by their id field; the others are append-only logs keyed by content.
+_PAID_MEDIA_LISTS: dict[str, str | None] = {
+    "experiments": "experiment_id",
+    "creative_reviews": "review_id",
+    "incidents": "incident_id",
+    "shift_reports": "report_id",
+    "checkpoints": None,
+    "decisions": None,
+    "reconciliations": None,
+}
+_PAID_MEDIA_SCALARS = ("worker_state", "autonomy_mode", "last_seen", "current_task")
+
+
+def _dump(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def _item_key(item: dict[str, Any], id_field: str | None) -> str:
+    return str(item[id_field]) if id_field else _dump(item)
+
+
+def _paid_records(snapshot: PaidMediaSnapshot) -> dict[str, dict[str, str]]:
+    records = {
+        name: {
+            _item_key(item, id_field): _dump(item) for item in getattr(snapshot, name)
+        }
+        for name, id_field in _PAID_MEDIA_LISTS.items()
+    }
+    records["scalars"] = {
+        name: _dump(getattr(snapshot, name)) for name in _PAID_MEDIA_SCALARS
+    }
+    records["idempotency"] = dict(snapshot.idempotency)
+    return records
+
+
 class PaidMediaStore:
+    """Paid-media state shared by every web worker.
+
+    Same contract as ``CommandEngine``: each write takes a database lock, keeps
+    what other workers stored and adds this worker's changes, so experiments,
+    incidents and idempotency keys are never lost or duplicated.
+    """
+
     def __init__(self, persistence_path: str):
         self.url = (
             persistence_path
@@ -215,68 +260,149 @@ class PaidMediaStore:
             else None
         )
         self.path = None if self.url else Path(persistence_path)
-        self.lock = Lock()
+        self.lock = RLock()
+        self._depth = 0
         if self.path:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.snapshot = self._load() or PaidMediaSnapshot()
+        self.snapshot = PaidMediaSnapshot()
+        self._baseline = _paid_records(self.snapshot)
+        self.refresh()
 
-    def _load(self) -> PaidMediaSnapshot | None:
+    @contextmanager
+    def _transaction(self) -> Iterator[Any]:
         if self.url:
             import psycopg
 
             with psycopg.connect(self.url) as db:
+                db.execute("SELECT pg_advisory_xact_lock(%s)", (_PAID_MEDIA_LOCK_KEY,))
                 db.execute(
                     """CREATE TABLE IF NOT EXISTS paid_media_runtime_snapshot (
                     id INTEGER PRIMARY KEY CHECK (id=1), payload JSONB NOT NULL,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"""
                 )
-                row = db.execute(
-                    "SELECT payload FROM paid_media_runtime_snapshot WHERE id=1"
-                ).fetchone()
-            if not row:
-                return None
-            data = row[0] if isinstance(row[0], dict) else json.loads(row[0])
-            return PaidMediaSnapshot(**data)
-        if not self.path:
-            return None
-        with sqlite3.connect(self.path) as db:
-            db.execute(
-                "CREATE TABLE IF NOT EXISTS paid_media_runtime_snapshot (id INTEGER PRIMARY KEY CHECK (id=1), payload TEXT NOT NULL)"
-            )
-            row = db.execute(
-                "SELECT payload FROM paid_media_runtime_snapshot WHERE id=1"
-            ).fetchone()
-        return PaidMediaSnapshot(**json.loads(row[0])) if row else None
-
-    def save(self) -> None:
-        payload = asdict(self.snapshot)
-        with self.lock:
-            if self.url:
-                import psycopg
-                from psycopg.types.json import Jsonb
-
-                with psycopg.connect(self.url) as db:
-                    db.execute(
-                        """CREATE TABLE IF NOT EXISTS paid_media_runtime_snapshot (
-                        id INTEGER PRIMARY KEY CHECK (id=1), payload JSONB NOT NULL,
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"""
-                    )
-                    db.execute(
-                        """INSERT INTO paid_media_runtime_snapshot (id,payload)
-                        VALUES (1,%s) ON CONFLICT (id) DO UPDATE SET
-                        payload=EXCLUDED.payload, updated_at=NOW()""",
-                        (Jsonb(payload),),
-                    )
-                return
-            with sqlite3.connect(self.path) as db:
+                yield db
+            return
+        with closing(
+            sqlite3.connect(self.path, timeout=30, isolation_level=None)
+        ) as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
                 db.execute(
                     "CREATE TABLE IF NOT EXISTS paid_media_runtime_snapshot (id INTEGER PRIMARY KEY CHECK (id=1), payload TEXT NOT NULL)"
                 )
-                db.execute(
-                    "INSERT OR REPLACE INTO paid_media_runtime_snapshot VALUES (1,?)",
-                    (json.dumps(payload, ensure_ascii=False),),
-                )
-                db.commit()
+                yield db
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
+            db.execute("COMMIT")
+
+    @staticmethod
+    def _select(db: Any) -> dict[str, Any] | None:
+        row = db.execute(
+            "SELECT payload FROM paid_media_runtime_snapshot WHERE id=1"
+        ).fetchone()
+        if not row:
+            return None
+        return row[0] if isinstance(row[0], dict) else json.loads(row[0])
+
+    def _write(self, db: Any) -> None:
+        payload = json.dumps(asdict(self.snapshot), ensure_ascii=False, default=str)
+        if self.url:
+            from psycopg.types.json import Jsonb
+
+            db.execute(
+                """INSERT INTO paid_media_runtime_snapshot (id,payload)
+                VALUES (1,%s) ON CONFLICT (id) DO UPDATE SET
+                payload=EXCLUDED.payload, updated_at=NOW()""",
+                (Jsonb(json.loads(payload)),),
+            )
+        else:
+            db.execute(
+                "INSERT OR REPLACE INTO paid_media_runtime_snapshot VALUES (1,?)",
+                (payload,),
+            )
+
+    def _absorb(self, stored: dict[str, Any] | None) -> dict[str, set[str]]:
+        """Take from storage every item this worker has not changed."""
+        current = _paid_records(self.snapshot)
+        dirty = {
+            kind: {
+                key
+                for key, value in records.items()
+                if self._baseline[kind].get(key) != value
+            }
+            for kind, records in current.items()
+        }
+        if not stored:
+            return dirty
+        for name, id_field in _PAID_MEDIA_LISTS.items():
+            mine = getattr(self.snapshot, name)
+            position = {_item_key(item, id_field): i for i, item in enumerate(mine)}
+            for item in stored.get(name, []):
+                key = _item_key(item, id_field)
+                if key in dirty[name]:
+                    continue
+                if key in position:
+                    mine[position[key]].clear()
+                    mine[position[key]].update(item)
+                else:
+                    position[key] = len(mine)
+                    mine.append(item)
+        self.snapshot.checkpoints.sort(key=lambda item: item.get("timestamp") or "")
+        self.snapshot.checkpoints = self.snapshot.checkpoints[-100:]
+        for name in _PAID_MEDIA_SCALARS:
+            if name in stored and name not in dirty["scalars"]:
+                setattr(self.snapshot, name, stored[name])
+        for key, value in stored.get("idempotency", {}).items():
+            if key not in dirty["idempotency"]:
+                self.snapshot.idempotency[key] = value
+        return dirty
+
+    def refresh(self) -> None:
+        """Bring in what other workers stored, keeping this worker's pending edits."""
+        with self.lock:
+            if self._depth:
+                return
+            with self._transaction() as db:
+                stored = self._select(db)
+            dirty = self._absorb(stored)
+            for kind, records in _paid_records(self.snapshot).items():
+                for key, value in records.items():
+                    if key not in dirty[kind]:
+                        self._baseline[kind][key] = value
+
+    @contextmanager
+    def synchronized(self) -> Iterator[None]:
+        """Read-merge-modify-write as one step across threads and workers."""
+        with self.lock:
+            if self._depth:
+                self._depth += 1
+                try:
+                    yield
+                finally:
+                    self._depth -= 1
+                return
+            failure: BaseException | None = None
+            with self._transaction() as db:
+                self._absorb(self._select(db))
+                self._depth = 1
+                try:
+                    yield
+                except BaseException as exc:  # noqa: BLE001 - re-raised below
+                    failure = exc
+                finally:
+                    self._depth = 0
+                self._write(db)
+            self._baseline = _paid_records(self.snapshot)
+            if failure is not None:
+                raise failure
+
+    def save(self) -> None:
+        with self.lock:
+            if self._depth:
+                return  # the enclosing synchronized() block writes on exit
+            with self.synchronized():
+                pass
 
     def checkpoint(self, stage: str, data: dict[str, Any]) -> None:
         self.snapshot.last_seen = _now()
@@ -501,6 +627,17 @@ class PaidAcquisitionWorker:
         *,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
+        # One worker at a time, so a key never yields two experiments.
+        with self.store.synchronized():
+            return self._plan(products, creative, idempotency_key=idempotency_key)
+
+    def _plan(
+        self,
+        products: list[dict[str, Any]],
+        creative: dict[str, Any] | None,
+        *,
+        idempotency_key: str | None,
+    ) -> dict[str, Any]:
         if idempotency_key and (replayed := self._replay(idempotency_key)):
             return replayed
         if not self.config.enabled:
@@ -657,15 +794,18 @@ class PaidAcquisitionWorker:
             raise ValueError("experiment_not_found")
         if plan.get("blockers"):
             raise ValueError("plan_has_open_blockers")
-        approval = self._bound_approval(experiment_id, approval_request_id)
-        if approval is None:
-            raise ValueError("approval_not_found")
-        if approval.status is ApprovalStatus.PENDING:
-            approval.payload.update({"resolved_by": actor, "resolved_at": _now()})
-            approval = self.engine.approvals.resolve(
-                approval_request_id, ApprovalStatus.APPROVED
-            )
-            self.engine._persist()
+        # Resolved under the shared lock: two workers cannot both approve it.
+        with self.engine.synchronized():
+            approval = self._bound_approval(experiment_id, approval_request_id)
+            if approval is None:
+                raise ValueError("approval_not_found")
+            resolved_here = approval.status is ApprovalStatus.PENDING
+            if resolved_here:
+                approval.payload.update({"resolved_by": actor, "resolved_at": _now()})
+                approval = self.engine.approvals.resolve(
+                    approval_request_id, ApprovalStatus.APPROVED
+                )
+        if resolved_here:
             self.store.checkpoint(
                 "APPROVAL_RESOLVED",
                 {

@@ -8,6 +8,18 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
 
+SCHEMA_LOCK_KEY = 5640914734765077
+
+
+def lock_schema(connection: Any) -> None:
+    """Serialize CREATE TABLE IF NOT EXISTS between workers on PostgreSQL.
+
+    Two sessions creating the same table at once fail with a unique violation,
+    which happens when both workers take their first request on a fresh
+    database. The advisory lock ends with the transaction.
+    """
+    connection.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK_KEY,))
+
 
 class SqlStore:
     """SQLite locally; PostgreSQL whenever ``database_url`` is configured.
@@ -27,6 +39,7 @@ class SqlStore:
             if self.path:
                 db.executescript(self.SCHEMA)
             else:
+                lock_schema(db)
                 db.execute(self.SCHEMA)
 
     @contextmanager

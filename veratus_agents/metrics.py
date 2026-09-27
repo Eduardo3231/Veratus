@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .schemas import PerformanceRecord
+from .sqlstore import lock_schema
 
 SQLITE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS marketing_performance (
@@ -132,6 +133,7 @@ class PostgresMetricsStore:
 
         self.database_url = database_url
         with psycopg.connect(database_url) as connection:
+            lock_schema(connection)
             connection.execute(POSTGRES_SCHEMA)
             for column in (
                 "product_cost_cents",

@@ -16,6 +16,7 @@ from .product_master import (
     _utcnow,
     qa_issues,
 )
+from .sqlstore import lock_schema
 
 POSTGRES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS product_master (
@@ -51,6 +52,7 @@ class PostgresProductStore:
 
         self.database_url = database_url
         with psycopg.connect(database_url) as connection:
+            lock_schema(connection)
             connection.execute(POSTGRES_SCHEMA)
 
     @staticmethod

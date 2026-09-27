@@ -13,6 +13,8 @@ from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .sqlstore import lock_schema
+
 CHANNEL = "mercado-livre"
 
 
@@ -144,6 +146,7 @@ class MercadoLivreOAuthStore:
     def _ensure_schema(self) -> None:
         if self.database_url:
             with self._connect_postgres() as connection:
+                lock_schema(connection)
                 connection.execute(
                     """
                     CREATE TABLE IF NOT EXISTS marketplace_oauth_states (

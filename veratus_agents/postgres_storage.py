@@ -5,6 +5,8 @@ import hashlib
 import uuid
 from typing import Any
 
+from .sqlstore import lock_schema
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS agent_runs (
     run_id TEXT PRIMARY KEY,
@@ -82,6 +84,7 @@ class PostgresRunStore:
     def _ensure_schema(self) -> None:
         psycopg, _, _ = self._driver()
         with psycopg.connect(self.database_url) as connection:
+            lock_schema(connection)
             connection.execute(SCHEMA)
 
     def get_or_create_run(

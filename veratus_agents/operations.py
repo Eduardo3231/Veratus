@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable
-from dataclasses import asdict, dataclass, field, replace
+from collections.abc import Callable, Iterator
+from contextlib import closing, contextmanager
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from threading import Lock
+from threading import RLock
 from typing import Any, ClassVar, Protocol
 from uuid import uuid4
 
@@ -128,6 +129,7 @@ class Command:
     payload: dict[str, Any]
     priority: Priority
     status: TaskStatus = TaskStatus.QUEUED
+    started_at: str | None = None
 
 
 @dataclass
@@ -398,7 +400,6 @@ class TaskEngine:
         self.runtimes = {
             agent_id: AgentRuntime(agent_id) for agent_id in AGENT_REGISTRY
         }
-        self.resource_locks: dict[str, Lock] = {}
         self.persist_callback = None
 
     def create(
@@ -567,7 +568,101 @@ class TaskEngine:
         return [asdict(runtime) for runtime in self.runtimes.values()]
 
 
+_RUNTIME_LOCK_KEY = 5640914734765075  # advisory lock shared by every web worker
+_STALE_RUN = timedelta(minutes=15)
+_TERMINAL = {TaskStatus.COMPLETED, TaskStatus.BLOCKED, TaskStatus.ESCALATED}
+
+
+def _dump(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, default=str)
+
+
+def _records(snapshot: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Per-record fingerprints used to tell which records a worker changed."""
+    return {
+        "commands": {
+            item["command_id"]: _dump(item) for item in snapshot.get("commands", [])
+        },
+        "tasks": {item["task_id"]: _dump(item) for item in snapshot.get("tasks", [])},
+        "approvals": {
+            item["request_id"]: _dump(item) for item in snapshot.get("approvals", [])
+        },
+        "runtimes": {
+            agent_id: _dump(item)
+            for agent_id, item in snapshot.get("runtimes", {}).items()
+        },
+        "idempotency": dict(snapshot.get("idempotency", {})),
+    }
+
+
+def _upsert(mapping: dict[str, Any], key: str, value: Any) -> None:
+    """Insert, or update in place so references held by callers stay valid."""
+    current = mapping.get(key)
+    if current is None:
+        mapping[key] = value
+        return
+    for item in fields(value):
+        setattr(current, item.name, getattr(value, item.name))
+
+
+def _command_from(item: dict[str, Any]) -> Command:
+    return Command(
+        item["command_id"],
+        item["issuer"],
+        item["target"],
+        CommandType(item["command_type"]),
+        item["payload"],
+        Priority(item["priority"]),
+        TaskStatus(item["status"]),
+        item.get("started_at"),
+    )
+
+
+def _task_from(item: dict[str, Any]) -> Task:
+    return Task(
+        item["task_id"],
+        item["command_id"],
+        item["agent"],
+        item["action"],
+        item["target"],
+        Priority(item["priority"]),
+        TaskStatus(item["status"]),
+        item.get("parent_task_id"),
+        item.get("depends_on", []),
+        item.get("blocked_by", []),
+        item.get("child_tasks", []),
+        item.get("retry_count", 0),
+        item.get("max_retries", 2),
+        item.get("timeout_seconds", 300),
+        item.get("started_at"),
+        item.get("next_retry"),
+        item.get("last_error"),
+        item.get("result", {}),
+        item.get("errors", []),
+    )
+
+
+def _approval_from(item: dict[str, Any]) -> ApprovalRequest:
+    return ApprovalRequest(
+        item["request_id"],
+        item["requested_by"],
+        ApprovalType(item["approval_type"]),
+        item["reason"],
+        item["payload"],
+        ApprovalStatus(item["status"]),
+        item.get("created_at", datetime.now(timezone.utc).isoformat()),
+    )
+
+
 class CommandEngine:
+    """Commands, tasks, approvals and audit shared by every web worker.
+
+    Each worker keeps a working copy in memory. A write takes a database lock,
+    takes from the database every record this worker did not change, and stores
+    the union, so one worker never erases another's records. Idempotency keys
+    are checked under the same lock, so a key maps to a single command.
+    """
+
     def __init__(
         self, task_engine: TaskEngine | None = None, persistence_path: str | None = None
     ) -> None:
@@ -583,131 +678,169 @@ class CommandEngine:
             else None
         )
         self.persistence_path = None if self.persistence_url else persistence_path
+        self._mutex = RLock()
+        self._depth = 0
+        self._baseline = _records(self.snapshot())
         self.tasks.persist_callback = self._persist
         self._load()
 
-    def _write_snapshot(self, payload: str) -> None:
+    @property
+    def _persistent(self) -> bool:
+        return bool(self.persistence_url or self.persistence_path)
+
+    @contextmanager
+    def _transaction(self) -> Iterator[Any]:
+        """Exclusive section across processes: advisory lock or BEGIN IMMEDIATE."""
         if self.persistence_url:
             import psycopg
-            from psycopg.types.json import Jsonb
 
             with psycopg.connect(self.persistence_url) as db:
+                db.execute("SELECT pg_advisory_xact_lock(%s)", (_RUNTIME_LOCK_KEY,))
                 db.execute(
                     """CREATE TABLE IF NOT EXISTS operational_runtime_snapshot (
                     id INTEGER PRIMARY KEY CHECK (id=1), payload JSONB NOT NULL,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"""
                 )
-                db.execute(
-                    """INSERT INTO operational_runtime_snapshot (id, payload)
-                    VALUES (1, %s) ON CONFLICT (id) DO UPDATE SET
-                    payload=EXCLUDED.payload, updated_at=NOW()""",
-                    (Jsonb(json.loads(payload)),),
-                )
+                yield db
             return
-        if self.persistence_path:
-            with sqlite3.connect(self.persistence_path) as db:
+        with closing(
+            sqlite3.connect(self.persistence_path, timeout=30, isolation_level=None)
+        ) as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
                 db.execute(
                     "CREATE TABLE IF NOT EXISTS runtime_snapshot (id INTEGER PRIMARY KEY CHECK (id=1), payload TEXT NOT NULL)"
                 )
-                db.execute(
-                    "INSERT OR REPLACE INTO runtime_snapshot VALUES (1, ?)",
-                    (payload,),
-                )
-                db.commit()
+                yield db
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
+            db.execute("COMMIT")
 
-    def _read_snapshot(self) -> dict[str, Any] | None:
-        if self.persistence_url:
-            import psycopg
-
-            with psycopg.connect(self.persistence_url) as db:
-                db.execute(
-                    """CREATE TABLE IF NOT EXISTS operational_runtime_snapshot (
-                    id INTEGER PRIMARY KEY CHECK (id=1), payload JSONB NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"""
-                )
-                row = db.execute(
-                    "SELECT payload FROM operational_runtime_snapshot WHERE id=1"
-                ).fetchone()
-            if not row:
-                return None
-            return row[0] if isinstance(row[0], dict) else json.loads(row[0])
-        if not self.persistence_path:
+    def _select(self, db: Any) -> dict[str, Any] | None:
+        table = (
+            "operational_runtime_snapshot"
+            if self.persistence_url
+            else "runtime_snapshot"
+        )
+        row = db.execute(f"SELECT payload FROM {table} WHERE id=1").fetchone()
+        if not row:
             return None
-        with sqlite3.connect(self.persistence_path) as db:
+        return row[0] if isinstance(row[0], dict) else json.loads(row[0])
+
+    def _write(self, db: Any) -> None:
+        payload = json.dumps(self.snapshot(), default=str)
+        if self.persistence_url:
+            from psycopg.types.json import Jsonb
+
             db.execute(
-                "CREATE TABLE IF NOT EXISTS runtime_snapshot (id INTEGER PRIMARY KEY CHECK (id=1), payload TEXT NOT NULL)"
+                """INSERT INTO operational_runtime_snapshot (id, payload)
+                VALUES (1, %s) ON CONFLICT (id) DO UPDATE SET
+                payload=EXCLUDED.payload, updated_at=NOW()""",
+                (Jsonb(json.loads(payload)),),
             )
-            row = db.execute(
-                "SELECT payload FROM runtime_snapshot WHERE id=1"
-            ).fetchone()
-        return json.loads(row[0]) if row else None
+        else:
+            db.execute(
+                "INSERT OR REPLACE INTO runtime_snapshot VALUES (1, ?)", (payload,)
+            )
+
+    def _absorb(self, stored: dict[str, Any] | None) -> dict[str, set[str]]:
+        """Take from storage every record this worker has not changed."""
+        current = _records(self.snapshot())
+        dirty = {
+            kind: {
+                key
+                for key, value in records.items()
+                if self._baseline[kind].get(key) != value
+            }
+            for kind, records in current.items()
+        }
+        if not stored:
+            return dirty
+        for item in stored.get("commands", []):
+            if item["command_id"] not in dirty["commands"]:
+                _upsert(self.commands, item["command_id"], _command_from(item))
+        for item in stored.get("tasks", []):
+            if item["task_id"] not in dirty["tasks"]:
+                _upsert(self.tasks.tasks, item["task_id"], _task_from(item))
+        for item in stored.get("approvals", []):
+            if item["request_id"] not in dirty["approvals"]:
+                _upsert(
+                    self.approvals.requests, item["request_id"], _approval_from(item)
+                )
+        for agent_id, item in stored.get("runtimes", {}).items():
+            if agent_id in self.tasks.runtimes and agent_id not in dirty["runtimes"]:
+                _upsert(self.tasks.runtimes, agent_id, AgentRuntime(**item))
+        for key, command_id in stored.get("idempotency", {}).items():
+            if key not in dirty["idempotency"]:
+                self.idempotency[key] = command_id
+        self.overrides |= set(stored.get("overrides", []))
+        known = {event.event_id for event in self.tasks.audit}
+        missing = [
+            AuditEvent(**item)
+            for item in stored.get("audit", [])
+            if item["event_id"] not in known
+        ]
+        if missing:
+            self.tasks.audit.extend(missing)
+            self.tasks.audit.sort(key=lambda event: event.timestamp)
+        return dirty
+
+    def refresh(self) -> None:
+        """Bring in what other workers stored, keeping this worker's pending edits."""
+        if not self._persistent:
+            return
+        with self._mutex:
+            if self._depth:
+                return
+            with self._transaction() as db:
+                stored = self._select(db)
+            dirty = self._absorb(stored)
+            for kind, records in _records(self.snapshot()).items():
+                for key, value in records.items():
+                    if key not in dirty[kind]:
+                        self._baseline[kind][key] = value
+
+    @contextmanager
+    def synchronized(self) -> Iterator[None]:
+        """Read-merge-modify-write as one step across threads and workers.
+
+        State reached before an error is still stored, as each step used to be.
+        """
+        with self._mutex:
+            if self._depth or not self._persistent:
+                self._depth += 1
+                try:
+                    yield
+                finally:
+                    self._depth -= 1
+                return
+            failure: BaseException | None = None
+            with self._transaction() as db:
+                self._absorb(self._select(db))
+                self._depth = 1
+                try:
+                    yield
+                except BaseException as exc:  # noqa: BLE001 - re-raised below
+                    failure = exc
+                finally:
+                    self._depth = 0
+                self._write(db)
+            self._baseline = _records(self.snapshot())
+            if failure is not None:
+                raise failure
 
     def _persist(self) -> None:
-        if not self.persistence_path and not self.persistence_url:
+        if not self._persistent:
             return
-        payload = json.dumps(
-            self.snapshot(),
-            default=lambda value: value.value if isinstance(value, StrEnum) else value,
-        )
-        self._write_snapshot(payload)
+        with self._mutex:
+            if self._depth:
+                return  # the enclosing synchronized() block writes on exit
+            with self.synchronized():
+                pass
 
     def _load(self) -> None:
-        if not self.persistence_path and not self.persistence_url:
-            return
-        raw = self._read_snapshot()
-        if raw is None:
-            return
-        for item in raw.get("commands", []):
-            command = Command(
-                item["command_id"],
-                item["issuer"],
-                item["target"],
-                CommandType(item["command_type"]),
-                item["payload"],
-                Priority(item["priority"]),
-                TaskStatus(item["status"]),
-            )
-            self.commands[command.command_id] = command
-        for item in raw.get("tasks", []):
-            task = Task(
-                item["task_id"],
-                item["command_id"],
-                item["agent"],
-                item["action"],
-                item["target"],
-                Priority(item["priority"]),
-                TaskStatus(item["status"]),
-                item.get("parent_task_id"),
-                item.get("depends_on", []),
-                item.get("blocked_by", []),
-                item.get("child_tasks", []),
-                item.get("retry_count", 0),
-                item.get("max_retries", 2),
-                item.get("timeout_seconds", 300),
-                item.get("started_at"),
-                item.get("next_retry"),
-                item.get("last_error"),
-                item.get("result", {}),
-                item.get("errors", []),
-            )
-            self.tasks.tasks[task.task_id] = task
-        self.tasks.audit = [AuditEvent(**item) for item in raw.get("audit", [])]
-        self.idempotency = raw.get("idempotency", {})
-        self.overrides = set(raw.get("overrides", []))
-        for item in raw.get("approvals", []):
-            approval = ApprovalRequest(
-                item["request_id"],
-                item["requested_by"],
-                ApprovalType(item["approval_type"]),
-                item["reason"],
-                item["payload"],
-                ApprovalStatus(item["status"]),
-                item.get("created_at", datetime.now(timezone.utc).isoformat()),
-            )
-            self.approvals.requests[approval.request_id] = approval
-        for agent_id, runtime in raw.get("runtimes", {}).items():
-            if agent_id in self.tasks.runtimes:
-                self.tasks.runtimes[agent_id] = AgentRuntime(**runtime)
+        self.refresh()
 
     def submit(
         self,
@@ -717,31 +850,70 @@ class CommandEngine:
         payload: dict[str, Any],
         idempotency_key: str,
     ) -> Command:
-        if idempotency_key in self.idempotency:
-            return self.commands[self.idempotency[idempotency_key]]
-        priority = (
-            Priority.CEO_OVERRIDE if issuer in {"founder", "ceo"} else Priority.ROUTINE
-        )
-        command = Command(
-            f"cmd_{uuid4().hex}", issuer, target, command_type, payload, priority
-        )
-        self.commands[command.command_id] = command
-        self.idempotency[idempotency_key] = command.command_id
-        self.tasks.record(
-            issuer,
-            "COMMAND_CREATED",
-            target,
-            "SUCCESS",
-            command.command_id,
-            after={"priority": priority.value},
-        )
-        if command_type is CommandType.CEO_OVERRIDE:
-            self.overrides.add(str(payload.get("sku", payload.get("target", ""))))
-            self.tasks.record(
-                issuer, "CEO_OVERRIDE", target, "SUCCESS", command.command_id
+        # Checked under the shared lock: two workers never create the same key.
+        with self.synchronized():
+            if idempotency_key in self.idempotency:
+                return self.commands[self.idempotency[idempotency_key]]
+            priority = (
+                Priority.CEO_OVERRIDE
+                if issuer in {"founder", "ceo"}
+                else Priority.ROUTINE
             )
-        self._persist()
-        return command
+            command = Command(
+                f"cmd_{uuid4().hex}", issuer, target, command_type, payload, priority
+            )
+            self.commands[command.command_id] = command
+            self.idempotency[idempotency_key] = command.command_id
+            self.tasks.record(
+                issuer,
+                "COMMAND_CREATED",
+                target,
+                "SUCCESS",
+                command.command_id,
+                after={"priority": priority.value},
+            )
+            if command_type is CommandType.CEO_OVERRIDE:
+                self.overrides.add(str(payload.get("sku", payload.get("target", ""))))
+                self.tasks.record(
+                    issuer, "CEO_OVERRIDE", target, "SUCCESS", command.command_id
+                )
+            return command
+
+    def claim(
+        self,
+        issuer: str,
+        target: str,
+        command_type: CommandType,
+        payload: dict[str, Any],
+        idempotency_key: str,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[Command, bool]:
+        """Submit a command and reserve its execution for this worker.
+
+        Returns ``(command, False)`` when it already finished or another worker
+        is running it; a run silent for 15 minutes counts as abandoned.
+        """
+        with self.synchronized():
+            command = self.submit(
+                issuer, target, command_type, payload, idempotency_key
+            )
+            ran_before = any(
+                task.command_id == command.command_id
+                for task in self.tasks.tasks.values()
+            )
+            if ran_before and command.status in _TERMINAL:
+                return command, False
+            now = now or datetime.now(timezone.utc)
+            if (
+                command.status == TaskStatus.RUNNING
+                and command.started_at
+                and now - datetime.fromisoformat(command.started_at) < _STALE_RUN
+            ):
+                return command, False
+            command.status = TaskStatus.RUNNING
+            command.started_at = now.isoformat()
+            return command, True
 
     def authorize(self, agent: str, permission: str) -> None:
         definition = AGENT_REGISTRY.get(agent)
@@ -1057,7 +1229,7 @@ class OperationalRuntime:
             if parsed.handler in {"prepare", "prepare_feminine"}
             else CommandType.REPORT
         )
-        command = self.engine.submit(
+        command, claimed = self.engine.claim(
             issuer,
             "general-manager",
             kind,
@@ -1068,16 +1240,8 @@ class OperationalRuntime:
             },
             key,
         )
-        prior = [
-            task
-            for task in self.engine.tasks.tasks.values()
-            if task.command_id == command.command_id
-        ]
-        if prior and command.status in {
-            TaskStatus.COMPLETED,
-            TaskStatus.BLOCKED,
-            TaskStatus.ESCALATED,
-        }:
+        if not claimed:
+            # Finished earlier, or another worker is running it right now.
             return self._report(command)
         try:
             if parsed.handler == "prepare":

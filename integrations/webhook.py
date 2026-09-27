@@ -1518,6 +1518,8 @@ def _runtime():
     global _runtime_engine
     if _runtime_engine is None:
         _runtime_engine = _operational_runtime().engine
+    # Another worker may have written since this one last looked.
+    _runtime_engine.refresh()
     return _runtime_engine
 
 
@@ -1549,6 +1551,7 @@ def _operational_runtime():
             marketplace_store=store,
             connection_service=MarketplaceConnectionService(store),
         )
+    _operational_runtime_instance.engine.refresh()
     return _operational_runtime_instance
 
 
@@ -1572,6 +1575,8 @@ def _paid_media_worker():
             adapter=MetaAdsAdapter(),
             config=PaidMediaConfig.from_env(),
         )
+    _paid_media_worker_instance.engine.refresh()
+    _paid_media_worker_instance.store.refresh()
     return _paid_media_worker_instance
 
 
@@ -1844,11 +1849,16 @@ def _resolve_approval(request_id, status):
     denied = _admin_required()
     if denied:
         return denied
+    engine = _runtime()
     try:
-        approval = _runtime().approvals.resolve(request_id, status)
+        # Resolved and stored under the shared lock: one decision per request.
+        with engine.synchronized():
+            approval = engine.approvals.resolve(request_id, status)
+            engine.tasks.record(
+                "founder", "APPROVAL_RESOLVED", request_id, status.value
+            )
     except (KeyError, ValueError):
         return jsonify({"status": "error", "message": "approval_not_resolvable"}), 409
-    _runtime().tasks.record("founder", "APPROVAL_RESOLVED", request_id, status.value)
     return jsonify({"approval": approval.__dict__}), 200
 
 
