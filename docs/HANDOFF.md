@@ -1,84 +1,90 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 27/09/2026, Claude Code.
+**Última atualização:** 27/09/2026 (tarde), Claude Code.
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
 
-## Atenção: outro processo escreveu na pasta principal
+## Estado do repositório
 
-Em 26/09, com a trava em nome de `claude-code`, outro processo reescreveu `veratus_agents/data_discovery.py` (20:39) e `veratus_agents/catalog.py` (20:55). As duas versões são **antigas** e não correspondem a nenhum commit: removem o suporte à coleção feminina e a projeção pública. Com elas, `pytest` falha e `/os/readiness` dá 500.
+- `origin/main` = `38f50be`. **Nada foi enviado nem publicado.**
+- `claude/site-referencias` contém tudo: rodadas de 25, 26 e 27/09, **27 commits** sobre `origin/main`. Os commits do `main` local (+6) e de `claude/rodada-2609` (+12) já estão nela.
+- Para publicar tudo de uma vez: `git push origin claude/site-referencias:main`. O Render publica o `main` (deploy automático do serviço `veratus-leads`, a conferir no painel). Só com confirmação do fundador no momento da ação.
+- Flags: `PUBLISH_ENABLED=false`, `PAID_MEDIA_LIVE_WRITES=false`, `PAID_MEDIA_AUTONOMY_MODE=SHADOW`, `WHATSAPP_SEND_ENABLED=false`, `INSTAGRAM_DM_ENABLED=false`, e as 8 flags de canal `false`.
+- Produção (`https://veratus.onrender.com`) ainda roda `38f50be`, **com as fotos e o vídeo com marca de terceiros no ar** até o push.
 
-- Esses arquivos **não foram revertidos** (regra do `AGENTS.md`).
-- As rodadas de 26 e 27/09 foram feitas em worktrees isoladas.
-- Em 27/09, o Codex estava de novo em execução (desde 10:34), mas não escreveu nada na pasta principal durante a rodada.
-- Antes de qualquer commit na pasta principal, descubra quem escreveu e decida o que fazer.
+## Pasta principal (`C:\Users\PC GAMER\Teste`): ainda no `main` antigo
 
-Outras alterações não versionadas na pasta principal que **não** entraram em commit:
+O fast-forward da `main` local para `claude/site-referencias` **não foi feito**. Ele esbarra em arquivos que outro processo escreveu e que não são desta sessão:
 
 | Arquivo | Situação |
 | --- | --- |
-| `veratus_agents/data_discovery.py`, `veratus_agents/catalog.py` | versões antigas escritas por outro processo (acima) |
+| `veratus_agents/catalog.py`, `veratus_agents/data_discovery.py` | versões antigas escritas por outro processo em 26/09 (20:39 e 20:55); removem a coleção feminina e a projeção pública; com elas, `pytest` falha e `/os/readiness` dá 500. `catalog.py` impede o fast-forward. |
+| `docs/evidence/economics-2026-09-25.md`, `docs/evidence/mercado-livre-readiness-2026-09-25.md`, `docs/insights/posts-2026-09-26.md` | cópias não versionadas que diferem das versões da branch; impedem o fast-forward |
 | `veratus_agents/product_master.py` | agente externo em 25/09: exige material também para joias (decisão abaixo) |
 | `integrations/zapier_to_sheets.md` | versão antiga que manda colocar a URL do Zapier no HTML público. Não usar |
 | `social/fila-publicacao.csv` | formato alterado, origem desconhecida |
 | `docs/data-discovery-2026-09-19.json` | contém nome e endereço do fornecedor. **Não versionar;** apagar ou guardar fora do repositório |
 
-## Estado do repositório
+Guardar esses arquivos num stash e fazer o fast-forward foi bloqueado pela permissão do Claude Code (risco de perda local). **O fundador decide.** Se aprovar:
 
-- `origin/main` = `38f50be`. Nada foi enviado nem publicado.
-- `main` local: +6 commits (rodadas de 25 e 26/09 organizadas por tema).
-- `claude/rodada-2609` (a partir do `main`): +12 commits, decisões do fundador de 26/09. Relatório em `docs/evidence/founder-round-2026-09-26.md`.
-- `claude/site-referencias` (a partir de `claude/rodada-2609`): +5 commits de 27/09. Relatório em `docs/evidence/site-round-2026-09-27.md`.
-- Flags: `PUBLISH_ENABLED=false`, `PAID_MEDIA_LIVE_WRITES=false`, `PAID_MEDIA_AUTONOMY_MODE=SHADOW`, `WHATSAPP_SEND_ENABLED=false`, `INSTAGRAM_DM_ENABLED=false`, e as 8 flags de canal `false`.
-- Produção (`https://veratus.onrender.com`) ainda roda `38f50be`. **O site público ainda mostra as fotos e o vídeo com marca de terceiros** até o deploy.
+```powershell
+git stash push -u -m "externo 25-26/09" -- veratus_agents/catalog.py veratus_agents/data_discovery.py docs/HANDOFF.md docs/automation docs/decisions docs/evidence/economics-2026-09-25.md docs/evidence/mercado-livre-readiness-2026-09-25.md docs/evidence/task-contracts-2026-09-25.md docs/evidence/truth-table-2026-09-25.md docs/insights/posts-2026-09-26.md
+git merge --ff-only claude/site-referencias
+```
 
-## Bloqueio principal (atualizado em 27/09)
+O Codex (PID 5968) estava em execução desde 10:34 de 27/09, sem escrever na pasta principal durante a rodada.
 
-As fotos e o vídeo dos relógios mostravam ROLEX, a coroa e o selo "ROLEX S.A. GENEVE". Isso incluía o catálogo, o hero, a campanha e os posts sociais.
+## O que mudou em 27/09 (tarde)
 
-- O fundador confirmou em 27/09 que as **peças físicas não levam marca de terceiros**.
-- Os 47 arquivos estão em `quarantine/third-party-marks/`, fora do site e da imagem Docker. O publicador social recusa essa mídia.
-- Relógios aparecem sem foto ("Foto oficial em produção"), **sem preço, sem botão de pedido**, e o Black GMT segue fora da vitrine.
-- **Desbloqueio:** fotos reais do item exato, sem marca de terceiros, com fonte no Product Master (`image`, `image_status`).
-- Não edite as fotos antigas para apagar a marca.
+| Commit | O que muda |
+| --- | --- |
+| `3e92e54` | **Relógios à venda.** 9 relógios, Black GMT incluído, com R$ 289,90, "Frete grátis · até 7 dias" e o botão "Pedir" (WhatsApp com produto, referência e intenção de pedido). Sem foto real, cada relógio aparece como **ilustração da própria paleta** (`palette` no Product Master), identificada como "Ilustração da cor". O ponteiro de segundos segue a hora de São Paulo. Hero com R$ 289,90, frete grátis e até 7 dias. |
+| `f7855d5` | **Agente de vendas.** Antes, o gate bloqueava qualquer R$, frete grátis e prazo, então o agente não respondia "quanto custa?". Agora `CONFIRMED_SALES_FACTS` libera exatamente preço dos relógios, sem taxas, frete grátis, entrega em até 7 dias e desistência em 7 dias, cada um com `evidence_ref`. Continuam bloqueados: outro valor ou prazo, preço de relógio para joia, marca de terceiros, "réplica", estoque, parcelamento e garantia. As ferramentas não entregam mais custo, fornecedor nem material ao agente. |
+| `31cd3c9` | **Fotos reais em um comando**, descrito abaixo. |
+
+## Fotos reais dos relógios
+
+1. Salve uma foto por modelo em `incoming/relogios/<id>.jpg`, por exemplo `ocean-blue.jpg` ou `black-gmt.jpg`. A pasta fica fora do Git.
+2. Rode `python scripts/import_watch_photos.py --sem-marca-de-terceiros`.
+3. O script recorta em 4:5, salva WebP sem EXIF e marca `REAL_PHOTO` no Product Master. O cartão troca a ilustração pela foto.
+
+Anúncio pago e post de relógio continuam bloqueados até a foto real do item exato (`STOREFRONT_BLOCKERS`). A mídia antiga com marca segue em `quarantine/third-party-marks/`: não restaurar, não editar para apagar a marca.
 
 ## Verificar
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest -q          # 221 passed em 27/09 (worktree claude/site-referencias)
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 ```
 
-- Testes de navegador (`tests/test_landing_browser.py`) usam o Chrome local e são pulados no CI.
-- `tests/test_multiworker_state.py` sobe 2 processos reais. Com `VERATUS_TEST_DATABASE_URL` (PostgreSQL descartável), roda também no PostgreSQL e apaga as tabelas de snapshot desse banco.
+- Os testes de navegador (`tests/test_landing_browser.py`) usam o Chrome local e são pulados no CI.
+- `tests/test_multiworker_state.py` sobe 2 processos reais.
 
 ## Decisões abertas do fundador
 
-1. Push e deploy: `main` (+6), `claude/rodada-2609` (+12), `claude/site-referencias` (+5). Enquanto não houver deploy, a mídia com marca continua no ar.
-2. Fotos reais dos 9 relógios (Black GMT incluído). Com elas: preço R$ 289,90, botão de pedido e Black GMT na vitrine. Os modelos seguem o desenho de modelos conhecidos (Submariner, GMT-Master, Datejust), mesmo sem a marca. Vale uma avaliação jurídica sobre conjunto-imagem antes de anunciar.
-3. Posts da fila social usavam a mídia com marca e estão bloqueados. Novos posts precisam de fotos reais ou das joias.
+1. **Push para o GitHub, que o Render publica.** Isso tira do ar a mídia com marca e coloca os relógios à venda.
+2. Fast-forward da pasta principal (stash acima).
+3. Fotos reais dos 9 relógios, para anúncio, post e troca da ilustração. Os modelos seguem o desenho de modelos conhecidos. Vale uma avaliação jurídica de conjunto-imagem antes de anunciar.
 4. Origem registrada com manuseio de 2 dias úteis vs entrega em até 7 dias. Quando o prazo começa a contar?
 5. `product_master.py` (material obrigatório para joias no QA): manter ou reverter.
-6. Economics: frete pago pela Veratus, taxa de pagamento e tributo (UNVERIFIED). Custo de devolução não modelado.
-7. Preços das joias: nenhuma fonte real (9 × NEEDS_PRICING). Para publicar, preencher `sale_price` e `price_source`.
-8. Fornecedor no histórico do Git (`commercial_config.py` até `38f50be`) e mídia com marca no histórico: reescrever ou não.
-9. `VERATUS_SELLER_DOCUMENT` e `INSTAGRAM_ACCESS_TOKEN` no Render; número do WhatsApp, ADR de tracking, app do Mercado Livre e 14º papel (`paid-acquisition-worker`).
+6. Economics: frete pago pela Veratus, taxa de pagamento e tributo (UNVERIFIED).
+7. Preços das joias: nenhuma fonte real (9 × NEEDS_PRICING).
+8. Fornecedor e mídia com marca no histórico do Git: reescrever ou não.
+9. `VERATUS_SELLER_DOCUMENT`, `INSTAGRAM_ACCESS_TOKEN` e `OPENAI_API_KEY` no Render; número do WhatsApp Cloud API; formas de pagamento, que o agente ainda manda confirmar com a equipe.
 
 ## Não faça
 
-- Não ligue nenhuma flag de envio ou publicação nem faça deploy sem confirmação explícita no momento da ação.
-- Não publique preço, anúncio ou post de relógio sem foto real do item exato.
-- Não restaure nada de `quarantine/third-party-marks/` para `landing/` nem use essa mídia em post ou anúncio.
+- Não ligue nenhuma flag de envio ou publicação nem faça push ou deploy sem confirmação explícita no momento da ação.
+- Não use a mídia de `quarantine/third-party-marks/` nem edite fotos para apagar marcas.
 - Não "restaure" arquivos que você não alterou; registre aqui.
 - Não versione `docs/data-discovery-2026-09-19.json` nem nada com nome, endereço ou cidade do fornecedor.
 
 ## Próximo passo sugerido
 
-1. Com o push e o deploy aprovados, publicar as três branches na ordem (`main`, `claude/rodada-2609`, `claude/site-referencias`). Isso tira do ar a mídia com marca.
+1. Com o push aprovado: `git push origin claude/site-referencias:main`.
 2. Conferir em produção:
-   - `/health`, `/robots.txt` e `/sitemap.xml`;
-   - `/os/paid-media/status` (401 sem token);
-   - `/integrations/whatsapp/webhook` (403 sem verify token);
-   - `/assets/catalog/black-gmt.webp` e `/social/posts/navy-gold.jpg` (404).
-3. Rodar `VERATUS_LANDING_URL=https://veratus.onrender.com pytest tests/test_landing_browser.py`.
-4. Receber as fotos reais dos relógios e aplicar preço e botão de pedido.
+   - `/health`;
+   - a vitrine com 9 relógios e o preço;
+   - `/assets/catalog/black-gmt.webp` e `/social/posts/navy-gold.jpg` devem dar 404;
+   - `VERATUS_LANDING_URL=https://veratus.onrender.com pytest tests/test_landing_browser.py`.
+3. Receber as fotos reais e rodar o importador.

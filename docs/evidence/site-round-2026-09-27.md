@@ -44,3 +44,17 @@ Todas as animações novas mexem só em `transform`. Sem JS, sem suporte a anima
 ## Não verificado ao vivo
 
 Deploy, Render e o comportamento em produção. O site público ainda roda `38f50be`, com a mídia de marca no ar, até o deploy aprovado.
+
+## Segunda parte (27/09, tarde): relógios à venda e agente que responde
+
+Pedido do fundador: colocar os produtos no ar, parar de travar a vitrine e melhorar os agentes. As fotos com o nome e a coroa de outra marca continuam fora do site; todo o resto foi aplicado.
+
+| Commit | Tema |
+| --- | --- |
+| `3e92e54` | **Loja.** 9 relógios (Black GMT de volta) com R$ 289,90, "Frete grátis · até 7 dias" e botão "Pedir" no cartão e no diálogo. Sem foto real, cada relógio é desenhado na própria paleta (`palette` no Product Master) e identificado como "Ilustração da cor"; o ponteiro de segundos segue a hora de São Paulo e para com movimento reduzido. Hero com as condições confirmadas. |
+| `f7855d5` | **Agente de vendas.** O gate bloqueava qualquer R$, frete e prazo, e o agente não conseguia responder preço. Agora os fatos confirmados passam com `evidence_ref`; variações, preço de relógio para joia, marcas de terceiros e "réplica" são bloqueados. Ferramentas sem custo, fornecedor e material. Instruções com passo a passo de venda e dois exemplos aprovados pelo próprio gate. |
+| `31cd3c9` | **Fotos reais.** `incoming/relogios/<id>.jpg` → `python scripts/import_watch_photos.py --sem-marca-de-terceiros` → WebP 4:5 sem EXIF, `REAL_PHOTO` no Product Master, catálogo exportado. |
+
+Verificação: `pytest -q` 221 passed (inclui os testes de navegador com Chrome: 9 cartões com preço, link "Pedir" com `produto=black-gmt` e intenção de pedido, diálogo com preço e ilustração), `ruff check` e `ruff format --check` sem apontamentos. Capturas atualizadas em `screens-2026-09-27/`.
+
+Anúncio pago e post de relógio seguem bloqueados até a foto real do item exato.
