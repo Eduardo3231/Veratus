@@ -91,6 +91,48 @@ def test_absent_flags_resolve_to_blocked(
     assert config.autonomy_mode is AutonomyMode.SHADOW
 
 
+@pytest.mark.parametrize("value", [None, "", "1", "yes", "TRUE "])
+def test_each_channel_flag_is_false_unless_exactly_true(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, value: str | None
+) -> None:
+    for name in CHANNEL_FLAGS:
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+
+    channels = MarketplaceStore(tmp_path / "marketplace.sqlite3").channels()
+
+    assert {item["id"] for item in channels} == {
+        "mercado-livre",
+        "shopee",
+        "tiktok-shop",
+        "meta",
+    }
+    for item in channels:
+        assert item["enabled"] is False, item["id"]
+        assert item["publish_enabled"] is False, item["id"]
+
+
+def test_message_senders_are_off_when_their_flags_are_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from veratus_agents.instagram_comments import dm_enabled
+    from veratus_agents.paid_media import MetaAdsAdapter
+    from veratus_agents.whatsapp import send_enabled
+
+    for name in (
+        "WHATSAPP_SEND_ENABLED",
+        "INSTAGRAM_DM_ENABLED",
+        "META_PURCHASE_EVENT_VERIFIED",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    assert send_enabled() is False
+    assert dm_enabled() is False
+    assert MetaAdsAdapter().get_tracking_status()["purchase_event_verified"] is False
+
+
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [("0", Decimal(0)), ("-5", Decimal(0)), ("abc", Decimal(20)), ("NaN", Decimal(20))],
