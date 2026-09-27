@@ -54,23 +54,26 @@ def test_delivery_promise_and_registered_origin_stay_an_open_question() -> None:
     assert "PRIVATE" in question["question"]
 
 
-def test_watch_storefront_changes_wait_for_real_photos() -> None:
+def test_watches_are_on_sale_and_only_ads_wait_for_real_photos() -> None:
     discovered = {item["sku"]: item for item in discover_products()}
     blocker = config.STOREFRONT_BLOCKERS[0]
     projection = public_catalog()
     watches = [item for item in projection if item["collection"] == "watches"]
+    jewelry = [item for item in projection if item["collection"] == "feminine"]
 
-    # Black GMT stays active for the agents; the storefront waits for real
-    # photos of the exact item (the physical pieces carry no third-party mark).
+    # Price, order button and Black GMT are on the storefront (founder,
+    # 2026-09-26); ads and posts wait for a real photo of the exact item.
     assert discovered["black-gmt"]["active"] is True
     assert "watch_physical_marks" in config.FOUNDER_DECISIONS
     assert blocker["id"] == "watch-real-photos-pending"
-    assert blocker["status"] == "BLOCKING"
-    assert {"watch_public_price", "black_gmt_storefront"} <= set(blocker["blocks"])
-    assert "black-gmt" not in {item["id"] for item in projection}
-    assert all("price_brl" not in item for item in projection)
-    assert watches and all(item["image"] is None for item in watches)
-    assert {item["image_status"] for item in watches} == {"NEEDS_REAL_PHOTO"}
+    assert set(blocker["blocks"]) == {"paid_media_launch", "watch_social_posts"}
+    assert len(watches) == 9 and "black-gmt" in {item["id"] for item in watches}
+    assert {item["price_brl"] for item in watches} == {"289.90"}
+    assert all("price_brl" not in item for item in jewelry)
+    for item in watches:
+        assert set(item["palette"]) == {"dial", "bezel", "metal"}
+        if item["image_status"] == "NEEDS_REAL_PHOTO":
+            assert item["image"] is None
 
 
 def test_home_purchase_journey_matches_confirmed_terms() -> None:

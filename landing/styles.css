@@ -621,12 +621,7 @@ button { color: inherit; font: inherit; }
 /* Sem mídia de terceiros (27/09/2026): paisagem fixa no hero, símbolo no lugar das fotos de relógio. */
 .hero-still { position: absolute; z-index: -3; inset: -4%; background: #080808 url("assets/hero/veratus-hero-alpes-1280.webp") center / cover no-repeat; opacity: .42; filter: saturate(.75) contrast(1.05); animation: hero-drift 28s ease-in-out infinite alternate; }
 @keyframes hero-drift { from { transform: scale(1.02) translate3d(0, 0, 0); } to { transform: scale(1.1) translate3d(-2%, -1.5%, 0); } }
-.product-visual--pending { display: grid; place-items: center; background: radial-gradient(circle at 50% 42%, #1c1a17, #0b0b0b 68%); }
-.product-visual--pending img { width: 46%; height: auto; object-fit: contain; opacity: .5; filter: drop-shadow(0 14px 20px rgba(0,0,0,.55)); }
-.product-visual--pending em, .pending-photo { position: absolute; bottom: 18px; left: 50%; margin: 0; color: var(--muted); font-size: .52rem; font-style: normal; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; white-space: nowrap; transform: translateX(-50%); }
 .dialog-media { position: relative; }
-.dialog-media--pending { display: grid; place-items: center; background: radial-gradient(circle at 50% 42%, #1c1a17, #0b0b0b 70%); }
-.dialog-media--pending img { width: 48%; height: auto; object-fit: contain; opacity: .55; }
 .inspection-product--brand { width: min(78%, 520px); height: auto; aspect-ratio: 1; }
 .inspection-product--brand > img { filter: drop-shadow(0 30px 40px rgba(0,0,0,.6)); }
 .hotspot-precision { top: 30%; left: 26%; }
@@ -714,4 +709,41 @@ button { color: inherit; font: inherit; }
 }
 @media (prefers-reduced-motion: reduce) {
   .editorial-piece__media img { animation: none !important; transform: scale(1.02); }
+}
+
+/* Relógios à venda (27/09/2026): ilustração da paleta até a foto real, preço e pedido direto. */
+.hero-offer { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 30px; padding: 0; list-style: none; }
+.hero-offer li { padding: 8px 14px; border: 1px solid rgba(200,165,106,.35); background: rgba(8,8,8,.45); color: #d8d1c5; font-size: .58rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; backdrop-filter: blur(8px); }
+.hero-offer b { color: var(--accent); }
+.product-visual { cursor: pointer; }
+.product-visual--art { display: grid; place-items: center; background: radial-gradient(circle at 50% 38%, #1d1b18, #090909 72%); }
+.watch-art { width: auto; max-width: 86%; height: 86%; overflow: visible; filter: drop-shadow(0 26px 30px rgba(0,0,0,.6)); transition: transform .8s cubic-bezier(.2, .75, .25, 1); }
+.product-card:hover .watch-art { transform: scale(1.04) rotate(-2deg); }
+.watch-art__hand, .watch-art__second { transform: rotate(var(--turn)); transform-box: view-box; transform-origin: 200px 250px; }
+.watch-art__second { animation: watch-sweep 60s linear infinite; }
+@keyframes watch-sweep { from { transform: rotate(var(--turn)); } to { transform: rotate(calc(var(--turn) + 360deg)); } }
+.product-visual--art em, .art-label { position: absolute; bottom: 16px; left: 50%; margin: 0; color: var(--muted); font-size: .5rem; font-style: normal; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; white-space: nowrap; transform: translateX(-50%); }
+.product-info--priced { grid-template-areas: "tag tag" "name name" "price actions"; }
+.product-price { grid-area: price; display: grid; gap: 5px; }
+.product-price b { color: var(--ivory); font: 600 1.55rem/1 var(--serif); }
+.product-price span { color: var(--muted); font-size: .5rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.product-actions { grid-area: actions; display: flex; align-items: center; gap: 16px; }
+.product-order { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; background: var(--accent); color: var(--black); font-size: .55rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; transition: background .25s, transform .25s; }
+.product-order:hover, .product-order:focus-visible { background: #e0c48f; transform: translateY(-2px); }
+.dialog-media--art { display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #1e1c19, #080808 72%); }
+.dialog-art { display: grid; width: min(78%, 460px); place-items: center; }
+.dialog-art .watch-art { width: 100%; max-width: none; height: auto; }
+.dialog-art[hidden], .art-label[hidden], #dialog-image[hidden], .dialog-price[hidden] { display: none; }
+.dialog-price { display: grid; gap: 6px; margin: 0 0 26px; }
+.dialog-price b { color: var(--accent); font: 600 2.4rem/1 var(--serif); }
+.dialog-price span { color: var(--muted); font-size: .56rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+@media (max-width: 680px) {
+  .hero-offer { margin: -4px 0 24px; }
+  .hero-offer li { padding: 7px 10px; font-size: .5rem; }
+  .product-info--priced { grid-template-columns: 1fr; grid-template-areas: "tag" "name" "price" "actions"; }
+  .product-actions { justify-content: space-between; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .watch-art__second { animation: none !important; }
+  .product-card:hover .watch-art { transform: none; }
 }

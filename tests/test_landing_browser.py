@@ -209,12 +209,43 @@ def test_page_loads_no_third_party_media(
         page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
         page.mouse.wheel(0, 20_000)
         page.wait_for_timeout(800)
-        pending = page.locator("#catalog-rail .product-visual--pending")
+        art = page.locator("#catalog-rail .product-visual--art")
 
         assert page.locator("video").count() == 0
-        assert pending.count() >= 8
-        assert "Foto oficial em produção" in pending.first.text_content()
+        assert art.count() == 9
+        assert "Ilustração da cor" in art.first.text_content()
+        assert art.first.locator("svg.watch-art").count() == 1
         assert not [url for url in requested if any(p in url for p in REMOVED_MEDIA)]
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("viewport", sorted(VIEWPORTS))
+def test_watch_cards_show_price_and_order_on_whatsapp(
+    browser, landing_url: str, viewport: str
+) -> None:
+    context, page = _open(browser, landing_url, viewport)
+    try:
+        page.goto(landing_url, wait_until="networkidle")
+        page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
+        page.wait_for_function(INTRO_GONE_JS, timeout=6_000)
+        cards = page.locator("#catalog-rail .product-card")
+        ids = cards.evaluate_all("cards => cards.map(card => card.dataset.productId)")
+        black = page.locator('#catalog-rail .product-card[data-product-id="black-gmt"]')
+
+        assert len(ids) == 9 and "black-gmt" in ids
+        prices = page.locator("#catalog-rail .product-price b").all_text_contents()
+        assert prices == ["R$\xa0289,90"] * 9
+        black.scroll_into_view_if_needed()
+        _assert_visible(page, '[data-product-id="black-gmt"] .product-order')
+        order = black.locator(".product-order").get_attribute("href")
+        assert order.startswith(WHATSAPP) and VISIT_REFERENCE in order
+        assert "produto%3Dblack-gmt" in order and "pedido" in order
+
+        black.locator(".product-open").click()
+        assert page.locator("#dialog-price b").text_content() == "R$\xa0289,90"
+        assert page.locator("#dialog-art svg.watch-art").count() == 1
+        assert page.locator("#dialog-cta").text_content() == "Pedir pelo WhatsApp"
     finally:
         context.close()
 

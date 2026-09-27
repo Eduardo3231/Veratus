@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
+
+from .commercial_config import OFFICIAL_SALE_PRICE_BRL
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 CATALOG_PATH = BASE_DIR / "catalog" / "products.json"
@@ -73,9 +76,9 @@ def public_catalog(
 ) -> list[dict[str, Any]]:
     """Return the customer-safe projection consumed by the storefront.
 
-    Black GMT remains in the Product Master and outside the public projection,
-    preserving its existing operational rule. Feminine DRAFT items are exposed
-    only as an editorial preview, without cost, price, material or supplier data.
+    Watches carry the founder-confirmed price (Black GMT included, 2026-09-26).
+    Feminine DRAFT items are exposed only as an editorial preview, without cost,
+    material or supplier data, and with a price only when it has a real source.
     """
 
     safe_fields = (
@@ -100,11 +103,10 @@ def public_catalog(
         "styles",
         "finish_color",
         "color",
+        "palette",
     )
     projection = []
     for product in products or load_catalog():
-        if product["id"] == "black-gmt":
-            continue
         collection = product.get("collection") or "watches"
         if collection == "feminine" and product.get("site_visibility") != "PREVIEW":
             continue
@@ -114,8 +116,20 @@ def public_catalog(
         item.setdefault("subcategory", "watch")
         item.setdefault("status", "ACTIVE")
         item.setdefault("alt", f"{product['name']} da coleção Veratus")
+        price = public_price(product)
+        if price:
+            item["price_brl"] = price
         projection.append(item)
     return projection
+
+
+def public_price(product: dict[str, Any]) -> str | None:
+    """Price a customer may see: watches at the confirmed price, jewelry only with a source."""
+    if (product.get("collection") or "watches") == "watches":
+        return f"{OFFICIAL_SALE_PRICE_BRL:.2f}"
+    if product.get("sale_price") and product.get("price_source"):
+        return f"{Decimal(str(product['sale_price'])):.2f}"
+    return None
 
 
 def catalog_names_from_landing() -> list[str]:

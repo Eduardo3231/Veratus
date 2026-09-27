@@ -88,19 +88,15 @@ FOUNDER_OPEN_QUESTIONS = (
 # Verificado em 2026-09-26: as fotos dos relógios (catálogo, vídeo do hero,
 # campanha e social) mostram marca de terceiro. Em 2026-09-27 o fundador
 # confirmou que as peças físicas não levam marca; as fotos foram para
-# quarantine/third-party-marks/. Sem foto real, o relógio fica na vitrine sem
-# imagem, sem preço e sem botão de pedido.
+# quarantine/third-party-marks/. Os relógios seguem à venda no site (preço,
+# pedido e Black GMT) com a ilustração da paleta; anúncio e post esperam a foto
+# real do item exato.
 STOREFRONT_BLOCKERS = (
     {
         "id": "watch-real-photos-pending",
         "status": "BLOCKING",
         "scope": "watches",
-        "blocks": (
-            "watch_public_price",
-            "watch_order_cta",
-            "black_gmt_storefront",
-            "paid_media_launch",
-        ),
+        "blocks": ("paid_media_launch", "watch_social_posts"),
         "evidence": (
             "fotos do fornecedor com marca de terceiro em quarentena "
             "(quarantine/third-party-marks/manifest.json)"

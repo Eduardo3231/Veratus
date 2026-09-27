@@ -13,6 +13,9 @@ const dialogEyebrow = document.querySelector('#dialog-eyebrow');
 const dialogDescription = document.querySelector('#dialog-description');
 const dialogCollection = document.querySelector('#dialog-collection');
 const dialogCta = document.querySelector('#dialog-cta');
+const dialogArt = document.querySelector('#dialog-art');
+const dialogArtLabel = document.querySelector('#dialog-art-label');
+const dialogPrice = document.querySelector('#dialog-price');
 
 let catalogProducts = [];
 let renderedProducts = [];
@@ -60,13 +63,13 @@ function campaignReference() {
   return `VT-${(hash >>> 0).toString(36).toUpperCase()}`;
 }
 
-function createWhatsAppLink(productName = '', productId = '') {
+function createWhatsAppLink(productName = '', productId = '', order = false) {
   const context = campaignEntries().map(([key, value]) => `${key}=${value}`).join(' | ');
   const message = [
     productName
       ? `Olá! Vim pelo site da Veratus e tenho interesse em ${productName}.`
       : 'Olá! Vim pelo site da Veratus e quero conhecer as coleções.',
-    'Gostaria de confirmar disponibilidade e valor.',
+    order ? 'Quero fazer o pedido e confirmar a disponibilidade.' : 'Gostaria de confirmar disponibilidade e valor.',
     `Referência da visita: ${campaignReference()}${productId ? ` | produto=${productId}` : ''}`,
     context ? `Origem da visita: ${context}` : '',
   ].filter(Boolean).join('\n');
@@ -82,9 +85,96 @@ function productImage(product) {
   return product.primary_image || product.image || product.images?.[0] || '';
 }
 
-// Watches wait for real photos of the exact item; the brand mark stands in.
-const PENDING_PHOTO_MARK = 'assets/veratus-v-wheat-720.webp';
-const PENDING_PHOTO_LABEL = 'Foto oficial em produção';
+// Until the real photo of the exact item arrives, a watch is drawn in its own
+// palette (Product Master) and says so; the second hand runs on São Paulo time.
+const ILLUSTRATION_LABEL = 'Ilustração da cor';
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const METALS = {
+  steel: ['#f5f6f7', '#a9aeb3', '#5b5f64', '#f1ede5'],
+  'two-tone': ['#f5f6f7', '#a9aeb3', '#5b5f64', '#d9b77a'],
+  gold: ['#f6e3b4', '#c8a56a', '#7a5a2a', '#f3dfae'],
+};
+
+function luminance(hex) {
+  const [r, g, b] = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function shade(hex, amount) {
+  const channels = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
+  const mixed = channels.map((value) => Math.round(amount < 0 ? value * (1 + amount) : value + (255 - value) * amount));
+  return `#${mixed.map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function saoPauloTime() {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' })
+    .formatToParts(new Date())
+    .reduce((found, part) => ({ ...found, [part.type]: Number(part.value) }), {});
+  return { hours: parts.hour % 12, minutes: parts.minute, seconds: parts.second };
+}
+
+function watchIllustration(product, context) {
+  const palette = product.palette || {};
+  const dial = HEX_COLOR.test(palette.dial) ? palette.dial : '#141414';
+  const bezel = HEX_COLOR.test(palette.bezel) ? palette.bezel : '#1c1c1c';
+  const [light, mid, dark, accent] = METALS[palette.metal] || METALS.steel;
+  const sport = (product.styles || []).includes('esportivo');
+  const ink = luminance(dial) > 0.55 ? '#1d1d1f' : '#f1ede5';
+  const bezelInk = luminance(bezel) > 0.55 ? '#1d1d1f' : '#f1ede5';
+  const id = `w-${context}-${product.id}`.replace(/[^a-z0-9-]/gi, '');
+  const dialRadius = sport ? 88 : 98;
+  const { hours, minutes, seconds } = saoPauloTime();
+
+  const indices = Array.from({ length: 12 }, (_, hour) => {
+    const angle = hour * 30;
+    if (sport && hour === 0) return `<path d="M200 ${250 - dialRadius + 8}l-9 16h18z" fill="${ink}"/>`;
+    if (sport && hour % 3 === 0) return `<rect x="196" y="${250 - dialRadius + 8}" width="8" height="20" rx="1.5" fill="${ink}" transform="rotate(${angle} 200 250)"/>`;
+    if (sport) return `<circle cx="200" cy="${250 - dialRadius + 15}" r="5.5" fill="${ink}" transform="rotate(${angle} 200 250)"/>`;
+    return `<rect x="197.5" y="${250 - dialRadius + 10}" width="5" height="${hour % 3 === 0 ? 22 : 15}" rx="1" fill="${accent}" transform="rotate(${angle} 200 250)"/>`;
+  }).join('');
+  const bezelMarks = sport
+    ? Array.from({ length: 60 }, (_, minute) => (minute === 0 ? '' : `<rect x="${minute % 5 ? 199.4 : 198.5}" y="${143 + (minute % 5 ? 2 : 0)}" width="${minute % 5 ? 1.2 : 3}" height="${minute % 5 ? 5 : 9}" fill="${bezelInk}" opacity="${minute % 5 ? 0.55 : 0.9}" transform="rotate(${minute * 6} 200 250)"/>`)).join('')
+      + `<path d="M200 157l-7-12h14z" fill="${accent}"/>`
+    : '';
+  const track = sport ? '' : Array.from({ length: 60 }, (_, minute) => `<rect x="199.6" y="${250 - dialRadius + 3}" width=".8" height="4" fill="${ink}" opacity=".45" transform="rotate(${minute * 6} 200 250)"/>`).join('');
+  const links = [22, 44, 66, 88, 110, 132].map((y) => `<path d="M${152 + y * 0.05} ${y}H${248 - y * 0.05}M${152 + y * 0.05} ${500 - y}H${248 - y * 0.05}" stroke="${dark}" stroke-opacity=".38"/>`).join('');
+
+  return `<svg class="watch-art" viewBox="0 0 400 500" role="img" aria-label="Ilustração do ${product.name} na cor do modelo">
+    <defs>
+      <linearGradient id="${id}-metal" x1="0" x2="1"><stop offset="0" stop-color="${dark}"/><stop offset=".28" stop-color="${light}"/><stop offset=".55" stop-color="${mid}"/><stop offset=".82" stop-color="${light}"/><stop offset="1" stop-color="${dark}"/></linearGradient>
+      <linearGradient id="${id}-ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${light}"/><stop offset=".5" stop-color="${dark}"/><stop offset="1" stop-color="${light}"/></linearGradient>
+      <radialGradient id="${id}-dial" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="${shade(dial, 0.22)}"/><stop offset=".55" stop-color="${dial}"/><stop offset="1" stop-color="${shade(dial, -0.45)}"/></radialGradient>
+      <radialGradient id="${id}-glow" cx=".5" cy=".5" r=".55"><stop offset="0" stop-color="${dial}" stop-opacity=".42"/><stop offset="1" stop-color="${dial}" stop-opacity="0"/></radialGradient>
+      <linearGradient id="${id}-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".24" stop-color="#fff"/><stop offset=".76" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+      <mask id="${id}-mask"><rect width="400" height="500" fill="url(#${id}-fade)"/></mask>
+      <clipPath id="${id}-crystal"><circle cx="200" cy="250" r="${dialRadius}"/></clipPath>
+    </defs>
+    <rect width="400" height="500" fill="url(#${id}-glow)"/>
+    <g mask="url(#${id}-mask)">
+      <path d="M150 0h100l-7 150h-86z" fill="url(#${id}-metal)"/><path d="M157 350h86l7 150H150z" fill="url(#${id}-metal)"/>
+      <g stroke-width="1.4">${links}</g>
+      <path d="M186 0v150M214 0v150M186 350v150M214 350v150" stroke="${dark}" stroke-opacity=".3"/>
+    </g>
+    <rect x="309" y="236" width="18" height="28" rx="4" fill="url(#${id}-metal)"/>
+    <circle cx="200" cy="250" r="118" fill="url(#${id}-metal)"/>
+    <circle cx="200" cy="250" r="110" fill="${sport ? bezel : `url(#${id}-ring)`}" stroke="${dark}" stroke-opacity=".5"/>
+    ${bezelMarks}
+    <circle cx="200" cy="250" r="${dialRadius}" fill="url(#${id}-dial)" stroke="${dark}" stroke-opacity=".6"/>
+    ${track}${indices}
+    <g class="watch-art__hand" style="--turn:${hours * 30 + minutes / 2}deg"><rect x="195.5" y="196" width="9" height="62" rx="3.5" fill="${ink}" stroke="${dark}" stroke-opacity=".35"/></g>
+    <g class="watch-art__hand" style="--turn:${minutes * 6 + seconds / 10}deg"><rect x="196.5" y="${250 - dialRadius + 16}" width="7" height="${dialRadius - 8}" rx="3" fill="${ink}" stroke="${dark}" stroke-opacity=".35"/></g>
+    <g class="watch-art__second" style="--turn:${seconds * 6}deg"><rect x="199" y="${250 - dialRadius + 8}" width="2" height="${dialRadius + 14}" fill="${accent}"/></g>
+    <circle cx="200" cy="250" r="7" fill="${accent}" stroke="${dark}" stroke-opacity=".5"/>
+    <ellipse cx="168" cy="196" rx="112" ry="54" fill="#fff" opacity=".07" transform="rotate(-32 168 196)" clip-path="url(#${id}-crystal)"/>
+  </svg>`;
+}
+
+function formatPrice(product) {
+  const value = Number(product.price_brl);
+  return Number.isFinite(value) && value > 0
+    ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    : '';
+}
 
 function productMatches(product) {
   if (activeFilter === 'todos') return true;
@@ -104,22 +194,25 @@ function createProductCard(product, index) {
 
   const visual = document.createElement('div');
   visual.className = 'product-visual';
-  const image = document.createElement('img');
   const photo = productImage(product);
-  image.src = photo || PENDING_PHOTO_MARK;
-  image.alt = photo ? product.alt || `${product.name} da coleção Veratus` : '';
-  image.loading = 'lazy';
-  image.width = 1122;
-  image.height = 1402;
   const number = document.createElement('span');
   number.textContent = String(index + 1).padStart(2, '0');
-  visual.append(image, number);
-  if (!photo) {
-    visual.classList.add('product-visual--pending');
-    const pending = document.createElement('em');
-    pending.textContent = PENDING_PHOTO_LABEL;
-    visual.append(pending);
+  if (photo) {
+    const image = document.createElement('img');
+    image.src = photo;
+    image.alt = product.alt || `${product.name} da coleção Veratus`;
+    image.loading = 'lazy';
+    image.width = 1122;
+    image.height = 1402;
+    visual.append(image, number);
+  } else {
+    visual.classList.add('product-visual--art');
+    visual.innerHTML = watchIllustration(product, 'card');
+    const label = document.createElement('em');
+    label.textContent = ILLUSTRATION_LABEL;
+    visual.append(number, label);
   }
+  visual.addEventListener('click', () => openProduct(product));
 
   const info = document.createElement('div');
   info.className = 'product-info';
@@ -130,9 +223,32 @@ function createProductCard(product, index) {
   const open = document.createElement('button');
   open.className = 'product-open';
   open.type = 'button';
-  open.innerHTML = `${activeCollection === 'feminine' ? 'Descobrir peça' : 'Entrar no modelo'} <b aria-hidden="true">↗</b>`;
   open.addEventListener('click', () => openProduct(product));
-  info.append(eyebrow, name, open);
+  info.append(eyebrow, name);
+  const price = formatPrice(product);
+  if (price) {
+    info.classList.add('product-info--priced');
+    const priceLine = document.createElement('div');
+    priceLine.className = 'product-price';
+    priceLine.innerHTML = `<b></b><span>Frete grátis · até 7 dias</span>`;
+    priceLine.querySelector('b').textContent = price;
+    const order = document.createElement('a');
+    order.className = 'product-order purchase-link';
+    order.href = createWhatsAppLink(product.name, product.id, true);
+    order.target = '_blank';
+    order.rel = 'noopener';
+    order.dataset.productId = product.id;
+    order.innerHTML = 'Pedir <b aria-hidden="true">↗</b>';
+    order.setAttribute('aria-label', `Pedir ${product.name} pelo WhatsApp`);
+    open.innerHTML = 'Detalhes';
+    const actions = document.createElement('div');
+    actions.className = 'product-actions';
+    actions.append(open, order);
+    info.append(priceLine, actions);
+  } else {
+    open.innerHTML = `${activeCollection === 'feminine' ? 'Descobrir peça' : 'Entrar no modelo'} <b aria-hidden="true">↗</b>`;
+    info.append(open);
+  }
   article.append(visual, info);
 
   if (!reducedMotion && window.matchMedia('(pointer: fine)').matches) {
@@ -204,15 +320,25 @@ function openProduct(product) {
   const pool = renderedProducts.length ? renderedProducts : currentCollectionProducts();
   activeProductIndex = Math.max(0, pool.findIndex((item) => item.id === product.id));
   const photo = productImage(product);
-  dialogImage.src = photo || PENDING_PHOTO_MARK;
-  dialogImage.alt = photo ? product.alt || `${product.name} da coleção Veratus` : '';
-  dialogImage.parentElement.classList.toggle('dialog-media--pending', !photo);
-  dialogImage.nextElementSibling.hidden = Boolean(photo);
+  dialogImage.hidden = !photo;
+  if (photo) {
+    dialogImage.src = photo;
+    dialogImage.alt = product.alt || `${product.name} da coleção Veratus`;
+  }
+  dialogArt.innerHTML = photo ? '' : watchIllustration(product, 'dialog');
+  dialogArt.hidden = Boolean(photo);
+  dialogArtLabel.hidden = Boolean(photo);
+  dialogImage.parentElement.classList.toggle('dialog-media--art', !photo);
   dialogName.textContent = product.name;
   dialogEyebrow.textContent = product.eyebrow || product.product_type || 'Veratus';
   dialogDescription.textContent = product.description || product.short_description || '';
   dialogCollection.textContent = product.collection === 'feminine' ? 'FEMININO' : 'RELÓGIOS';
-  dialogCta.href = createWhatsAppLink(product.name, product.id);
+  const price = formatPrice(product);
+  dialogPrice.hidden = !price;
+  dialogPrice.querySelector('b').textContent = price;
+  dialogCta.href = createWhatsAppLink(product.name, product.id, Boolean(price));
+  dialogCta.dataset.productId = product.id;
+  dialogCta.textContent = price ? 'Pedir pelo WhatsApp' : 'Tenho interesse';
   dialog.showModal();
   document.body.classList.add('dialog-open');
 }

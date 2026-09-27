@@ -76,11 +76,12 @@ def test_feminine_assets_are_unique_and_exist() -> None:
 def test_public_catalog_is_derived_and_private_fields_are_absent() -> None:
     projection = public_catalog()
 
-    assert len(projection) == 17
-    assert "black-gmt" not in {item["id"] for item in projection}
+    assert len(projection) == 18
+    assert "black-gmt" in {item["id"] for item in projection}
     assert sum(item["collection"] == "feminine" for item in projection) == 9
     assert all("supplier_visibility" not in item for item in projection)
     assert all("cost" not in item and "sale_price" not in item for item in projection)
+    assert all("material" not in item for item in projection)
     assert validate_catalog_sync()[0] is True
 
 

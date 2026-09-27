@@ -69,8 +69,15 @@ def test_watches_wait_for_real_photos_and_jewelry_keeps_its_own() -> None:
     watches = [item for item in projection if item["collection"] == "watches"]
     jewelry = [item for item in projection if item["collection"] == "feminine"]
 
-    assert watches and all(item["image"] is None for item in watches)
-    assert all(item["image_status"] == "NEEDS_REAL_PHOTO" for item in watches)
+    assert watches
+    for item in watches:
+        # No photo until the real one arrives through scripts/import_watch_photos.py.
+        assert item["image_status"] in {"NEEDS_REAL_PHOTO", "REAL_PHOTO"}
+        if item["image_status"] == "NEEDS_REAL_PHOTO":
+            assert item["image"] is None
+        else:
+            assert item["image"].startswith("assets/watches/")
+            assert (LANDING / item["image"]).exists()
     for item in jewelry:
         for image in item.get("images") or [item.get("primary_image")]:
             assert (LANDING / image).exists(), image

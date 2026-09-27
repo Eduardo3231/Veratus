@@ -9,11 +9,17 @@
     "styles": [
       "classico"
     ],
+    "palette": {
+      "dial": "#ece8df",
+      "bezel": "#c7cacd",
+      "metal": "steel"
+    },
     "collection": "watches",
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Arctic White da coleção Veratus"
+    "alt": "Arctic White da coleção Veratus",
+    "price_brl": "289.90"
   },
   {
     "id": "ocean-blue",
@@ -25,11 +31,40 @@
     "styles": [
       "esportivo"
     ],
+    "palette": {
+      "dial": "#0f2c52",
+      "bezel": "#123763",
+      "metal": "steel"
+    },
     "collection": "watches",
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Ocean Blue da coleção Veratus"
+    "alt": "Ocean Blue da coleção Veratus",
+    "price_brl": "289.90"
+  },
+  {
+    "id": "black-gmt",
+    "name": "Black GMT",
+    "eyebrow": "Esportivo / Marcante",
+    "description": "Preto, aço e uma presença visual definida por contrastes.",
+    "image": null,
+    "image_status": "NEEDS_REAL_PHOTO",
+    "styles": [
+      "esportivo",
+      "marcante"
+    ],
+    "palette": {
+      "dial": "#0c0c0d",
+      "bezel": "#161617",
+      "metal": "steel"
+    },
+    "collection": "watches",
+    "category": "watches",
+    "subcategory": "watch",
+    "status": "ACTIVE",
+    "alt": "Black GMT da coleção Veratus",
+    "price_brl": "289.90"
   },
   {
     "id": "royal-blue",
@@ -42,11 +77,17 @@
       "marcante",
       "esportivo"
     ],
+    "palette": {
+      "dial": "#15347a",
+      "bezel": "#183b86",
+      "metal": "two-tone"
+    },
     "collection": "watches",
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Royal Blue da coleção Veratus"
+    "alt": "Royal Blue da coleção Veratus",
+    "price_brl": "289.90"
   },
   {
     "id": "platinum-classic",
@@ -58,11 +99,17 @@
     "styles": [
       "classico"
     ],
+    "palette": {
+      "dial": "#dde2e6",
+      "bezel": "#c7cacd",
+      "metal": "steel"
+    },
     "collection": "watches",
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Platinum Classic da coleção Veratus"
+    "alt": "Platinum Classic da coleção Veratus",
+    "price_brl": "289.90"
   },
   {
     "id": "emerald-signature",
@@ -74,11 +121,17 @@
     "styles": [
       "marcante"
     ],
+    "palette": {
+      "dial": "#0e4a35",
+      "bezel": "#0f5139",
+      "metal": "steel"
+    },
     "collection": "watches",
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Emerald Signature da coleção Veratus"
+    "alt": "Emerald Signature da coleção Veratus",
+    "price_brl": "289.90"
   },
   {
     "id": "silver-prestige",
@@ -90,11 +143,17 @@
     "styles": [
       "classico"
     ],
+    "palette": {
+      "dial": "#b7bbc0",
+      "bezel": "#c7cacd",
+      "metal": "steel"
+    },
     "collection": "watches",
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Silver Prestige da coleção Veratus"
+    "alt": "Silver Prestige da coleção Veratus",
+    "price_brl": "289.90"
   },
   {
     "id": "polar-blue",
@@ -106,11 +165,17 @@
     "styles": [
       "esportivo"
     ],
+    "palette": {
+      "dial": "#e6edf2",
+      "bezel": "#5d93bd",
+      "metal": "steel"
+    },
     "collection": "watches",
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Polar Blue da coleção Veratus"
+    "alt": "Polar Blue da coleção Veratus",
+    "price_brl": "289.90"
   },
   {
     "id": "bronze-heritage",
@@ -123,11 +188,17 @@
       "classico",
       "marcante"
     ],
+    "palette": {
+      "dial": "#5e3f24",
+      "bezel": "#c8a56a",
+      "metal": "gold"
+    },
     "collection": "watches",
     "category": "watches",
     "subcategory": "watch",
     "status": "ACTIVE",
-    "alt": "Bronze Heritage da coleção Veratus"
+    "alt": "Bronze Heritage da coleção Veratus",
+    "price_brl": "289.90"
   },
   {
     "id": "celeste-anklet",
