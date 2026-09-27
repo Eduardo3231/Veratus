@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from veratus_agents import commercial_config as config
 from veratus_agents.catalog import public_catalog
@@ -70,3 +71,18 @@ def test_watch_storefront_changes_wait_for_real_photos() -> None:
     assert all("price_brl" not in item for item in projection)
     assert watches and all(item["image"] is None for item in watches)
     assert {item["image_status"] for item in watches} == {"NEEDS_REAL_PHOTO"}
+
+
+def test_home_purchase_journey_matches_confirmed_terms() -> None:
+    landing = Path(__file__).resolve().parents[1] / "landing"
+    home = (landing / "index.html").read_text(encoding="utf-8")
+    terms = (landing / "condicoes-de-compra.html").read_text(encoding="utf-8")
+
+    assert config.FREE_SHIPPING and config.CUSTOMER_EXTRA_FEES_BRL == 0
+    assert "Frete grátis" in home and "sem taxas adicionais" in home
+    assert f"entrega em até {config.DELIVERY_MAX_DAYS} dias" in home
+    assert "desistir em até 7 dias após o recebimento" in home
+    assert 'href="condicoes-de-compra.html"' in home and 'href="#como-comprar"' in home
+    # Freight and delivery are published now; nothing says "will be informed".
+    for page in (home, terms):
+        assert "informad" not in page.casefold()
