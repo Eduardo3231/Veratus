@@ -287,40 +287,62 @@ class PaidMediaStore:
         self.save()
 
 
+# EconomicsSnapshot (FOUNDER_CONFIRMED 2026-09-26): what the customer pays
+# minus what each order costs Veratus. Field names follow the founder's record.
+ECONOMICS_REVENUE = ("price", "customer_shipping", "customer_fees")
+ECONOMICS_COSTS = ("unit_cost", "shipping_cost_paid_by_veratus", "payment_fee", "tax")
+_ECONOMICS_ALIASES = {
+    "price": ("price", "sale_price", "price_brl"),
+    "unit_cost": ("unit_cost", "cost"),
+}
+
+
+def _first_field(product: dict[str, Any], names: tuple[str, ...]) -> Any:
+    for name in names:
+        value = _field(product, name)
+        if value not in (None, ""):
+            return value
+    return None
+
+
 def calculate_economics(
     product: dict[str, Any], safety_factor: Decimal = Decimal("0.70")
 ) -> dict[str, Any]:
-    inputs = {
-        "sale_price": _decimal(
-            _field(product, "sale_price") or product.get("price_brl")
-        ),
-        "product_cost": _decimal(_field(product, "cost")),
-        "payment_fees": _decimal(_field(product, "payment_fees")),
-        "channel_fees": _decimal(_field(product, "channel_fees")),
-        "shipping_subsidy": _decimal(_field(product, "shipping_subsidy")),
-        "taxes": _decimal(_field(product, "taxes")),
-        "expected_returns_cost": _decimal(_field(product, "expected_returns_cost")),
+    from .commercial_config import CUSTOMER_EXTRA_FEES_BRL, CUSTOMER_SHIPPING_BRL
+
+    # Free shipping and no extra fees are the founder's policy for every product;
+    # a product may still record its own value.
+    policy = {
+        "customer_shipping": CUSTOMER_SHIPPING_BRL,
+        "customer_fees": CUSTOMER_EXTRA_FEES_BRL,
     }
+    inputs: dict[str, Decimal | None] = {}
+    for name in (*ECONOMICS_REVENUE, *ECONOMICS_COSTS):
+        value = _decimal(_first_field(product, _ECONOMICS_ALIASES.get(name, (name,))))
+        inputs[name] = policy.get(name) if value is None else value
     missing = [name for name, value in inputs.items() if value is None]
     if missing:
+        # No break-even CPA is published, not even as a ceiling, until every
+        # cost has a source.
         return {
             "status": "INCOMPLETE",
             "inputs": {k: str(v) if v is not None else None for k, v in inputs.items()},
             "missing_fields": missing,
             "contribution_before_ads": None,
             "break_even_cpa": None,
+            "break_even_cpa_final": False,
             "target_cpa": None,
             "break_even_roas": None,
             "target_roas": None,
         }
-    contribution = inputs["sale_price"] - sum(
-        value for name, value in inputs.items() if name != "sale_price"
-    )
+    revenue = sum(inputs[name] for name in ECONOMICS_REVENUE)
+    contribution = revenue - sum(inputs[name] for name in ECONOMICS_COSTS)
     if contribution <= 0 or safety_factor <= 0:
         return {
             "status": "INVALID",
             "missing_fields": [],
             "contribution_before_ads": str(contribution),
+            "break_even_cpa_final": False,
         }
     target_cpa = contribution * safety_factor
     return {
@@ -330,9 +352,10 @@ def calculate_economics(
         "safety_factor": str(safety_factor),
         "contribution_before_ads": f"{contribution:.2f}",
         "break_even_cpa": f"{contribution:.2f}",
+        "break_even_cpa_final": True,
         "target_cpa": f"{target_cpa:.2f}",
-        "break_even_roas": f"{inputs['sale_price'] / contribution:.4f}",
-        "target_roas": f"{inputs['sale_price'] / target_cpa:.4f}",
+        "break_even_roas": f"{revenue / contribution:.4f}",
+        "target_roas": f"{revenue / target_cpa:.4f}",
     }
 
 

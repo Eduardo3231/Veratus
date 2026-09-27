@@ -25,11 +25,9 @@ def product(*, complete_economics: bool = False):
     if complete_economics:
         fields.update(
             {
-                "payment_fees": {"value": "10.00"},
-                "channel_fees": {"value": "0.00"},
-                "shipping_subsidy": {"value": "20.00"},
-                "taxes": {"value": "15.00"},
-                "expected_returns_cost": {"value": "5.00"},
+                "shipping_cost_paid_by_veratus": {"value": "20.00"},
+                "payment_fee": {"value": "10.00"},
+                "tax": {"value": "15.00"},
             }
         )
     return {
@@ -64,13 +62,17 @@ def test_economics_blocks_when_operational_costs_are_missing():
     result = calculate_economics(product())
 
     assert result["status"] == "INCOMPLETE"
-    assert set(result["missing_fields"]) == {
-        "payment_fees",
-        "channel_fees",
-        "shipping_subsidy",
-        "taxes",
-        "expected_returns_cost",
-    }
+    assert result["missing_fields"] == [
+        "shipping_cost_paid_by_veratus",
+        "payment_fee",
+        "tax",
+    ]
+    assert result["inputs"]["price"] == "289.90"
+    assert result["inputs"]["unit_cost"] == "65.00"
+    assert result["inputs"]["customer_shipping"] == "0.00"
+    assert result["inputs"]["customer_fees"] == "0.00"
+    assert result["break_even_cpa"] is None
+    assert result["break_even_cpa_final"] is False
     assert result["target_cpa"] is None
 
 
@@ -78,8 +80,9 @@ def test_complete_economics_calculates_cpa_and_roas():
     result = calculate_economics(product(complete_economics=True))
 
     assert result["status"] == "COMPLETE"
-    assert result["contribution_before_ads"] == "174.90"
-    assert result["target_cpa"] == "122.43"
+    assert result["contribution_before_ads"] == "179.90"
+    assert result["target_cpa"] == "125.93"
+    assert result["break_even_cpa_final"] is True
 
 
 def test_creative_review_is_structural_not_performance_prediction():
