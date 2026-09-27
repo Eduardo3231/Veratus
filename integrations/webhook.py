@@ -1,4 +1,3 @@
-import csv
 import datetime
 import hashlib
 import hmac
@@ -26,7 +25,6 @@ LANDING_DIR = Path(BASE_DIR) / "landing"
 app = Flask(__name__, static_folder=str(LANDING_DIR), static_url_path="")
 app.config["MAX_CONTENT_LENGTH"] = 8192
 
-LEADS_CSV = os.getenv("LEADS_CSV_PATH") or os.path.join(BASE_DIR, "leads.csv")
 PORT = int(os.getenv("PORT", "5000"))
 
 FRONTEND_ORIGINS = [
@@ -51,7 +49,6 @@ if TRUST_PROXY_HOPS:
 
 rate_store = defaultdict(list)
 rate_lock = Lock()
-lead_file_lock = Lock()
 
 
 def _allowed_origin():
@@ -72,25 +69,6 @@ def add_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
-
-
-def ensure_csv():
-    directory = os.path.dirname(LEADS_CSV) or "."
-    os.makedirs(directory, exist_ok=True)
-    if not os.path.exists(LEADS_CSV):
-        with open(LEADS_CSV, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                [
-                    "timestamp",
-                    "email",
-                    "whatsapp",
-                    "source",
-                    "campaign",
-                    "consent",
-                    "consent_source",
-                ]
-            )
 
 
 def _client_ip():
@@ -157,9 +135,16 @@ def _normalize_lead(data):
     }
 
 
-def _safe_csv_cell(value: str) -> str:
-    value = value[:500]
-    return "'" + value if value.startswith(("=", "+", "-", "@")) else value
+@lru_cache(maxsize=4)
+def _lead_store_cached(operations_db: str, database_url: str | None):
+    from veratus_agents.leads import LeadStore
+
+    return LeadStore(operations_db, database_url)
+
+
+def _lead_store():
+    settings = AgentSettings.from_env()
+    return _lead_store_cached(str(settings.operations_db), settings.database_url)
 
 
 @app.route("/health", methods=["GET", "HEAD", "OPTIONS"])
@@ -233,26 +218,17 @@ def webhook():
     except (TypeError, ValueError) as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
 
-    ensure_csv()
-    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
     campaign = {
         key: str(data[key])[:200]
         for key in ("utm_source", "utm_medium", "utm_campaign", "utm_content")
         if data.get(key)
     }
-    with lead_file_lock, open(LEADS_CSV, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(
-            [
-                timestamp,
-                _safe_csv_cell(lead["email"]),
-                _safe_csv_cell(lead["whatsapp"]),
-                _safe_csv_cell(lead["source"]),
-                json.dumps(campaign, ensure_ascii=False),
-                "",
-                "",
-            ]
-        )
+    try:
+        # Consent is never taken from the public form; an operator records it.
+        _lead_store().add(**lead, campaign=campaign)
+    except Exception as exc:  # noqa: BLE001 - lead contents never reach the log
+        app.logger.error("lead_store_unavailable error_type=%s", type(exc).__name__)
+        return jsonify({"status": "error", "message": "lead_storage_unavailable"}), 503
 
     return jsonify({"status": "ok", "message": "lead_queued_for_review"}), 200
 

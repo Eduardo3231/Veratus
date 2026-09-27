@@ -16,8 +16,6 @@ services:
         sync: false
       - key: FRONTEND_ORIGINS
         value: "https://veratus.onrender.com,http://localhost:5000,http://127.0.0.1:5000"
-      - key: LEADS_CSV_PATH
-        value: /tmp/veratus-leads.csv
       - key: PORT
         value: "5000"
       - key: RATE_LIMIT_REQUESTS
