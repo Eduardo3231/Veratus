@@ -182,5 +182,33 @@ def test_3d_brand_chapter_only_moves_and_respects_reduced_motion() -> None:
     assert html.count('class="brand-3d__layer"') >= 5
     assert turn and "opacity" not in turn.group(1)
     assert "animation-timeline: view()" in css
-    reduced = css.split("@media (prefers-reduced-motion: reduce)")[-1]
+    reduced = "".join(css.split("@media (prefers-reduced-motion: reduce)")[1:])
     assert ".brand-3d__body { animation: none !important;" in reduced
+
+
+UNVERIFIED_MATERIAL = re.compile(
+    r"\b(ouro|prata|banhad[oa]s?|banho|zirc[oô]nias?|hipoalerg[eê]nic[oa]s?|"
+    r"18k|925|a[cç]o cir[uú]rgico|folhead[oa]s?|cristal)\b",
+    re.IGNORECASE,
+)
+
+
+def test_jewelry_editorial_mirrors_the_product_master() -> None:
+    html = (LANDING / "index.html").read_text(encoding="utf-8")
+    section = html.split('id="feminino"', 1)[1].split("</section>", 1)[0]
+    catalog = {
+        item["id"]: item
+        for item in json.loads((LANDING / "catalog.json").read_text(encoding="utf-8"))
+    }
+    ids = re.findall(r'data-product-id="([a-z-]+)"', section)
+
+    assert len(ids) == 3 and "noir-clover" not in ids
+    for product_id in ids:
+        item = catalog[product_id]
+        assert item["collection"] == "feminine" and item["site_visibility"] == "PREVIEW"
+        assert f'src="{item["primary_image"]}" alt="{item["alt"]}"' in section
+        assert f"<b>{item['name']}</b>" in section
+        assert f"produto%3D{product_id}" in section
+    assert section.count("Refer%C3%AAncia%20da%20visita%3A%20VT-") == 3
+    assert not UNVERIFIED_MATERIAL.search(re.sub(r"<[^>]+>", " ", section))
+    assert "R$" not in section
