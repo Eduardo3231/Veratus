@@ -2151,6 +2151,58 @@ def _instagram_queue():
     return _instagram_queue_cached(str(settings.operations_db), settings.database_url)
 
 
+@lru_cache(maxsize=4)
+def _instagram_token_store_cached(operations_db, database_url, encryption_key, seed):
+    from veratus_agents.instagram_token import InstagramTokenStore
+
+    return InstagramTokenStore(
+        operations_db, database_url, encryption_key=encryption_key, seed_token=seed
+    )
+
+
+def _instagram_token_store():
+    settings = AgentSettings.from_env()
+    return _instagram_token_store_cached(
+        str(settings.operations_db),
+        settings.database_url,
+        os.getenv("VERATUS_TOKEN_ENCRYPTION_KEY", "").strip(),
+        os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip(),
+    )
+
+
+@app.before_request
+def _start_instagram_token_watcher():
+    """Renew the long-lived token before it expires (one check per 6 h)."""
+    if app.testing or not os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip():
+        return
+    from veratus_agents.instagram_token import start_refresh_watcher
+
+    try:
+        start_refresh_watcher(_instagram_token_store())
+    except Exception as exc:  # noqa: BLE001 - never block a page on the watcher
+        app.logger.error(
+            "ALERT instagram_token_watcher_not_started error_type=%s",
+            type(exc).__name__,
+        )
+
+
+@app.route("/integrations/instagram/token/status", methods=["GET"])
+def instagram_token_status():
+    denied = _admin_required()
+    if denied:
+        return denied
+    return jsonify(_instagram_token_store().status()), 200
+
+
+@app.route("/integrations/instagram/token/refresh", methods=["POST"])
+def instagram_token_refresh():
+    denied = _admin_required()
+    if denied:
+        return denied
+    result = _instagram_token_store().refresh_if_due()
+    return jsonify({**result, "token": _instagram_token_store().status()}), 200
+
+
 @app.route("/integrations/instagram/webhook", methods=["GET", "POST"])
 def instagram_webhook():
     if request.method == "GET":
@@ -2196,7 +2248,7 @@ def instagram_process_replies():
 
     landing_url, rules = load_rules()
     result = _instagram_queue().process(
-        client=InstagramClient.from_env(),
+        client=InstagramClient.from_env(token=_instagram_token_store().current()),
         enabled=dm_enabled(),
         landing_url=landing_url,
         rules=rules,

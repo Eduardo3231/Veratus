@@ -129,8 +129,9 @@ class InstagramClient:
         self.timeout = timeout
 
     @classmethod
-    def from_env(cls) -> InstagramClient | None:
-        token = os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
+    def from_env(cls, token: str | None = None) -> InstagramClient | None:
+        """``token`` is the renewed one from the token store, when available."""
+        token = (token or os.getenv("INSTAGRAM_ACCESS_TOKEN", "")).strip()
         user_id = os.getenv("INSTAGRAM_USER_ID", "").strip()
         return cls(token, user_id) if token and user_id else None
 
