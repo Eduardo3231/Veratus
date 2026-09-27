@@ -146,6 +146,23 @@ def test_site_js_builds_the_same_default_message() -> None:
     assert "document.querySelectorAll('.purchase-link').forEach" in script
 
 
+def test_mobile_hero_and_brand_mark_stay_light() -> None:
+    html = (LANDING / "index.html").read_text(encoding="utf-8")
+    mobile_source = (
+        '<source src="assets/video/veratus-hero-mobile.mp4" type="video/mp4" '
+        'media="(max-width: 680px)">'
+    )
+
+    assert mobile_source in html
+    assert html.index(mobile_source) < html.index("veratus-hero-desktop.mp4")
+    assert 'poster="assets/video/veratus-hero-poster.webp"' in html
+    assert (LANDING / "assets/video/veratus-hero-mobile.mp4").stat().st_size < 1_600_000
+    assert "veratus-v-wheat-alpha.png" not in html
+    for size in (160, 720):
+        mark = LANDING / f"assets/veratus-v-wheat-{size}.webp"
+        assert mark.stat().st_size < 100_000
+
+
 def test_every_image_has_alternative_text() -> None:
     for page in ("index.html", "condicoes-de-compra.html", "privacy.html"):
         html = (LANDING / page).read_text(encoding="utf-8")
