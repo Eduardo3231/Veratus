@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import os
+import re
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -113,8 +114,13 @@ def _assert_visible(page, selector: str) -> None:
     assert result["ok"], (selector, result)
 
 
+META_PIXEL_HOSTS = re.compile(r"^https://(connect\.facebook\.net|www\.facebook\.com)/")
+
+
 def _open(browser, url: str, viewport: str, motion: str = "no-preference"):
     context = browser.new_context(viewport=VIEWPORTS[viewport], reduced_motion=motion)
+    # Test visits, even against the deployed site, never reach the Meta Pixel.
+    context.route(META_PIXEL_HOSTS, lambda route: route.abort())
     return context, context.new_page()
 
 
@@ -255,6 +261,52 @@ def test_watch_cards_show_price_and_order_on_whatsapp(
         )
         assert page.locator("#dialog-art svg.watch-art").count() == 0
         assert page.locator("#dialog-cta").text_content() == "Pedir pelo WhatsApp"
+    finally:
+        context.close()
+
+
+# Records fbq() calls and keeps WhatsApp links from navigating during the test.
+PIXEL_STUB_JS = """
+window.__pixel = [];
+window.fbq = (...args) => window.__pixel.push(args);
+window.addEventListener('click', (event) => {
+  if (event.target.closest('a[href^="https://wa.me/"]')) event.preventDefault();
+}, true);
+"""
+
+
+def test_meta_pixel_tracks_product_views_and_whatsapp_contacts(
+    browser, landing_url: str
+) -> None:
+    context, page = _open(browser, landing_url, "desktop")
+    requested: list[str] = []
+    context.on("request", lambda request: requested.append(request.url))
+    try:
+        page.add_init_script(PIXEL_STUB_JS)
+        page.goto(landing_url, wait_until="networkidle")
+        page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
+        page.wait_for_function(INTRO_GONE_JS, timeout=6_000)
+        black = page.locator('#catalog-rail .product-card[data-product-id="black-gmt"]')
+        black.scroll_into_view_if_needed()
+        black.locator(".product-order").click()
+        black.locator(".product-open").click()
+        page.locator("#dialog-cta").click()
+        calls = page.evaluate("window.__pixel")
+
+        watch = {
+            "content_ids": ["black-gmt"],
+            "content_name": "Black GMT",
+            "content_type": "product",
+            "value": 289.9,
+            "currency": "BRL",
+        }
+        assert ["track", "Contact", watch] in calls
+        assert ["track", "ViewContent", watch] in calls
+        assert calls.count(["track", "Contact", watch]) == 2
+        assert all("text" not in str(call) for call in calls)
+        if not EXTERNAL_URL:
+            # Locally the Pixel code does not load, so no test visit is counted.
+            assert not [url for url in requested if META_PIXEL_HOSTS.match(url)]
     finally:
         context.close()
 

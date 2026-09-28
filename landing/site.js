@@ -81,6 +81,26 @@ document.querySelectorAll('.purchase-link').forEach((link) => {
   link.href = createWhatsAppLink(link.dataset.productName, link.dataset.productId);
 });
 
+// Meta Pixel: the WhatsApp conversation is the site's conversion (tracking ADR,
+// option 1). Only product id, name and the public price travel; never the message.
+function trackPixel(event, data) {
+  if (typeof window.fbq === 'function') window.fbq('track', event, data);
+}
+
+function pixelProduct(productId) {
+  const product = catalogProducts.find((item) => item.id === productId);
+  if (!product) return {};
+  const data = { content_ids: [product.id], content_name: product.name, content_type: 'product' };
+  const value = Number(product.price_brl);
+  if (Number.isFinite(value) && value > 0) Object.assign(data, { value, currency: 'BRL' });
+  return data;
+}
+
+document.addEventListener('click', (event) => {
+  const link = event.target.closest?.('a[href^="https://wa.me/"]');
+  if (link) trackPixel('Contact', pixelProduct(link.dataset.productId));
+});
+
 function productImage(product) {
   return product.primary_image || product.image || product.images?.[0] || '';
 }
@@ -339,6 +359,7 @@ function openProduct(product) {
   dialogCta.href = createWhatsAppLink(product.name, product.id, Boolean(price));
   dialogCta.dataset.productId = product.id;
   dialogCta.textContent = price ? 'Pedir pelo WhatsApp' : 'Tenho interesse';
+  trackPixel('ViewContent', pixelProduct(product.id));
   dialog.showModal();
   document.body.classList.add('dialog-open');
 }

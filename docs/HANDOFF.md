@@ -1,6 +1,6 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 27/09/2026 (tarde), Codex.
+**Última atualização:** 28/09/2026, Claude Code (Meta Pixel).
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
 
 ## Estado do repositório
@@ -42,6 +42,23 @@ O Codex (PID 5968) estava em execução desde 10:34 de 27/09, sem escrever na pa
 | `31cd3c9` | **Fotos reais em um comando**, descrito abaixo. |
 | `4f9cb2f` | **Imagens dos nove relógios restauradas.** Cada criativo voltou ao modelo correspondente; o Product Master distingue o criativo de vitrine da foto real exigida para canais externos. |
 
+## Meta Pixel (28/09)
+
+O Pixel `1633870688525258`, pedido pelo fundador, está em `index.html`, `condicoes-de-compra.html` e `privacy.html`.
+
+- **Eventos:**
+  - `PageView` em toda página;
+  - `ViewContent` ao abrir um produto;
+  - `Contact` em qualquer clique num link do WhatsApp, com `content_ids`, `content_name` e, nos relógios, `value: 289.9` e `currency: BRL`.
+- O texto da mensagem do WhatsApp nunca vai para a Meta.
+- **Não carrega em `localhost`/`127.*`.** Os testes de navegador também bloqueiam `connect.facebook.net` e `www.facebook.com/tr`, mesmo contra produção, para visitas de teste não entrarem nas métricas.
+- `privacy.html` ganhou a seção "Cookies e medição de anúncios".
+- **Não verificado ao vivo:**
+  - a chegada dos eventos no Gerenciador de Eventos (Testar eventos);
+  - a variável `META_PIXEL_ID` no Render, que o worker de mídia paga lê.
+- Banner de consentimento de cookies: não existe. Decisão do fundador.
+- A ADR de tracking continua pendente; o Pixel cobre a parte "Contact" da opção 1.
+
 ## Fotos reais dos relógios
 
 **Publicado e verificado em 27/09:** por ordem direta do fundador, os nove criativos de catálogo voltaram à vitrine e foram religados aos modelos Arctic White, Ocean Blue, Black GMT, Royal Blue, Platinum Classic, Emerald Signature, Silver Prestige, Polar Blue e Bronze Heritage. Eles ficam em `landing/assets/catalog/`, todos com 1122×1402. O Product Master os classifica como `CATALOG_CREATIVE` e mantém `image_status: NEEDS_REAL_PHOTO`; assim, aparecem no site sem liberar anúncios, posts ou listings como se fossem fotos reais da peça.
@@ -55,7 +72,7 @@ Anúncio pago e post de relógio continuam bloqueados até a foto real do item e
 ## Verificar
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # 221 passed em 27/09 (worktree claude/site-referencias)
+.\.venv\Scripts\python.exe -m pytest -q          # 226 passed em 28/09 (pasta principal)
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 ```

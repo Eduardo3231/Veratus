@@ -4,6 +4,7 @@
 - **Data:** 25/09/2026
 - **Decisor:** fundador
 - **Nada deste documento foi implementado na Meta.**
+- **28/09/2026:** o Pixel `1633870688525258` foi instalado no site com `PageView`, `ViewContent` (produto aberto) e `Contact` (clique no WhatsApp, com produto e valor público). A decisão abaixo continua pendente.
 
 ## Contexto
 
