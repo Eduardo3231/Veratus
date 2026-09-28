@@ -1,4 +1,4 @@
-"""Marketplace account connections beyond Mercado Livre (read-only).
+"""Marketplace account connections beyond Mercado Livre: Shopee and Amazon.
 
 Registered by integrations/webhook.py. Same contract as the Mercado Livre
 routes: start, status and check need X-Veratus-Admin-Token; the callback checks
@@ -201,6 +201,50 @@ def create_blueprint(
             return denied
         return _no_store(
             jsonify({"status": "completed", "report": public_report(inspect_shopee())})
+        )
+
+    def inspect_amazon() -> dict[str, Any]:
+        from veratus_agents.marketplace_service import MarketplaceConnectionService
+
+        return MarketplaceConnectionService(marketplace_store()).inspect_amazon()
+
+    @blueprint.get("/integrations/amazon/status")
+    def amazon_status():
+        denied = admin_required()
+        if denied:
+            return denied
+        from veratus_agents.amazon_sp import configuration
+
+        configured = configuration()
+        last = next(
+            (
+                item
+                for item in marketplace_store().connection_checks()
+                if item.get("channel") == "amazon"
+            ),
+            None,
+        )
+        return _no_store(
+            jsonify(
+                {
+                    "status": "configured"
+                    if all(configured.values())
+                    else "not_configured",
+                    "configuration": configured,
+                    "last_check": public_report(last) if last else None,
+                    "publish_enabled": False,
+                    "external_writes": False,
+                }
+            )
+        )
+
+    @blueprint.post("/integrations/amazon/check")
+    def amazon_check():
+        denied = admin_required()
+        if denied:
+            return denied
+        return _no_store(
+            jsonify({"status": "completed", "report": public_report(inspect_amazon())})
         )
 
     return blueprint

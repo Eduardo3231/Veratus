@@ -29,11 +29,13 @@ class MarketplaceConnectionService:
         mercado_factory: Callable[[], Any] | None = None,
         tiktok_factory: Callable[[], Any] | None = None,
         shopee_factory: Callable[[], Any] | None = None,
+        amazon_factory: Callable[[], Any] | None = None,
     ) -> None:
         self.store = store
         self.mercado_factory = mercado_factory or self._mercado_client
         self.tiktok_factory = tiktok_factory or self._tiktok_client
         self.shopee_factory = shopee_factory or self._shopee_client
+        self.amazon_factory = amazon_factory or self._amazon_client
 
     @staticmethod
     def _mercado_client() -> MercadoLivreReadOnlyClient:
@@ -65,6 +67,12 @@ class MarketplaceConnectionService:
         from .shopee import shopee_read_client
 
         return shopee_read_client()
+
+    @staticmethod
+    def _amazon_client() -> Any:
+        from .amazon_sp import AmazonSellingPartnerClient
+
+        return AmazonSellingPartnerClient.from_env()
 
     def inspect_all(self, products: list[dict[str, Any]]) -> dict[str, Any]:
         static = connection_status()
@@ -303,6 +311,57 @@ class MarketplaceConnectionService:
             report.update(auth="INVALID", readiness="NOT_READY")
             report["errors"].append(code)
         return self.store.save_connection_check("shopee", report)
+
+    def inspect_amazon(self) -> dict[str, Any]:
+        """Brazil marketplace participation and watch product type, read-only."""
+        base = connection_status()["amazon"]
+        report = {**base, "channel": "amazon", "api_reads": [], "errors": []}
+        if base["credentials"] != "PRESENT":
+            report.update(readiness="NOT_READY")
+            report["errors"].append("AMAZON_CONFIGURATION_INCOMPLETE")
+            return self.store.save_connection_check("amazon", report)
+        try:
+            client = self.amazon_factory()
+            account = client.account_identity()
+            report["api_reads"].append("GET /sellers/v1/marketplaceParticipations")
+            report.update(
+                auth="HEALTHY",
+                account_info={
+                    key: account[key]
+                    for key in ("marketplace_id", "participating", "suspended_listings")
+                },
+            )
+            if not account["participating"]:
+                report.update(account="NOT_PARTICIPATING", readiness="NOT_READY")
+                report["errors"].append("AMAZON_BR_MARKETPLACE_NOT_ACTIVE")
+                return self.store.save_connection_check("amazon", report)
+            report["account"] = "HEALTHY"
+            categories = client.discover_categories("relógio")
+            report["api_reads"].append("GET /definitions/2020-09-01/productTypes")
+            if len(categories) == 1:
+                report.update(
+                    category_discovery="HEALTHY", external_category=categories[0]
+                )
+            else:
+                report.update(
+                    category_discovery="REVIEW_REQUIRED" if categories else "NOT_FOUND",
+                    category_candidates=categories[:10],
+                )
+            report.update(
+                attributes="NOT_TESTED",
+                logistics="NOT_TESTED",
+                readback="NOT_TESTED",
+                readiness="CONNECTED_READ_ONLY",
+            )
+        except (MarketplaceApiError, KeyError) as exc:
+            code = (
+                exc.code
+                if isinstance(exc, MarketplaceApiError)
+                else "CREDENTIALS_INVALID"
+            )
+            report.update(auth="INVALID", readiness="NOT_READY")
+            report["errors"].append(code)
+        return self.store.save_connection_check("amazon", report)
 
     def read_only_sync(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
         product_by_sku = {

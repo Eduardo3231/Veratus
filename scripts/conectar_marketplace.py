@@ -4,6 +4,7 @@ Uso (PowerShell, na pasta do projeto):
 
     .\\.venv\\Scripts\\python.exe scripts\\conectar_marketplace.py mercado-livre
     .\\.venv\\Scripts\\python.exe scripts\\conectar_marketplace.py shopee
+    .\\.venv\\Scripts\\python.exe scripts\\conectar_marketplace.py amazon
 
 O comando pede o token de administrador (Render > serviço veratus-leads >
 Environment > VERATUS_ADMIN_TOKEN) sem mostrá-lo na tela, abre a página de
@@ -47,6 +48,19 @@ CHANNELS = {
             "com os valores do app no Shopee Open Platform (App Management)."
         ),
         "check": "/integrations/shopee/check",
+    },
+    "amazon": {
+        "name": "Amazon",
+        "status": "/integrations/amazon/status",
+        "check": "/integrations/amazon/check",
+        # Private app: the seller authorizes it in Seller Central, no login page.
+        "oauth": False,
+        "config_hint": (
+            "No Seller Central: Apps e serviços > Desenvolver apps > seu app > "
+            "Autorizar, copie o refresh token; o Client ID e o Client Secret ficam "
+            "em Ver credenciais LWA. Cadastre os três no Render > veratus-leads > "
+            "Environment."
+        ),
     },
 }
 ENCRYPTION_HINT = (
@@ -163,6 +177,10 @@ def report_summary(report: dict[str, Any]) -> list[str]:
     lines = []
     if shop.get("shop_name"):
         lines.append(f"Loja: {shop['shop_name']} ({shop.get('region') or 'região ?'})")
+    if "participating" in shop:
+        lines.append(
+            "Marketplace Brasil: " + ("ativo" if shop["participating"] else "inativo")
+        )
     lines += [
         "Conta: "
         + ("respondendo" if report.get("account") == "HEALTHY" else "não verificada"),
@@ -205,6 +223,30 @@ def readiness_summary(execution: dict[str, Any], action: str) -> list[str]:
     return report_summary(report)
 
 
+def _check_configured(session: requests.Session, channel: dict[str, Any]) -> list[str]:
+    """Channels without a login page: confirm the settings, then run the check."""
+    response = request(session, "GET", channel["status"])
+    if response.status_code == 401:
+        raise ConnectionFailed(
+            "Token de administrador recusado. Copie de novo o valor de "
+            "VERATUS_ADMIN_TOKEN no Render."
+        )
+    data = _json(response) or {}
+    missing = [name for name, ok in (data.get("configuration") or {}).items() if not ok]
+    if response.status_code != 200 or missing:
+        raise ConnectionFailed(
+            "Faltam no Render (Environment): "
+            + (", ".join(missing) or "configuração do canal")
+            + ". "
+            + channel["config_hint"]
+        )
+    print(f"Configuração do {channel['name']} encontrada. Verificando (só leitura)...")
+    response = request(session, "POST", channel["check"])
+    if response.status_code != 200:
+        raise ConnectionFailed(f"A verificação falhou ({response.status_code}).")
+    return report_summary((_json(response) or {}).get("report") or {})
+
+
 def connect(
     channel_id: str,
     token: str,
@@ -217,6 +259,8 @@ def connect(
     channel = CHANNELS[channel_id]
     session = session or requests.Session()
     session.headers[ADMIN_HEADER] = token
+    if not channel.get("oauth", True):
+        return _check_configured(session, channel)
     before = _status(session, channel)
     url = _authorization_url(session, channel)
     print(f"Abrindo a autorização do {channel['name']} no navegador.")

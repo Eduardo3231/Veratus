@@ -213,3 +213,61 @@ def test_connects_a_shopee_shop_and_shows_the_store() -> None:
     assert "Loja: Veratus (BR)" in lines
     assert "Categorias para escolher: Relógios de Pulso, Relógios Esportivos" in lines
     assert "Prontidão: conectado em modo leitura" in lines
+
+
+AMAZON_STATUS = ("GET", "/integrations/amazon/status")
+AMAZON_CHECK = ("POST", "/integrations/amazon/check")
+
+
+def test_amazon_lists_the_missing_settings() -> None:
+    session = FakeSession(
+        {
+            AMAZON_STATUS: [
+                FakeResponse(
+                    200,
+                    {
+                        "status": "not_configured",
+                        "configuration": {
+                            "AMAZON_SP_LWA_CLIENT_ID": True,
+                            "AMAZON_SP_LWA_CLIENT_SECRET": True,
+                            "AMAZON_SP_REFRESH_TOKEN": False,
+                        },
+                    },
+                )
+            ]
+        }
+    )
+
+    with pytest.raises(tool.ConnectionFailed, match="AMAZON_SP_REFRESH_TOKEN"):
+        tool.connect("amazon", "t", session=session, open_browser=print)
+
+    assert AMAZON_CHECK not in session.calls
+
+
+def test_amazon_needs_no_browser_and_reports_the_brazil_store() -> None:
+    configured = {name: True for name in ("A", "B", "C")}
+    session = FakeSession(
+        {
+            AMAZON_STATUS: [FakeResponse(200, {"configuration": configured})],
+            AMAZON_CHECK: [
+                FakeResponse(
+                    200,
+                    {
+                        "report": {
+                            "readiness": "CONNECTED_READ_ONLY",
+                            "account": "HEALTHY",
+                            "account_info": {"participating": True},
+                            "external_category": {"external_category_name": "Relógio"},
+                        }
+                    },
+                )
+            ],
+        }
+    )
+    opened: list[str] = []
+
+    lines = tool.connect("amazon", "t", session=session, open_browser=opened.append)
+
+    assert opened == []
+    assert "Marketplace Brasil: ativo" in lines
+    assert "Categoria de relógios: Relógio" in lines

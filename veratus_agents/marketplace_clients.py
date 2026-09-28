@@ -144,6 +144,27 @@ CREDENTIAL_REQUIREMENTS = (
         "Get Authorized Shops",
     ),
     CredentialRequirement(
+        "amazon",
+        "AMAZON_SP_LWA_CLIENT_ID",
+        "Client ID do app (Login with Amazon)",
+        True,
+        "Seller Central > Apps e serviços > Desenvolver apps",
+    ),
+    CredentialRequirement(
+        "amazon",
+        "AMAZON_SP_LWA_CLIENT_SECRET",
+        "Client secret do app (Login with Amazon)",
+        True,
+        "Seller Central > Apps e serviços > Desenvolver apps",
+    ),
+    CredentialRequirement(
+        "amazon",
+        "AMAZON_SP_REFRESH_TOKEN",
+        "Autorização da própria conta (app privado)",
+        True,
+        "Seller Central > Desenvolver apps > Autorizar",
+    ),
+    CredentialRequirement(
         "meta",
         "META_ACCESS_TOKEN",
         "Token de acesso Graph API",
@@ -601,6 +622,21 @@ CLIENT_CAPABILITIES = {
         "error_normalization": "IMPLEMENTED",
         "rate_limits": "PARTIAL",
     },
+    "amazon": {
+        "authentication": "IMPLEMENTED",
+        "token_refresh": "IMPLEMENTED",
+        "account_identity": "IMPLEMENTED",
+        "health_check": "IMPLEMENTED",
+        "category_discovery": "IMPLEMENTED",
+        "attribute_discovery": "MISSING",
+        "listing_lookup": "MISSING",
+        "listing_create": "MISSING",
+        "listing_update": "MISSING",
+        "listing_pause": "MISSING",
+        "read_back": "MISSING",
+        "error_normalization": "IMPLEMENTED",
+        "rate_limits": "PARTIAL",
+    },
     "meta": {
         key: "API_CONTRACT_UNVERIFIED"
         for key in (
@@ -625,7 +661,7 @@ CLIENT_CAPABILITIES = {
 def connection_status() -> dict[str, Any]:
     matrix = credential_matrix()
     result: dict[str, Any] = {}
-    for channel in ("mercado-livre", "shopee", "tiktok-shop", "meta"):
+    for channel in ("mercado-livre", "shopee", "tiktok-shop", "meta", "amazon"):
         rows = [item for item in matrix if item["channel"] == channel]
         required = [item for item in rows if item["required_for_read"]]
         credentials = (
