@@ -27,6 +27,7 @@ class OrderChannel(StrEnum):
     MERCADO_LIVRE = "mercado_livre"
     SHOPEE = "shopee"
     TIKTOK_SHOP = "tiktok_shop"
+    AMAZON = "amazon"
     INSTAGRAM = "instagram"
     OTHER = "other"
 

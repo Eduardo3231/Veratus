@@ -127,7 +127,7 @@ def test_feminine_commands_run_pipeline_and_block_unpriced_distribution(
         for task in distribution["tasks"]
         if task["action"] == "PREPARE_FEMININE_DRAFTS"
     ]
-    assert len(channel_tasks) == 4
+    assert len(channel_tasks) == 5
     assert all(not task["result"]["drafts"] for task in channel_tasks)
     assert all(len(task["result"]["blocked"]) == 9 for task in channel_tasks)
     assert all(

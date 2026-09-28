@@ -169,6 +169,16 @@ CHANNELS = {
         ("catalog", "draft", "read"),
         ("META_ACCESS_TOKEN",),
     ),
+    Marketplace.AMAZON.value: MarketplaceChannel(
+        "amazon",
+        "Amazon",
+        ChannelState.DISABLED,
+        False,
+        False,
+        False,
+        ("draft", "read"),
+        ("AMAZON_SP_REFRESH_TOKEN",),
+    ),
 }
 
 

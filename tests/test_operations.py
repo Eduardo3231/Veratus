@@ -51,8 +51,9 @@ def test_paid_acquisition_command_is_not_misrouted_to_catalogue_drafts():
     )
 
 
-def test_registry_has_fourteen_operational_agents():
-    assert len(AGENT_REGISTRY) == 14
+def test_registry_has_fifteen_operational_agents():
+    assert len(AGENT_REGISTRY) == 15
+    assert AGENT_REGISTRY["amazon-agent"].external_write is False
     assert AGENT_REGISTRY["general-manager"].level == 1
     assert AGENT_REGISTRY["shopee-agent"].external_write is False
     assert AGENT_REGISTRY["paid-acquisition-worker"].external_write is False
@@ -88,7 +89,13 @@ def test_simulation_delegates_and_never_publishes():
     result = simulate_prepare_distribution(product_count=8)
 
     assert result["status"] == "COMPLETED"
-    assert result["drafts"] == ["mercado-livre", "shopee", "tiktok-shop", "meta"]
+    assert result["drafts"] == [
+        "mercado-livre",
+        "shopee",
+        "tiktok-shop",
+        "meta",
+        "amazon",
+    ]
     assert all(task["status"] == TaskStatus.COMPLETED for task in result["tasks"])
     assert all(
         task["result"].get("external_write") is not True

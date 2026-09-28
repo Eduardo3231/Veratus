@@ -45,7 +45,7 @@ def test_channel_registry_starts_disabled_and_readiness_is_draft(tmp_path):
     store = MarketplaceStore(tmp_path / "marketplace.sqlite3")
     channels = store.channels()
 
-    assert len(channels) == 4
+    assert len(channels) == 5
     assert all(item["state"] == ChannelState.DISABLED.value for item in channels)
     assert (
         channel_readiness(store.channel("shopee"), approved_product())

@@ -1535,7 +1535,7 @@ def _operational_runtime():
 
         settings = AgentSettings.from_env()
         store = _marketplace_store()
-        for channel in ("mercado-livre", "shopee", "tiktok-shop", "meta"):
+        for channel in OperationalRuntime.CHANNEL_AGENTS:
             for canonical_category in (
                 "Relógios",
                 "jewelry_accessories/necklace",

@@ -232,6 +232,7 @@ def missing_business_data(
         "shopee": ["category_mapping"],
         "tiktok-shop": ["category_mapping"],
         "meta": ["category_mapping"],
+        "amazon": ["category_mapping"],
     }
     requirement_details = {
         "shipping_origin": (
@@ -338,6 +339,7 @@ def discovery_report() -> dict[str, Any]:
                 "SHOPEE_ACCESS_TOKEN",
                 "TIKTOK_SHOP_ACCESS_TOKEN",
                 "META_ACCESS_TOKEN",
+                "AMAZON_SP_REFRESH_TOKEN",
             )
         },
     }

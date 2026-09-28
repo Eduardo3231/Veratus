@@ -92,3 +92,14 @@ def test_blocks_unmapped_category(tmp_path):
 
     with pytest.raises(DistributionDraftError, match="missing category_mapping"):
         build_distribution_draft(product, Marketplace.SHOPEE)
+
+
+def test_amazon_draft_targets_the_brazil_store_and_waits_for_the_account(tmp_path):
+    payload = build_distribution_draft(approved_product(tmp_path), Marketplace.AMAZON)[
+        "payload"
+    ]
+
+    assert payload["marketplace_id"] == "A2Q3Y263D00KWC"
+    assert payload["product_type"] == "PENDING_AMAZON_WATCH_PRODUCT_TYPE"
+    assert payload["product_identifier"] == "CONFIRMAR_GTIN_OU_ISENCAO"
+    assert payload["external_write"] is False

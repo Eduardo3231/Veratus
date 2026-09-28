@@ -39,8 +39,9 @@ def _products() -> list[dict[str, object]]:
     ]
 
 
-def test_registry_preserves_thirteen_agents_and_adds_paid_acquisition() -> None:
-    assert len(AGENT_REGISTRY) == 14
+def test_registry_has_the_amazon_agent_and_paid_acquisition() -> None:
+    assert len(AGENT_REGISTRY) == 15
+    assert AGENT_REGISTRY["amazon-agent"].supervisor == "distribution-supervisor"
     assert AGENT_REGISTRY["paid-acquisition-worker"].supervisor == "general-manager"
 
 
@@ -52,7 +53,7 @@ def test_manager_command_traverses_real_hierarchy_and_blocks_external_writes(
     )
     report = runtime.execute(
         "Gerente, prepare todos os relógios ativos da Veratus para Mercado Livre, "
-        "Shopee, TikTok Shop e Meta.",
+        "Shopee, TikTok Shop, Meta e Amazon.",
         idempotency_key="prepare-all-v1",
     )
 

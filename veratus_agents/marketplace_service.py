@@ -88,7 +88,7 @@ class MarketplaceConnectionService:
         except (ImportError, RuntimeError):
             pass
         reports: dict[str, Any] = {}
-        for channel in ("mercado-livre", "shopee", "tiktok-shop", "meta"):
+        for channel in ("mercado-livre", "shopee", "tiktok-shop", "meta", "amazon"):
             if static[channel]["credentials"] != "PRESENT":
                 reports[channel] = self.store.save_connection_check(
                     channel, {**static[channel], "channel": channel, "api_reads": []}
@@ -100,6 +100,8 @@ class MarketplaceConnectionService:
                 reports[channel] = self._inspect_tiktok(products, static[channel])
             elif channel == "shopee":
                 reports[channel] = self.inspect_shopee(static[channel])
+            elif channel == "amazon":
+                reports[channel] = self.inspect_amazon()
             else:
                 reports[channel] = self.store.save_connection_check(
                     channel,

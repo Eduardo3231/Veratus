@@ -27,7 +27,7 @@ def test_phase_two_reports_and_natural_command(tmp_path):
         )
 
     assert channels.status_code == 200
-    assert len(channels.json["channels"]) == 4
+    assert len(channels.json["channels"]) == 5
     assert quality.json["products_total"] == 18
     assert quality.json["segments"]["feminine_total"] == 9
     assert readiness.json["marketplace_mode"] == "LOCAL"
@@ -38,5 +38,5 @@ def test_phase_two_reports_and_natural_command(tmp_path):
     }
     assert command.status_code == 201
     assert command.json["execution"]["status"] == "COMPLETED"
-    assert len(command.json["execution"]["agents_invoked"]) == 13
+    assert len(command.json["execution"]["agents_invoked"]) == 14
     assert command.json["execution"]["external_writes"] == "BLOCKED"

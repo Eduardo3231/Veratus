@@ -56,6 +56,10 @@ services:
         value: "false"
       - key: META_PUBLISH_ENABLED
         value: "false"
+      - key: AMAZON_ENABLED
+        value: "false"
+      - key: AMAZON_PUBLISH_ENABLED
+        value: "false"
       - key: MERCADO_LIVRE_ACCESS_TOKEN
         sync: false
       - key: MERCADO_LIVRE_CLIENT_ID
@@ -92,6 +96,16 @@ services:
         sync: false
       - key: TIKTOK_SHOP_SHOP_CIPHER
         sync: false
+      - key: AMAZON_SP_LWA_CLIENT_ID
+        sync: false
+      - key: AMAZON_SP_LWA_CLIENT_SECRET
+        sync: false
+      - key: AMAZON_SP_REFRESH_TOKEN
+        sync: false
+      - key: AMAZON_SP_MARKETPLACE_ID
+        value: A2Q3Y263D00KWC
+      - key: AMAZON_SP_ENDPOINT
+        value: https://sellingpartnerapi-na.amazon.com
       - key: META_ACCESS_TOKEN
         sync: false
       - key: META_BUSINESS_ID

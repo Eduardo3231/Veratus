@@ -22,9 +22,10 @@ Comando único: `.\.venv\Scripts\python.exe scripts\conectar_marketplace.py <mer
 - **Configuração no Render:**
   - `VERATUS_TOKEN_ENCRYPTION_KEY` precisa existir (chave Fernet). O comando explica como gerar se faltar.
   - `SHOPEE_API_HOST`, `SHOPEE_REDIRECT_URI` e `AMAZON_SP_ENDPOINT`/`AMAZON_SP_MARKETPLACE_ID` são opcionais; o código tem os padrões.
-  - As variáveis novas da Amazon **não** foram declaradas no `render.yaml`/`.env.example` porque o Codex tem alterações não commitadas nesses dois arquivos na pasta principal. Declarar depois, mantendo o teste de paridade.
+  - As variáveis da Amazon estão declaradas no `render.yaml` e no `.env.example`. As chaves ficam com `sync: false`, e `AMAZON_ENABLED`/`AMAZON_PUBLISH_ENABLED` com `false`.
 - **Não verificado ao vivo:** nenhuma das três contas foi conectada ainda. O host da Shopee para contas brasileiras (`partner.shopeemobile.com`) segue a documentação pública; se a Shopee indicar outro host, basta mudar `SHOPEE_API_HOST`.
-- **Próximo passo dos agentes:** registrar o `amazon-agent` (hoje 14 agentes) e os rascunhos de anúncio da Amazon depois da primeira conexão real. Criação de anúncio segue ausente nos três canais, e os relógios não devem ir a anúncio sem foto real (`STOREFRONT_BLOCKERS`).
+- **Amazon Agent (15º agente, 28/09):** canal `amazon` registrado (desligado), `amazon-agent` sob o `distribution-supervisor`, rascunho de anúncio com product type e GTIN a confirmar, canal `amazon` no Orders Ledger. O gerente inclui a Amazon na auditoria de conexões e nos comandos ("prepare ... Amazon").
+- **Criação de anúncio** segue ausente nos quatro canais de venda. Os relógios não devem ir a anúncio sem foto real (`STOREFRONT_BLOCKERS`).
 - **Pasta principal:** o Codex deixou alterações não commitadas em `integrations/webhook.py`, `render.yaml`, `.env.example`, `veratus_agents/paid_media.py`, `veratus_agents/meta_webhooks.py`, `tests/test_paid_media.py` e na ADR de tracking. Commitar ou descartar essas alterações é decisão do fundador. Só depois a pasta principal pode puxar a branch `claude/marketplaces`, que também altera `webhook.py`.
 - **Palco dos modelos** (branch `claude/experiencia-modelos`): pronto e testado, **não publicado** por decisão do fundador em 28/09.
 

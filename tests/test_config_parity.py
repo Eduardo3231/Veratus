@@ -14,7 +14,7 @@ from veratus_agents.paid_media import AutonomyMode, PaidMediaConfig
 ROOT = Path(__file__).resolve().parents[1]
 CHANNEL_FLAGS = [
     f"{channel}_{suffix}"
-    for channel in ("MERCADO_LIVRE", "SHOPEE", "TIKTOK_SHOP", "META")
+    for channel in ("MERCADO_LIVRE", "SHOPEE", "TIKTOK_SHOP", "META", "AMAZON")
     for suffix in ("ENABLED", "PUBLISH_ENABLED")
 ]
 MUST_BE_FALSE = {
@@ -108,6 +108,7 @@ def test_each_channel_flag_is_false_unless_exactly_true(
         "shopee",
         "tiktok-shop",
         "meta",
+        "amazon",
     }
     for item in channels:
         assert item["enabled"] is False, item["id"]

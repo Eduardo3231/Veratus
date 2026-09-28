@@ -286,6 +286,14 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
         "distribution-supervisor",
         frozenset({"READ_APPROVED_PRODUCT", "CREATE_DRAFT"}),
     ),
+    "amazon-agent": AgentDefinition(
+        "amazon-agent",
+        "Amazon Agent",
+        3,
+        "distribution",
+        "distribution-supervisor",
+        frozenset({"READ_APPROVED_PRODUCT", "CREATE_DRAFT"}),
+    ),
     "sync-monitor-agent": AgentDefinition(
         "sync-monitor-agent",
         "Sync Monitor Agent",
@@ -966,7 +974,13 @@ class CommandEngine:
 
 def simulate_prepare_distribution(
     product_count: int,
-    channels: tuple[str, ...] = ("mercado-livre", "shopee", "tiktok-shop", "meta"),
+    channels: tuple[str, ...] = (
+        "mercado-livre",
+        "shopee",
+        "tiktok-shop",
+        "meta",
+        "amazon",
+    ),
     blocked_sku: str | None = None,
 ) -> dict[str, Any]:
     engine = CommandEngine()
@@ -1089,7 +1103,7 @@ class ParsedCommand:
 
 
 class OperationalRuntime:
-    """Deterministic 14-agent runtime.
+    """Deterministic 15-agent runtime.
 
     The runtime deliberately stops at persisted local drafts. An external API write is
     never performed here; publishing belongs behind the approval and write guard.
@@ -1100,6 +1114,7 @@ class OperationalRuntime:
         "shopee": "shopee-agent",
         "tiktok-shop": "tiktok-shop-agent",
         "meta": "meta-agent",
+        "amazon": "amazon-agent",
     }
 
     def __init__(
@@ -1176,6 +1191,7 @@ class OperationalRuntime:
                     ("shopee", "shopee"),
                     ("tiktok", "tiktok-shop"),
                     ("meta", "meta"),
+                    ("amazon", "amazon"),
                 )
                 if token in normalized
             )
@@ -1210,6 +1226,7 @@ class OperationalRuntime:
             ("shopee", "shopee"),
             ("tiktok", "tiktok-shop"),
             ("meta", "meta"),
+            ("amazon", "amazon"),
         ):
             if "pend" in normalized and token in normalized:
                 return ParsedCommand("channel_pending", (channel,))

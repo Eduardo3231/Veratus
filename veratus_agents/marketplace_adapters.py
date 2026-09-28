@@ -11,6 +11,7 @@ class Marketplace(StrEnum):
     SHOPEE = "shopee"
     TIKTOK_SHOP = "tiktok-shop"
     META = "meta"
+    AMAZON = "amazon"
 
 
 class DistributionDraftError(ValueError):
@@ -22,6 +23,7 @@ CHANNEL_ATTRIBUTE_MAPPINGS: dict[Marketplace, dict[str, str]] = {
     Marketplace.SHOPEE: {"color": "SHOPEE_COLOR", "material": "SHOPEE_MATERIAL"},
     Marketplace.TIKTOK_SHOP: {"color": "TIKTOK_COLOR", "material": "TIKTOK_MATERIAL"},
     Marketplace.META: {"color": "META_COLOR", "material": "META_MATERIAL"},
+    Marketplace.AMAZON: {"color": "AMAZON_COLOR", "material": "AMAZON_MATERIAL"},
 }
 
 CATEGORY_MAPPINGS: dict[Marketplace, dict[str, str]] = {
@@ -48,6 +50,12 @@ CATEGORY_MAPPINGS: dict[Marketplace, dict[str, str]] = {
         "jewelry_accessories/necklace": "PENDING_META_NECKLACE_CATEGORY",
         "jewelry_accessories/bracelet": "PENDING_META_BRACELET_CATEGORY",
         "jewelry_accessories/anklet": "PENDING_META_ANKLET_CATEGORY",
+    },
+    Marketplace.AMAZON: {
+        "Relógios": "PENDING_AMAZON_WATCH_PRODUCT_TYPE",
+        "jewelry_accessories/necklace": "PENDING_AMAZON_NECKLACE_PRODUCT_TYPE",
+        "jewelry_accessories/bracelet": "PENDING_AMAZON_BRACELET_PRODUCT_TYPE",
+        "jewelry_accessories/anklet": "PENDING_AMAZON_ANKLET_PRODUCT_TYPE",
     },
 }
 
@@ -181,6 +189,18 @@ def build_distribution_draft(
                 "google_product_category": CATEGORY_MAPPINGS[channel][
                     _category_mapping_key(product)
                 ],
+            }
+        )
+    elif channel is Marketplace.AMAZON:
+        base.update(
+            {
+                "product_type": CATEGORY_MAPPINGS[channel][
+                    _category_mapping_key(product)
+                ],
+                "marketplace_id": "A2Q3Y263D00KWC",
+                "condition_type": "new_new",
+                "fulfillment": "CONFIRMAR_COM_CONTA",
+                "product_identifier": "CONFIRMAR_GTIN_OU_ISENCAO",
             }
         )
     else:
