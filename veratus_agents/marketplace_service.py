@@ -28,10 +28,12 @@ class MarketplaceConnectionService:
         *,
         mercado_factory: Callable[[], Any] | None = None,
         tiktok_factory: Callable[[], Any] | None = None,
+        shopee_factory: Callable[[], Any] | None = None,
     ) -> None:
         self.store = store
         self.mercado_factory = mercado_factory or self._mercado_client
         self.tiktok_factory = tiktok_factory or self._tiktok_client
+        self.shopee_factory = shopee_factory or self._shopee_client
 
     @staticmethod
     def _mercado_client() -> MercadoLivreReadOnlyClient:
@@ -58,6 +60,12 @@ class MarketplaceConnectionService:
             shop_cipher=os.getenv("TIKTOK_SHOP_SHOP_CIPHER"),
         )
 
+    @staticmethod
+    def _shopee_client() -> Any:
+        from .shopee import shopee_read_client
+
+        return shopee_read_client()
+
     def inspect_all(self, products: list[dict[str, Any]]) -> dict[str, Any]:
         static = connection_status()
         try:
@@ -82,6 +90,8 @@ class MarketplaceConnectionService:
                 reports[channel] = self._inspect_mercado(products, static[channel])
             elif channel == "tiktok-shop":
                 reports[channel] = self._inspect_tiktok(products, static[channel])
+            elif channel == "shopee":
+                reports[channel] = self.inspect_shopee(static[channel])
             else:
                 reports[channel] = self.store.save_connection_check(
                     channel,
@@ -243,6 +253,56 @@ class MarketplaceConnectionService:
             report.update(auth="INVALID", readiness="NOT_READY")
             report["errors"].append(code)
         return self.store.save_connection_check("tiktok-shop", report)
+
+    def inspect_shopee(self, base: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Authorized shop and watch category, read-only."""
+        base = base or connection_status()["shopee"]
+        report = {**base, "channel": "shopee", "api_reads": [], "errors": []}
+        if base["credentials"] != "PRESENT":
+            report.update(readiness="NOT_READY")
+            report["errors"].append("SHOP_NOT_AUTHORIZED")
+            return self.store.save_connection_check("shopee", report)
+        try:
+            client = self.shopee_factory()
+            account = client.account_identity()
+            report["api_reads"].append("GET /api/v2/shop/get_shop_info")
+            report.update(auth="HEALTHY", account="HEALTHY", account_info=account)
+            categories = client.discover_categories("relógio")
+            report["api_reads"].append("GET /api/v2/product/get_category")
+            leaves = [item for item in categories if not item.get("has_children")]
+            if len(leaves) == 1:
+                self.store.upsert_category_mapping(
+                    "shopee",
+                    "accessories/watches",
+                    external_category=str(leaves[0]["external_category_id"]),
+                    status=CategoryMappingStatus.DISCOVERED,
+                )
+                self.store.save_category_details(
+                    "shopee",
+                    "accessories/watches",
+                    {**leaves[0], "required_attributes": []},
+                )
+                report.update(category_discovery="HEALTHY", external_category=leaves[0])
+            else:
+                report.update(
+                    category_discovery="REVIEW_REQUIRED" if leaves else "NOT_FOUND",
+                    category_candidates=leaves[:10],
+                )
+            report.update(
+                attributes="NOT_TESTED",
+                logistics="NOT_TESTED",
+                readback="NOT_TESTED",
+                readiness="CONNECTED_READ_ONLY",
+            )
+        except (MarketplaceApiError, KeyError, RuntimeError) as exc:
+            code = (
+                exc.code
+                if isinstance(exc, MarketplaceApiError)
+                else "CREDENTIALS_INVALID"
+            )
+            report.update(auth="INVALID", readiness="NOT_READY")
+            report["errors"].append(code)
+        return self.store.save_connection_check("shopee", report)
 
     def read_only_sync(self, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
         product_by_sku = {

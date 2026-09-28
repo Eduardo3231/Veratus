@@ -90,23 +90,23 @@ CREDENTIAL_REQUIREMENTS = (
     CredentialRequirement(
         "shopee",
         "SHOPEE_ACCESS_TOKEN",
-        "Token da loja autorizada",
-        True,
-        "OAuth da Shopee Open Platform",
+        "Token da loja autorizada (opcional: a autorização guarda o token cifrado)",
+        False,
+        "/integrations/shopee/oauth/start",
     ),
     CredentialRequirement(
         "shopee",
         "SHOPEE_REFRESH_TOKEN",
-        "Renovar token da loja",
+        "Renovar token da loja (opcional: guardado cifrado pela autorização)",
         False,
-        "Resposta OAuth da Shopee Open Platform",
+        "/integrations/shopee/oauth/start",
     ),
     CredentialRequirement(
         "shopee",
         "SHOPEE_SHOP_ID",
-        "Escopo da loja",
-        True,
-        "Autorização/get shop info da Shopee",
+        "Escopo da loja (opcional: devolvido pela autorização)",
+        False,
+        "/integrations/shopee/oauth/start",
     ),
     CredentialRequirement(
         "tiktok-shop",
@@ -572,22 +572,19 @@ CLIENT_CAPABILITIES = {
         "rate_limits": "PARTIAL",
     },
     "shopee": {
-        key: "API_CONTRACT_UNVERIFIED"
-        for key in (
-            "authentication",
-            "token_refresh",
-            "account_identity",
-            "health_check",
-            "category_discovery",
-            "attribute_discovery",
-            "listing_lookup",
-            "listing_create",
-            "listing_update",
-            "listing_pause",
-            "read_back",
-            "error_normalization",
-            "rate_limits",
-        )
+        "authentication": "IMPLEMENTED",
+        "token_refresh": "IMPLEMENTED",
+        "account_identity": "IMPLEMENTED",
+        "health_check": "IMPLEMENTED",
+        "category_discovery": "IMPLEMENTED",
+        "attribute_discovery": "MISSING",
+        "listing_lookup": "MISSING",
+        "listing_create": "MISSING",
+        "listing_update": "MISSING",
+        "listing_pause": "MISSING",
+        "read_back": "MISSING",
+        "error_normalization": "IMPLEMENTED",
+        "rate_limits": "PARTIAL",
     },
     "tiktok-shop": {
         "authentication": "IMPLEMENTED",
@@ -644,6 +641,15 @@ def connection_status() -> dict[str, Any]:
                     credentials = "PRESENT"
             except (ImportError, RuntimeError):
                 pass
+        if channel == "shopee" and credentials == "PRESENT":
+            # The app keys alone read nothing: the shop must be authorized.
+            try:
+                from .mercado_livre_oauth import persisted_credentials_available
+
+                if not persisted_credentials_available("shopee"):
+                    credentials = "MISSING"
+            except (ImportError, RuntimeError):
+                credentials = "MISSING"
         contract = (
             "VERIFIED_READ_ONLY"
             if channel in {"mercado-livre", "tiktok-shop"}

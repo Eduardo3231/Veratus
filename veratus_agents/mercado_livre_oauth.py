@@ -98,7 +98,7 @@ class StoredTokens:
 
 
 class MercadoLivreOAuthStore:
-    """Durable encrypted OAuth state, tokens and notification queue.
+    """Durable encrypted OAuth state, tokens and notification queue, per channel.
 
     PostgreSQL is used whenever DATABASE_URL is configured. SQLite exists only for
     local development and tests. Raw credentials never leave this class.
@@ -110,7 +110,9 @@ class MercadoLivreOAuthStore:
         encryption_key: str,
         database_url: str | None = None,
         sqlite_path: str | Path | None = None,
+        channel: str = CHANNEL,
     ) -> None:
+        self.channel = channel
         if not encryption_key:
             raise OAuthConfigurationError("TOKEN_ENCRYPTION_KEY_MISSING")
         try:
@@ -126,7 +128,7 @@ class MercadoLivreOAuthStore:
         self._ensure_schema()
 
     @classmethod
-    def from_env(cls) -> MercadoLivreOAuthStore:
+    def from_env(cls, channel: str = CHANNEL) -> MercadoLivreOAuthStore:
         from .config import AgentSettings
 
         settings = AgentSettings.from_env()
@@ -134,6 +136,7 @@ class MercadoLivreOAuthStore:
             encryption_key=os.getenv("VERATUS_TOKEN_ENCRYPTION_KEY", "").strip(),
             database_url=os.getenv("DATABASE_URL", "").strip() or None,
             sqlite_path=settings.runtime_dir / "mercado-livre-oauth.sqlite3",
+            channel=channel,
         )
 
     def _connect_postgres(self):
@@ -215,13 +218,13 @@ class MercadoLivreOAuthStore:
             with self._connect_postgres() as connection:
                 connection.execute(
                     "INSERT INTO marketplace_oauth_states(state_hash,channel,expires_at) VALUES (%s,%s,%s)",
-                    (_state_hash(state), CHANNEL, expires_at),
+                    (_state_hash(state), self.channel, expires_at),
                 )
         else:
             with sqlite3.connect(self.sqlite_path) as connection:
                 connection.execute(
                     "INSERT INTO marketplace_oauth_states(state_hash,channel,expires_at) VALUES (?,?,?)",
-                    (_state_hash(state), CHANNEL, _iso(expires_at)),
+                    (_state_hash(state), self.channel, _iso(expires_at)),
                 )
         return state
 
@@ -236,7 +239,7 @@ class MercadoLivreOAuthStore:
                     """UPDATE marketplace_oauth_states SET consumed_at=%s
                     WHERE state_hash=%s AND channel=%s AND consumed_at IS NULL
                       AND expires_at>%s RETURNING state_hash""",
-                    (now, digest, CHANNEL, now),
+                    (now, digest, self.channel, now),
                 )
                 if cursor.fetchone() is None:
                     raise OAuthStateError("INVALID_OAUTH_STATE")
@@ -245,7 +248,7 @@ class MercadoLivreOAuthStore:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT expires_at,consumed_at FROM marketplace_oauth_states WHERE state_hash=? AND channel=?",
-                (digest, CHANNEL),
+                (digest, self.channel),
             ).fetchone()
             if row is None or row[1] is not None or _parse_datetime(row[0]) <= now:
                 raise OAuthStateError("INVALID_OAUTH_STATE")
@@ -285,7 +288,7 @@ class MercadoLivreOAuthStore:
                     """INSERT INTO marketplace_oauth_tokens(channel,encrypted_payload,updated_at)
                     VALUES (%s,%s,%s) ON CONFLICT(channel) DO UPDATE SET
                     encrypted_payload=EXCLUDED.encrypted_payload,updated_at=EXCLUDED.updated_at""",
-                    (CHANNEL, encrypted, now),
+                    (self.channel, encrypted, now),
                 )
         else:
             with sqlite3.connect(self.sqlite_path) as connection:
@@ -293,7 +296,7 @@ class MercadoLivreOAuthStore:
                     """INSERT INTO marketplace_oauth_tokens(channel,encrypted_payload,updated_at)
                     VALUES (?,?,?) ON CONFLICT(channel) DO UPDATE SET
                     encrypted_payload=excluded.encrypted_payload,updated_at=excluded.updated_at""",
-                    (CHANNEL, encrypted, _iso(now)),
+                    (self.channel, encrypted, _iso(now)),
                 )
         return StoredTokens(
             access_token,
@@ -308,13 +311,13 @@ class MercadoLivreOAuthStore:
             with self._connect_postgres() as connection:
                 row = connection.execute(
                     "SELECT encrypted_payload FROM marketplace_oauth_tokens WHERE channel=%s",
-                    (CHANNEL,),
+                    (self.channel,),
                 ).fetchone()
         else:
             with sqlite3.connect(self.sqlite_path) as connection:
                 row = connection.execute(
                     "SELECT encrypted_payload FROM marketplace_oauth_tokens WHERE channel=?",
-                    (CHANNEL,),
+                    (self.channel,),
                 ).fetchone()
         if row is None:
             if required:
@@ -339,7 +342,7 @@ class MercadoLivreOAuthStore:
         event_id = _event_id(payload)
         record = (
             event_id,
-            CHANNEL,
+            self.channel,
             str(payload["topic"]),
             str(payload["resource"]),
             str(payload["application_id"]),
@@ -374,9 +377,11 @@ class MercadoLivreOAuthStore:
         query = "SELECT COUNT(*) FROM marketplace_notification_queue WHERE channel="
         if self.database_url:
             with self._connect_postgres() as connection:
-                return int(connection.execute(query + "%s", (CHANNEL,)).fetchone()[0])
+                return int(
+                    connection.execute(query + "%s", (self.channel,)).fetchone()[0]
+                )
         with sqlite3.connect(self.sqlite_path) as connection:
-            return int(connection.execute(query + "?", (CHANNEL,)).fetchone()[0])
+            return int(connection.execute(query + "?", (self.channel,)).fetchone()[0])
 
 
 def validate_notification_payload(
@@ -434,8 +439,12 @@ def validate_notification_payload(
     return clean
 
 
-def persisted_credentials_available() -> bool:
+# The store is shared by every marketplace; rows are keyed by channel.
+MarketplaceTokenStore = MercadoLivreOAuthStore
+
+
+def persisted_credentials_available(channel: str = CHANNEL) -> bool:
     try:
-        return MercadoLivreOAuthStore.from_env().has_tokens()
+        return MercadoLivreOAuthStore.from_env(channel).has_tokens()
     except (OAuthConfigurationError, TokenStorageError, OSError):
         return False

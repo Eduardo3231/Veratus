@@ -161,3 +161,55 @@ def test_waits_while_render_wakes_the_instance(monkeypatch) -> None:
     response = tool.request(session, "GET", STATUS[1], wait_seconds=60, pause=0)
 
     assert response.status_code == 200 and session.calls.count(STATUS) == 3
+
+
+def test_connects_a_shopee_shop_and_shows_the_store() -> None:
+    status = ("GET", "/integrations/shopee/status")
+    session = FakeSession(
+        {
+            status: [
+                FakeResponse(
+                    200, {"status": "not_authorized", "token": {"stored": False}}
+                ),
+                FakeResponse(
+                    200,
+                    {
+                        "status": "authorized",
+                        "token": {"expires_at": "2026-09-29T04:00:00+00:00"},
+                    },
+                ),
+            ],
+            ("GET", "/integrations/shopee/oauth/start?format=json"): [
+                FakeResponse(
+                    200, {"authorization_url": "https://partner.shopeemobile.com/x"}
+                )
+            ],
+            ("POST", "/integrations/shopee/check"): [
+                FakeResponse(
+                    200,
+                    {
+                        "status": "completed",
+                        "report": {
+                            "readiness": "CONNECTED_READ_ONLY",
+                            "account": "HEALTHY",
+                            "account_info": {"shop_name": "Veratus", "region": "BR"},
+                            "category_discovery": "REVIEW_REQUIRED",
+                            "category_candidates": [
+                                {"external_category_name": "Relógios de Pulso"},
+                                {"external_category_name": "Relógios Esportivos"},
+                            ],
+                            "errors": [],
+                        },
+                    },
+                )
+            ],
+        }
+    )
+
+    lines = tool.connect(
+        "shopee", "t", session=session, open_browser=print, poll_pause=0
+    )
+
+    assert "Loja: Veratus (BR)" in lines
+    assert "Categorias para escolher: Relógios de Pulso, Relógios Esportivos" in lines
+    assert "Prontidão: conectado em modo leitura" in lines

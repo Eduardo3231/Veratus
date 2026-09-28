@@ -3,6 +3,7 @@
 Uso (PowerShell, na pasta do projeto):
 
     .\\.venv\\Scripts\\python.exe scripts\\conectar_marketplace.py mercado-livre
+    .\\.venv\\Scripts\\python.exe scripts\\conectar_marketplace.py shopee
 
 O comando pede o token de administrador (Render > serviço veratus-leads >
 Environment > VERATUS_ADMIN_TOKEN) sem mostrá-lo na tela, abre a página de
@@ -35,6 +36,17 @@ CHANNELS = {
             "MERCADO_LIVRE_CLIENT_SECRET, com os valores do app no Mercado Livre "
             "Developers."
         ),
+        "check": "/os/connections/refresh",
+    },
+    "shopee": {
+        "name": "Shopee",
+        "status": "/integrations/shopee/status",
+        "start": "/integrations/shopee/oauth/start?format=json",
+        "config_hint": (
+            "Confira no Render (Environment) SHOPEE_PARTNER_ID e SHOPEE_PARTNER_KEY, "
+            "com os valores do app no Shopee Open Platform (App Management)."
+        ),
+        "check": "/integrations/shopee/check",
     },
 }
 ENCRYPTION_HINT = (
@@ -145,6 +157,40 @@ def wait_for_authorization(
     )
 
 
+def report_summary(report: dict[str, Any]) -> list[str]:
+    category = (report.get("external_category") or {}).get("external_category_name")
+    shop = report.get("account_info") or {}
+    lines = []
+    if shop.get("shop_name"):
+        lines.append(f"Loja: {shop['shop_name']} ({shop.get('region') or 'região ?'})")
+    lines += [
+        "Conta: "
+        + ("respondendo" if report.get("account") == "HEALTHY" else "não verificada"),
+        "Categoria de relógios: " + (category or "não encontrada"),
+    ]
+    if report.get("category_candidates"):
+        names = [
+            item.get("external_category_name") for item in report["category_candidates"]
+        ]
+        lines.append("Categorias para escolher: " + ", ".join(map(str, names[:5])))
+    if report.get("required_attributes") is not None:
+        lines.append(
+            f"Atributos obrigatórios da categoria: {report['required_attributes']}"
+        )
+    lines.append(
+        "Prontidão: "
+        + (
+            "conectado em modo leitura"
+            if report.get("readiness") == "CONNECTED_READ_ONLY"
+            else "ainda não pronto"
+        )
+    )
+    if report.get("errors"):
+        lines.append("Erros: " + ", ".join(map(str, report["errors"])))
+    lines.append("Publicação de anúncios: desligada (nenhuma escrita no marketplace)")
+    return lines
+
+
 def readiness_summary(execution: dict[str, Any], action: str) -> list[str]:
     tasks = execution.get("tasks") or []
     task = next(
@@ -153,29 +199,10 @@ def readiness_summary(execution: dict[str, Any], action: str) -> list[str]:
     if task is None:
         return ["A verificação rodou, mas não trouxe o resultado do canal."]
     result = task.get("result") or {}
-    status = result.get("status") or {}
-    category = (status.get("external_category") or {}).get("external_category_name")
-    lines = [
-        "Conta: "
-        + ("respondendo" if status.get("account") == "HEALTHY" else "não verificada"),
-        "Categoria de relógios: " + (category or "não encontrada"),
-    ]
-    if status.get("required_attributes") is not None:
-        lines.append(
-            f"Atributos obrigatórios da categoria: {status['required_attributes']}"
-        )
-    lines.append(
-        "Prontidão: "
-        + (
-            "conectado em modo leitura"
-            if result.get("read_only_connection")
-            else "ainda não pronto"
-        )
-    )
-    if status.get("errors"):
-        lines.append("Erros: " + ", ".join(map(str, status["errors"])))
-    lines.append("Publicação de anúncios: desligada (nenhuma escrita no marketplace)")
-    return lines
+    report = dict(result.get("status") or {})
+    if result.get("read_only_connection"):
+        report["readiness"] = "CONNECTED_READ_ONLY"
+    return report_summary(report)
 
 
 def connect(
@@ -201,14 +228,18 @@ def connect(
         session, channel, before, timeout=poll_timeout, pause=poll_pause
     )
     print("Autorizado. Rodando a verificação dos agentes (só leitura)...")
-    response = request(session, "POST", "/os/connections/refresh")
+    response = request(session, "POST", channel["check"])
     data = _json(response) or {}
     if response.status_code != 200:
         raise ConnectionFailed(
             f"A verificação falhou ({response.status_code}). O token ficou salvo; "
             "rode o comando de novo para repetir a verificação."
         )
-    return readiness_summary(data.get("execution") or {}, channel["readiness_action"])
+    if "readiness_action" in channel:
+        return readiness_summary(
+            data.get("execution") or {}, channel["readiness_action"]
+        )
+    return report_summary(data.get("report") or {})
 
 
 def main(argv: list[str] | None = None) -> int:

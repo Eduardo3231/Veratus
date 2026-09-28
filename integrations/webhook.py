@@ -2258,5 +2258,11 @@ def instagram_process_replies():
     return jsonify({"status": "ok", **result}), 200
 
 
+# Shopee (and future marketplaces): connection routes, read-only.
+from integrations.marketplace_connect import create_blueprint
+
+app.register_blueprint(create_blueprint(_admin_required, _marketplace_store))
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, debug=False)
