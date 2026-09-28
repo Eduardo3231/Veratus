@@ -1,7 +1,32 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 28/09/2026, Claude Code (Meta Pixel).
+**Última atualização:** 28/09/2026, Claude Code (conexões de marketplace).
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
+
+## Conexões de marketplace (28/09)
+
+O fundador vende ou vai vender em Mercado Livre, Shopee e Amazon. Os três conectam em **modo leitura**; a publicação continua bloqueada pelas flags.
+
+Comando único: `.\.venv\Scripts\python.exe scripts\conectar_marketplace.py <mercado-livre|shopee|amazon>`.
+- Pede `VERATUS_ADMIN_TOKEN` sem ecoar.
+- Espera o Render acordar.
+- Diz o que falta configurar.
+- Roda a inspeção do agente.
+
+| Canal | O fundador faz | O sistema faz |
+| --- | --- | --- |
+| Mercado Livre | App ID e Secret Key no Render (`MERCADO_LIVRE_CLIENT_ID`, `MERCADO_LIVRE_CLIENT_SECRET`). Redirect URI no app: `https://veratus.onrender.com/integrations/mercado-livre/oauth/callback` | OAuth já existente. Após autorizar, o gerente roda a verificação: conta, categoria, atributos obrigatórios e busca por SKU |
+| Shopee | App no Shopee Open Platform. Cadastra `SHOPEE_PARTNER_ID` e `SHOPEE_PARTNER_KEY` no Render. Domínio de redirect do app: `veratus.onrender.com` | `/integrations/shopee/oauth/start` → autorização da loja → `/oauth/callback/<state>` troca o código. Token de 4 h renovado sozinho, cifrado no canal `shopee`. Inspeção: dados da loja e categoria de relógio |
+| Amazon | App privado no Seller Central → Autorizar. Cadastra `AMAZON_SP_LWA_CLIENT_ID`, `AMAZON_SP_LWA_CLIENT_SECRET` e `AMAZON_SP_REFRESH_TOKEN` no Render | Token LWA (1 h, em cache), endpoint NA, marketplace `A2Q3Y263D00KWC`. Inspeção: participação no Brasil e product type de relógio |
+
+- **Configuração no Render:**
+  - `VERATUS_TOKEN_ENCRYPTION_KEY` precisa existir (chave Fernet). O comando explica como gerar se faltar.
+  - `SHOPEE_API_HOST`, `SHOPEE_REDIRECT_URI` e `AMAZON_SP_ENDPOINT`/`AMAZON_SP_MARKETPLACE_ID` são opcionais; o código tem os padrões.
+  - As variáveis novas da Amazon **não** foram declaradas no `render.yaml`/`.env.example` porque o Codex tem alterações não commitadas nesses dois arquivos na pasta principal. Declarar depois, mantendo o teste de paridade.
+- **Não verificado ao vivo:** nenhuma das três contas foi conectada ainda. O host da Shopee para contas brasileiras (`partner.shopeemobile.com`) segue a documentação pública; se a Shopee indicar outro host, basta mudar `SHOPEE_API_HOST`.
+- **Próximo passo dos agentes:** registrar o `amazon-agent` (hoje 14 agentes) e os rascunhos de anúncio da Amazon depois da primeira conexão real. Criação de anúncio segue ausente nos três canais, e os relógios não devem ir a anúncio sem foto real (`STOREFRONT_BLOCKERS`).
+- **Pasta principal:** o Codex deixou alterações não commitadas em `integrations/webhook.py`, `render.yaml`, `.env.example`, `veratus_agents/paid_media.py`, `veratus_agents/meta_webhooks.py`, `tests/test_paid_media.py` e na ADR de tracking. Commitar ou descartar essas alterações é decisão do fundador. Só depois a pasta principal pode puxar a branch `claude/marketplaces`, que também altera `webhook.py`.
+- **Palco dos modelos** (branch `claude/experiencia-modelos`): pronto e testado, **não publicado** por decisão do fundador em 28/09.
 
 ## Estado do repositório
 
