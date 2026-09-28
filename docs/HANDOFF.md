@@ -53,8 +53,14 @@ O Pixel `1633870688525258`, pedido pelo fundador, está em `index.html`, `condic
 - O texto da mensagem do WhatsApp nunca vai para a Meta.
 - **Não carrega em `localhost`/`127.*`.** Os testes de navegador também bloqueiam `connect.facebook.net` e `www.facebook.com/tr`, mesmo contra produção, para visitas de teste não entrarem nas métricas.
 - `privacy.html` ganhou a seção "Cookies e medição de anúncios".
+- **Publicado em 28/09** (`fe4de26`, push autorizado pelo fundador).
+- **Verificado em produção:**
+  - o HTML traz o código;
+  - `fbevents.js` e a configuração do Pixel carregam;
+  - `fbq.getState()` mostra o Pixel `1633870688525258` com `eventCount: 1` (PageView).
+- `ViewContent` e `Contact` estão cobertos pelo teste de navegador (`test_meta_pixel_tracks_product_views_and_whatsapp_contacts`).
 - **Não verificado ao vivo:**
-  - a chegada dos eventos no Gerenciador de Eventos (Testar eventos);
+  - a chegada dos eventos no Gerenciador de Eventos (Testar eventos). O navegador automatizado não mostrou a requisição `/tr`;
   - a variável `META_PIXEL_ID` no Render, que o worker de mídia paga lê.
 - Banner de consentimento de cookies: não existe. Decisão do fundador.
 - A ADR de tracking continua pendente; o Pixel cobre a parte "Contact" da opção 1.
