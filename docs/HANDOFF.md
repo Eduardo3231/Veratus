@@ -98,6 +98,30 @@ O fundador aprovou a seção 0 do prompt nesta sessão, com os valores recomenda
 - **Provisório:** `voz.md`, `roteiro.md`, `objecoes.md` e `conversas-teste.yaml` foram escritos nesta sessão a partir do prompt atual do agente. `skills/` está vazio. **Lembrete ao fundador: entregar as skills e o roteiro de venda do pacote.**
 - `PyYAML` entrou em `integrations/requirements.txt`. O Dockerfile copia `config/` e `knowledge/`.
 
+### Fase 5 — Agendador de redes sociais
+
+- `veratus_agents/social_scheduler.py`:
+  - tabelas `scheduled_posts`, `social_approvals`, `social_publications`, `social_media_keywords`, `social_insights` e `social_events`;
+  - status `DRAFT` → `PENDING_APPROVAL` → `APPROVED` → `PUBLISHING` → `PUBLISHED` | `FAILED` | `NEEDS_MANUAL` | `NEEDS_VIDEO` | `BLOCKED`.
+- **Importação:** `python -m veratus_agents.social_scheduler import social/calendario-2026-10.json`.
+  - Aceita lista ou `{"itens": [...]}`, com nomes em português ou inglês (`data_hora`, `formato`, `midias`, `legenda`, `palavras_chave`, `produtos`, `status`).
+  - Horário sem fuso = Brasília. Mídia sem URL vira `https://veratus.onrender.com/social/posts/2026-10/<arquivo>`.
+  - Vídeo entra `NEEDS_VIDEO`; item só de TikTok entra `NEEDS_MANUAL`.
+  - Relógio sem `REAL_PHOTO`, linha de iPhone e mídia em quarentena entram `BLOCKED`, mesmo que o calendário esqueça.
+  - O calendário real não está no repositório (pacote pendente). O teste com um calendário sintético de mesma composição dá 44 itens: 31 para aprovação, 7 vídeos e 6 bloqueados.
+- **Aprovação semanal:** `request-approval` abre um `PUBLISH_APPROVAL` por semana com os `content_hash`. O fundador aprova em `/os/approvals/<id>/approve`. Editar o item depois disso (`edit_item`) tira a aprovação.
+- **Publicação:** `run-due`, por cron do Render a cada 5 min (ação externa, **não criado**). Com `SOCIAL_PUBLISH_ENABLED=false`, só devolve a prévia, sem chamar a Meta e sem item bloqueado. Ligado:
+  - confere se cada mídia responde 200 `image/jpeg` e não está na quarentena;
+  - publica por `meta_content_publisher` (estendido com `create_social_container` para IMAGE/CAROUSEL/STORY, `publish_facebook_page` e `read_facebook_permalink`) e lê o permalink de volta;
+  - é idempotente por id + `content_hash`;
+  - faz 3 tentativas (espera de 10, 20 e 40 min) e depois `FAILED` + alerta.
+  - Story na Página do Facebook fica `NEEDS_MANUAL`. TikTok: `TikTokDraftAdapter` `UNVERIFIED`, devolve `NEEDS_MANUAL`.
+- **Palavras-chave por post:** `instagram_comment_rules.json` ganhou `keyword_replies` (QUERO, CATÁLOGO, PRESENTE, TREVO, CORAÇÃO, LUZ, IPHONE). O id da mídia vem do registro de publicação, e a regra vale só no post que pediu a palavra (`CommentReplyQueue.enqueue(..., media_rules=)`). O envio continua dependendo de `INSTAGRAM_DM_ENABLED`.
+- **Relógios (Fase 2.6):** `refresh-blocks` marca `AGUARDA_ARTE_COM_FOTO` quando o modelo ganha `REAL_PHOTO` e registra o pedido ao Creative Agent. A arte nova entra por `edit_item(media=...)` e o item volta para `PENDING_APPROVAL`. **A recomposição automática da arte não foi implementada:** o layout das joias está nas artes do pacote, que não chegaram.
+- **Métricas:** `insights` lê alcance, salvamentos, comentários e compartilhamentos em +24 h e +7 dias. `report --week` gera o relatório semanal, e `insights_csv` exporta no formato de `social/medicao.csv`.
+- **Rota:** `GET /os/social/posts`.
+- Variáveis: `SOCIAL_PUBLISH_ENABLED=false` e `META_PAGE_ID` (vazio). O Dockerfile copia `social/`.
+
 ## Conexões de marketplace (28/09)
 
 O fundador vende ou vai vender em Mercado Livre, Shopee e Amazon. Os três conectam em **modo leitura**; a publicação continua bloqueada pelas flags.

@@ -133,6 +133,132 @@ def create_container(
     return str(response.json()["id"])
 
 
+def _post_media(
+    session: requests.Session, ig_user_id: str, params: dict[str, Any]
+) -> str:
+    response = session.post(f"{GRAPH_BASE}/{ig_user_id}/media", data=params, timeout=60)
+    response.raise_for_status()
+    return str(response.json()["id"])
+
+
+def create_social_container(
+    session: requests.Session,
+    item: dict[str, Any],
+    ig_user_id: str,
+    access_token: str,
+) -> str:
+    """Contêiner do agendador: IMAGE, CAROUSEL (até 10 imagens) ou STORY.
+
+    ``item`` traz ``type``, ``caption``, ``alt_text`` e ``media_urls``.
+    """
+    media_type, urls = item["type"], list(item["media_urls"])
+    if media_type == "IMAGE":
+        params = {
+            "image_url": urls[0],
+            "caption": item["caption"],
+            "access_token": access_token,
+        }
+        if item.get("alt_text"):
+            params["alt_text"] = item["alt_text"]
+        return _post_media(session, ig_user_id, params)
+    if media_type == "STORY":
+        return _post_media(
+            session,
+            ig_user_id,
+            {
+                "image_url": urls[0],
+                "media_type": "STORIES",
+                "access_token": access_token,
+            },
+        )
+    if media_type == "CAROUSEL":
+        if not 2 <= len(urls) <= 10:
+            raise ValueError("Carrossel precisa de 2 a 10 imagens.")
+        children = [
+            _post_media(
+                session,
+                ig_user_id,
+                {
+                    "image_url": url,
+                    "is_carousel_item": "true",
+                    "access_token": access_token,
+                },
+            )
+            for url in urls
+        ]
+        for child in children:
+            wait_until_ready(session, child, access_token)
+        return _post_media(
+            session,
+            ig_user_id,
+            {
+                "media_type": "CAROUSEL",
+                "children": ",".join(children),
+                "caption": item["caption"],
+                "access_token": access_token,
+            },
+        )
+    raise ValueError(f"Formato não suportado pelo agendador: {media_type}")
+
+
+def publish_facebook_page(
+    session: requests.Session,
+    item: dict[str, Any],
+    page_id: str,
+    access_token: str,
+) -> str:
+    """Post na Página do Facebook: foto única ou várias fotos num post."""
+    urls = list(item["media_urls"])
+    if len(urls) == 1:
+        response = session.post(
+            f"{GRAPH_BASE}/{page_id}/photos",
+            data={
+                "url": urls[0],
+                "caption": item["caption"],
+                "published": "true",
+                "access_token": access_token,
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return str(data.get("post_id") or data["id"])
+    photo_ids = []
+    for url in urls[:10]:
+        response = session.post(
+            f"{GRAPH_BASE}/{page_id}/photos",
+            data={"url": url, "published": "false", "access_token": access_token},
+            timeout=60,
+        )
+        response.raise_for_status()
+        photo_ids.append(str(response.json()["id"]))
+    response = session.post(
+        f"{GRAPH_BASE}/{page_id}/feed",
+        data={
+            "message": item["caption"],
+            "attached_media": json.dumps(
+                [{"media_fbid": photo_id} for photo_id in photo_ids]
+            ),
+            "access_token": access_token,
+        },
+        timeout=60,
+    )
+    response.raise_for_status()
+    return str(response.json()["id"])
+
+
+def read_facebook_permalink(
+    session: requests.Session, post_id: str, access_token: str
+) -> str | None:
+    response = session.get(
+        f"{GRAPH_BASE}/{post_id}",
+        params={"fields": "permalink_url", "access_token": access_token},
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json().get("permalink_url")
+
+
 def wait_until_ready(
     session: requests.Session,
     container_id: str,

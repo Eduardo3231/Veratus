@@ -7,6 +7,7 @@ COPY veratus_agents /app/veratus_agents
 COPY catalog /app/catalog
 COPY config /app/config
 COPY knowledge /app/knowledge
+COPY social /app/social
 COPY landing /app/landing
 RUN addgroup --system veratus && adduser --system --ingroup veratus veratus \
     && mkdir -p /app/runtime \

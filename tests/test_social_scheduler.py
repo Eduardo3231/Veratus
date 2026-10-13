@@ -1,0 +1,502 @@
+"""Agendador de redes sociais (Fase 5) e relógios fora dos planos (Fase 2)."""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import pytest
+
+from veratus_agents import social_scheduler as social
+from veratus_agents.instagram_comments import CommentReplyQueue, load_keyword_replies
+from veratus_agents.operations import ApprovalStatus, CommandEngine, approval_status
+
+ROOT = Path(__file__).resolve().parents[1]
+REAL_CALENDAR = ROOT / "social" / "calendario-2026-10.json"
+START = datetime(2026, 10, 19, 12, 0, tzinfo=timezone.utc)
+JEWELRY = ["noir-clover", "lumiere", "halo-verde", "rosa-aurea"]
+WATCHES = ["ocean-blue", "black-gmt", "arctic-white", "royal-blue", "polar-blue"]
+
+
+def synthetic_calendar() -> list[dict]:
+    """Mesma composição do pacote: 12 feed, 19 stories, 7 vídeos, 6 bloqueados."""
+    items = []
+    when = START
+
+    def add(**fields):
+        nonlocal when
+        when += timedelta(hours=7)
+        items.append(
+            {
+                "id": f"out-{len(items) + 1:02d}",
+                "data_hora": when.astimezone(social.SAO_PAULO).strftime(
+                    "%Y-%m-%d %H:%M"
+                ),
+                "canais": ["instagram", "facebook"],
+                "legenda": "Tom dourado para o dia a dia. Comente QUERO.",
+                "texto_alternativo": "Colar em tom dourado sobre fundo escuro.",
+                "palavras_chave": ["QUERO"],
+                **fields,
+            }
+        )
+
+    for index in range(12):
+        fmt = "carrossel" if index % 4 == 0 else "feed"
+        media = (
+            [f"feed-{index}-a.jpg", f"feed-{index}-b.jpg"]
+            if fmt == "carrossel"
+            else [f"feed-{index}.jpg"]
+        )
+        add(formato=fmt, midias=media, produtos=[JEWELRY[index % 4]])
+    for index in range(19):
+        add(formato="story", midias=[f"story-{index}.jpg"], canais=["instagram"])
+    for index in range(7):
+        add(formato="reel", midias=[], canais=["instagram", "tiktok"])
+    for index, watch in enumerate(WATCHES):
+        add(
+            formato="feed",
+            midias=[f"relogio-{index}.jpg"],
+            produtos=[watch],
+            status="BLOCKED",
+            motivo_bloqueio="esperando foto real",
+        )
+    add(
+        formato="feed",
+        midias=["iphone.jpg"],
+        produtos=[],
+        palavras_chave=["IPHONE"],
+        legenda="Em breve.",
+        status="BLOCKED",
+    )
+    return items
+
+
+@pytest.fixture
+def store(tmp_path):
+    return social.SocialScheduleStore(tmp_path / "social.sqlite3")
+
+
+@pytest.fixture
+def calendar(tmp_path):
+    path = tmp_path / "calendario.json"
+    path.write_text(json.dumps({"itens": synthetic_calendar()}), encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def engine():
+    return CommandEngine()
+
+
+def approve_all(store, engine):
+    for request in social.request_weekly_approvals(store, engine):
+        engine.approvals.resolve(request["approval_id"], ApprovalStatus.APPROVED)
+
+
+class FakePublisher:
+    def __init__(self, fail_times=0):
+        self.calls = []
+        self.fail_times = fail_times
+
+    def publish(self, item):
+        self.calls.append(item["id"])
+        if len(self.calls) <= self.fail_times:
+            raise TimeoutError("meta")
+        return {
+            "instagram": {
+                "id": f"ig-{item['id']}",
+                "permalink": f"https://instagram.com/p/{item['id']}",
+            }
+        }
+
+
+def ok_media(url):
+    return 200, "image/jpeg"
+
+
+# -- importação ---------------------------------------------------------------------
+
+
+def test_import_creates_44_items_with_6_blocked(store, calendar):
+    result = social.import_calendar(store, calendar)
+
+    assert result["items"] == 44
+    assert result["by_status"] == {
+        "PENDING_APPROVAL": 31,
+        "NEEDS_VIDEO": 7,
+        "BLOCKED": 6,
+    }
+    blocked = store.items(status="BLOCKED")
+    assert all("esperando foto real" in i["block_reason"] for i in blocked[:5])
+    assert "LINHA_IPHONE_DEPOIS_DO_TESTE" in blocked[-1]["block_reason"]
+    assert store.get("out-01")["format"] == "CAROUSEL"
+    assert store.get("out-01")["media"][0].startswith(
+        "https://veratus.onrender.com/social/posts/2026-10/"
+    )
+    again = social.import_calendar(store, calendar)
+    # Itens bloqueados e vídeos são reavaliados a cada importação.
+    assert (again["unchanged"], again["updated"]) == (31, 13)
+
+
+@pytest.mark.skipif(not REAL_CALENDAR.exists(), reason="pacote do fundador pendente")
+def test_founder_calendar_imports_44_items(store):
+    result = social.import_calendar(store, REAL_CALENDAR)
+
+    assert result["items"] == 44
+    assert result["by_status"].get("BLOCKED") == 6
+
+
+def test_watch_without_real_photo_is_blocked_even_if_the_calendar_forgets(
+    store, tmp_path
+):
+    path = tmp_path / "c.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "relogio-esquecido",
+                    "data": "2026-10-20 10:00",
+                    "formato": "feed",
+                    "midias": ["ocean.jpg"],
+                    "legenda": "Novo.",
+                    "produtos": ["ocean-blue"],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    social.import_calendar(store, path)
+
+    assert store.get("relogio-esquecido")["status"] == "BLOCKED"
+    assert store.get("relogio-esquecido")["block_reason"] == "NEEDS_REAL_PHOTO"
+
+
+def test_quarantined_media_never_enters_the_plan(store, tmp_path):
+    path = tmp_path / "c.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "quarentena",
+                    "data": "2026-10-20 10:00",
+                    "formato": "feed",
+                    "midias": ["landing/assets/campaign/onyx-box.webp"],
+                    "legenda": "x",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    social.import_calendar(store, path)
+
+    assert "MEDIA_IN_QUARANTINE" in store.get("quarentena")["block_reason"]
+
+
+def test_missing_calendar_reports_the_pending_package(store, tmp_path):
+    with pytest.raises(social.CalendarError, match="pacote do fundador"):
+        social.import_calendar(store, tmp_path / "nao-existe.json")
+
+
+# -- aprovação semanal ------------------------------------------------------------
+
+
+def test_one_approval_per_week_with_content_hashes(store, calendar, engine):
+    social.import_calendar(store, calendar)
+    requests = social.request_weekly_approvals(store, engine)
+
+    weeks = {item["week"] for item in store.items(status="PENDING_APPROVAL")}
+    assert {request["week"] for request in requests} == weeks
+    payload = engine.approvals.requests[requests[0]["approval_id"]].payload
+    assert all(len(item["content_hash"]) == 64 for item in payload["items"])
+    assert social.request_weekly_approvals(store, engine) == []
+
+
+def test_edit_after_approval_goes_back_to_pending(store, calendar, engine):
+    social.import_calendar(store, calendar)
+    approve_all(store, engine)
+    social.sync_approvals(store, lambda rid: approval_status(engine, rid))
+    assert store.get("out-02")["status"] == "APPROVED"
+
+    social.edit_item(store, "out-02", actor="fundador", caption="Legenda nova.")
+
+    assert store.get("out-02")["status"] == "PENDING_APPROVAL"
+    assert store.get("out-02")["approval_id"] is None
+
+
+# -- publicação ---------------------------------------------------------------------
+
+
+def test_run_due_with_flag_off_only_previews(store, calendar, engine):
+    social.import_calendar(store, calendar)
+    approve_all(store, engine)
+    publisher = FakePublisher()
+
+    result = social.run_due(
+        store,
+        publisher=publisher,
+        approval_status=lambda rid: approval_status(engine, rid),
+        enabled=False,
+        now=START + timedelta(days=60),
+    )
+
+    assert result["status"] == "PREVIEW"
+    assert result["external_write"] is False
+    assert publisher.calls == []
+    ids = {item["id"] for item in result["would_publish"]}
+    assert len(ids) == 31
+    blocked = {item["id"] for item in store.items(status="BLOCKED")}
+    assert not ids & blocked
+
+
+def test_run_due_publishes_once_and_reads_back(store, calendar, engine):
+    social.import_calendar(store, calendar)
+    approve_all(store, engine)
+    publisher = FakePublisher()
+    now = START + timedelta(hours=8)
+    kwargs = {
+        "publisher": publisher,
+        "approval_status": lambda rid: approval_status(engine, rid),
+        "enabled": True,
+        "media_check": ok_media,
+        "now": now,
+    }
+
+    first = social.run_due(store, **kwargs)
+    second = social.run_due(store, **kwargs)
+
+    assert first["published"] == ["out-01"]
+    assert second["published"] == []
+    assert publisher.calls == ["out-01"]
+    item = store.get("out-01")
+    assert item["status"] == "PUBLISHED"
+    assert item["permalink"] == "https://instagram.com/p/out-01"
+
+
+def test_failures_retry_three_times_then_alert(store, calendar, engine):
+    social.import_calendar(store, calendar)
+    approve_all(store, engine)
+    publisher = FakePublisher(fail_times=99)
+    alerts = []
+    now = START + timedelta(hours=8)
+    for _ in range(3):
+        social.run_due(
+            store,
+            publisher=publisher,
+            approval_status=lambda rid: approval_status(engine, rid),
+            enabled=True,
+            media_check=ok_media,
+            alert=alerts.append,
+            now=now,
+        )
+        now += timedelta(hours=2)
+
+    assert store.get("out-01")["status"] == "FAILED"
+    assert store.get("out-01")["attempts"] == 3
+    assert alerts and alerts[0]["item_id"] == "out-01"
+
+
+def test_media_that_is_not_a_public_jpeg_is_not_published(store, calendar, engine):
+    social.import_calendar(store, calendar)
+    approve_all(store, engine)
+    publisher = FakePublisher()
+
+    social.run_due(
+        store,
+        publisher=publisher,
+        approval_status=lambda rid: approval_status(engine, rid),
+        enabled=True,
+        media_check=lambda url: (404, "text/html"),
+        now=START + timedelta(hours=8),
+    )
+
+    assert publisher.calls == []
+    assert store.get("out-01")["status"] == "BLOCKED"
+
+
+class FakeGraph:
+    def __init__(self):
+        self.posts = []
+
+    def post(self, url, data=None, timeout=None, **kwargs):
+        self.posts.append((url, dict(data or {})))
+        return _Response(
+            {"id": f"id{len(self.posts)}", "post_id": f"post{len(self.posts)}"}
+        )
+
+    def get(self, url, params=None, timeout=None, **kwargs):
+        if "permalink_url" in (params or {}).get("fields", ""):
+            return _Response({"permalink_url": "https://facebook.com/p/1"})
+        if "status_code" in (params or {}).get("fields", ""):
+            return _Response({"status_code": "FINISHED"})
+        return _Response({"id": "m", "permalink": "https://instagram.com/p/m"})
+
+
+class _Response:
+    def __init__(self, data):
+        self._data = data
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._data
+
+
+def test_meta_publisher_handles_carousel_story_page_and_tiktok():
+    graph = FakeGraph()
+    publisher = social.MetaSocialPublisher(
+        graph, access_token="t", ig_user_id="IG", page_id="PAGE"
+    )
+    carousel = {
+        "id": "c",
+        "format": "CAROUSEL",
+        "caption": "Legenda",
+        "alt_text": "",
+        "media": ["https://x/a.jpg", "https://x/b.jpg"],
+        "channels": ["facebook", "instagram", "tiktok"],
+    }
+    result = publisher.publish(carousel)
+
+    children = [data for url, data in graph.posts if data.get("is_carousel_item")]
+    parent = [data for url, data in graph.posts if data.get("media_type") == "CAROUSEL"]
+    assert len(children) == 2 and parent[0]["children"] == "id1,id2"
+    assert result["instagram"]["permalink"] == "https://instagram.com/p/m"
+    assert result["facebook"]["permalink"] == "https://facebook.com/p/1"
+    assert result["tiktok"]["status"] == "NEEDS_MANUAL"
+
+    story = publisher.publish(
+        {**carousel, "format": "STORY", "media": ["https://x/s.jpg"]}
+    )
+    assert any(data.get("media_type") == "STORIES" for _, data in graph.posts)
+    assert story["facebook"] == {"status": "NEEDS_MANUAL"}
+
+
+# -- relógios: foto real libera a arte nova -----------------------------------------
+
+
+def test_real_photo_asks_the_creative_agent_and_new_art_goes_to_approval(
+    store, calendar
+):
+    social.import_calendar(store, calendar)
+    catalog = social._catalog()
+    catalog["ocean-blue"] = {**catalog["ocean-blue"], "image_status": "REAL_PHOTO"}
+    watch_item = next(
+        item
+        for item in store.items(status="BLOCKED")
+        if item["products"] == ["ocean-blue"]
+    )
+
+    result = social.refresh_blocks(store, catalog)
+
+    assert watch_item["id"] in result["awaiting_creative"]
+    assert store.get(watch_item["id"])["block_reason"] == "AGUARDA_ARTE_COM_FOTO"
+    other = next(
+        i for i in store.items(status="BLOCKED") if i["products"] == ["black-gmt"]
+    )
+    assert other["id"] in result["still_blocked"]
+
+
+# -- palavras-chave por post ------------------------------------------------------
+
+
+def comment(media_id, text, comment_id):
+    return {
+        "object": "instagram",
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "field": "comments",
+                        "value": {
+                            "id": comment_id,
+                            "text": text,
+                            "media": {"id": media_id},
+                            "from": {"id": "fan"},
+                        },
+                    }
+                ]
+            }
+        ],
+    }
+
+
+def test_post_keywords_answer_only_on_their_post(store, calendar, engine, tmp_path):
+    social.import_calendar(store, calendar)
+    approve_all(store, engine)
+    social.run_due(
+        store,
+        publisher=FakePublisher(),
+        approval_status=lambda rid: approval_status(engine, rid),
+        enabled=True,
+        media_check=ok_media,
+        now=START + timedelta(hours=8),
+    )
+    rules = social.media_reply_rules(store, load_keyword_replies())
+    queue = CommentReplyQueue(tmp_path / "ig.sqlite3")
+
+    on_post = queue.enqueue(comment("ig-out-01", "QUERO!", "c1"), [], media_rules=rules)
+    elsewhere = queue.enqueue(comment("outro", "quero", "c2"), [], media_rules=rules)
+
+    assert set(rules) == {"ig-out-01"}
+    assert on_post["queued"] == 1
+    assert elsewhere["ignored"] == 1
+
+
+def test_keyword_replies_pass_the_gate():
+    from veratus_agents.policy import hard_review_customer_reply
+
+    replies = load_keyword_replies()
+    assert set(replies) == {
+        "QUERO",
+        "CATÁLOGO",
+        "PRESENTE",
+        "TREVO",
+        "CORAÇÃO",
+        "LUZ",
+        "IPHONE",
+    }
+    for reply in replies.values():
+        assert hard_review_customer_reply(reply["message"]) == []
+
+
+# -- métricas -----------------------------------------------------------------------
+
+
+def test_insights_at_24h_and_7d_and_weekly_report(store, calendar, engine):
+    social.import_calendar(store, calendar)
+    approve_all(store, engine)
+    published_at = START + timedelta(hours=8)
+    social.run_due(
+        store,
+        publisher=FakePublisher(),
+        approval_status=lambda rid: approval_status(engine, rid),
+        enabled=True,
+        media_check=ok_media,
+        now=published_at,
+    )
+    metrics = {"reach": 1200, "saved": 30, "comments": 8, "shares": 5}
+
+    def fetch(media_id):
+        return metrics
+
+    assert (
+        social.collect_insights(store, fetch, now=published_at + timedelta(hours=1))
+        == []
+    )
+    day = social.collect_insights(store, fetch, now=published_at + timedelta(hours=25))
+    week = social.collect_insights(store, fetch, now=published_at + timedelta(days=8))
+
+    assert [item["checkpoint"] for item in day] == ["24h"]
+    assert [item["checkpoint"] for item in week] == ["7d"]
+    report = social.weekly_report(store, store.get("out-01")["week"])
+    assert report["top"] == ["out-01"]
+    assert "salvamentos" in social.insights_csv(store).splitlines()[0]
+
+
+def test_cli_reports_missing_calendar(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("VERATUS_AGENT_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setenv("DATABASE_URL", "")
+
+    assert social.main(["import", str(tmp_path / "x.json")]) == 2
+    assert "pacote do fundador" in capsys.readouterr().out

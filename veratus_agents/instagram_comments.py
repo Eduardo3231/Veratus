@@ -95,6 +95,12 @@ def load_rules(path: Path = RULES_PATH) -> tuple[str, list[ReplyRule]]:
     return data["landing_url"], rules
 
 
+def load_keyword_replies(path: Path = RULES_PATH) -> dict[str, dict[str, str]]:
+    """Textos de resposta por palavra-chave de post (QUERO, CATÁLOGO, ...)."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return dict(data.get("keyword_replies") or {})
+
+
 def match_rule(text: str, rules: list[ReplyRule]) -> ReplyRule | None:
     tokens = set(re.findall(r"[a-z0-9]+", normalize_text(text)))
     return next((rule for rule in rules if rule.keywords & tokens), None)
@@ -187,13 +193,19 @@ class CommentReplyQueue(SqlStore):
         rules: list[ReplyRule],
         *,
         own_account_id: str = "",
+        media_rules: dict[str, list[ReplyRule]] | None = None,
     ) -> dict[str, int]:
-        """Queue matching comments once; other comments are not stored at all."""
+        """Queue matching comments once; other comments are not stored at all.
+
+        ``media_rules`` are the keywords a published post asked for; they apply
+        only to comments on that post and win over the global rules.
+        """
         counts = {"queued": 0, "ignored": 0, "duplicates": 0}
         now = _now().isoformat()
         with self._connect() as (db, mark):
             for event in parse_comments(payload):
-                rule = match_rule(event.text, rules)
+                specific = (media_rules or {}).get(event.media_id, [])
+                rule = match_rule(event.text, [*specific, *rules])
                 if rule is None or (own_account_id and event.from_id == own_account_id):
                     counts["ignored"] += 1
                     continue

@@ -26,6 +26,7 @@ MUST_BE_FALSE = {
     "INSTAGRAM_MESSAGING_ENABLED",
     "MERCADO_LIVRE_ANSWERS_ENABLED",
     "PAYMENT_LINKS_ENABLED",
+    "SOCIAL_PUBLISH_ENABLED",
     *CHANNEL_FLAGS,
 }
 # Platform/container settings live only in the Blueprint; the MailerLite key is

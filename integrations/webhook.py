@@ -2362,6 +2362,37 @@ def _start_instagram_token_watcher():
         )
 
 
+@lru_cache(maxsize=4)
+def _social_store_cached(operations_db, database_url):
+    from veratus_agents.social_scheduler import SocialScheduleStore
+
+    return SocialScheduleStore(operations_db, database_url)
+
+
+def _social_store():
+    settings = AgentSettings.from_env()
+    return _social_store_cached(str(settings.operations_db), settings.database_url)
+
+
+def _post_keyword_rules():
+    """Palavras-chave dos posts publicados pelo agendador, por id de mídia."""
+    from veratus_agents.instagram_comments import load_keyword_replies
+    from veratus_agents.social_scheduler import media_reply_rules
+
+    return media_reply_rules(_social_store(), load_keyword_replies())
+
+
+@app.route("/os/social/posts", methods=["GET"])
+def os_social_posts():
+    denied = _admin_required()
+    if denied:
+        return denied
+    status = request.args.get("status") or None
+    return jsonify(
+        {"posts": _social_store().items(status=status, week=request.args.get("week"))}
+    ), 200
+
+
 @app.route("/integrations/instagram/token/status", methods=["GET"])
 def instagram_token_status():
     denied = _admin_required()
@@ -2390,7 +2421,9 @@ def instagram_webhook():
 
     _, rules = load_rules()
     own_account = os.getenv("INSTAGRAM_USER_ID", "").strip()
-    counts = _instagram_queue().enqueue(payload, rules, own_account_id=own_account)
+    counts = _instagram_queue().enqueue(
+        payload, rules, own_account_id=own_account, media_rules=_post_keyword_rules()
+    )
     # Direct (campo messages): guarda a conversa; responder segue o nível do canal.
     from veratus_agents.channel_adapters import parse_instagram_messages
 
@@ -2445,6 +2478,10 @@ def instagram_process_replies():
     )
 
     landing_url, rules = load_rules()
+    rules = [
+        *rules,
+        *(rule for items in _post_keyword_rules().values() for rule in items),
+    ]
     result = _instagram_queue().process(
         client=InstagramClient.from_env(token=_instagram_token_store().current()),
         enabled=dm_enabled(),
