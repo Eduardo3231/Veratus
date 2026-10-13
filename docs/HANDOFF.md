@@ -40,6 +40,64 @@ O fundador aprovou a seção 0 do prompt nesta sessão, com os valores recomenda
 - Fotos reais: o fluxo não mudou (`incoming/relogios/<id>.jpg` → `scripts/import_watch_photos.py --sem-marca-de-terceiros`). A quarentena não mudou.
 - Testes: `tests/test_watch_readiness.py`.
 
+### Fase 3 — Atendimento autônomo (Sales Agent V2)
+
+- **Módulos:**
+  - `veratus_agents/conversations.py`: motor, classificador, níveis, gate, fila, disjuntor, alertas, prontidão, métricas e eval;
+  - `veratus_agents/channel_adapters.py`: adaptadores e alerta ao fundador;
+  - `veratus_agents/payments.py`: Mercado Pago.
+- **Pipeline:** classificar → contexto (`knowledge/`, produto, origem, pedido) → rascunho → revisor (no modelo real) → gate → decidir → adaptador → auditoria (`cv_events`). Se o gate reprova, há uma reescrita; se reprova de novo, a conversa vai para `HUMAN` com `IA_TRAVADA`. Mensagem repetida pelo webhook é processada uma vez só.
+- **Níveis:** `CONVERSATION_MODE_<CANAL>` (padrão `SHADOW`).
+  - `AUTO_SAFE` envia sozinho saudação, catálogo, produto, preço, frete, prazo e como pedir.
+  - `AUTO` envia também fechamento, coleta de dados, link, status e rastreio.
+  - Risco 2 e intenção desconhecida nunca saem sozinhos.
+  - Mesmo em `AUTO`, nada sai sem a chave do canal (`WHATSAPP_SEND_ENABLED`, `INSTAGRAM_MESSAGING_ENABLED`, `MERCADO_LIVRE_ANSWERS_ENABLED`). Quando o envio é bloqueado, o rascunho volta para a fila com o motivo.
+- **Gatilhos de passagem ao fundador** (`HUMAN`): atendente, reclamação/Procon/Reclame Aqui, problema de pagamento (inclusive comprovante), fora da política (desconto pela 2ª vez, troca fora do prazo, entrega expressa), fraude (enviar antes de pagar, pagar fora do link, trocar endereço depois de pago), só uma pessoa faz (nota fiscal, ligação, personalização, atacado), fora de vendas, IA travada (3 mensagens sem avanço ou 2 reprovações do gate).
+  - **Interpretação registrada:** o 9º gatilho, fato não confirmado, *não* põe a conversa em `HUMAN`. O agente responde "a equipe confirma" e o fundador recebe o alerta, mas a conversa continua (o prompt diz que ele "não bloqueia o resto da conversa"). Os outros oito param a conversa.
+- **Alerta ao fundador:**
+  - template de utilidade `alerta_fundador` para `FOUNDER_ALERT_WHATSAPP` (motivo, resumo de até 3 linhas sem telefone/e-mail, sugestão);
+  - fallback por e-mail (`FOUNDER_ALERT_EMAIL` + `SMTP_*`);
+  - sem nada configurado, o alerta fica em `GET /os/conversations/alerts`.
+  - A conversa volta para `BOT` com `POST /os/conversations/<canal>/<id>/state` `{"state":"BOT","actor":...}`.
+- **Disjuntor:** duas reprovações do gate em uma hora, ou uma reclamação, rebaixam o canal um nível (`cv_channel_caps`) e alertam o fundador. `GET /os/conversations/readiness` calcula os critérios (50 conversas com 90% aprovadas sem edição e nenhuma reprovação; uma semana com 95%; 10 vendas sem erro) e abre um `AUTONOMY_CHANGE`. Subir de nível é mudar a variável no Render, nunca automático.
+- **Pagamento:**
+  - preferência com `external_reference` = id do pedido, parcelado com juros do cliente;
+  - `POST /integrations/mercado-pago/webhook` valida `x-signature` (HMAC, tolerância de 10 min) e lê o pagamento de volta antes de `PAID`: `approved`, mesmo pedido, valor ≥ pedido, BRL;
+  - comprovante enviado pelo cliente vira passagem ao fundador, nunca confirmação.
+- **Dados do cliente:** só depois do "sim" (fechamento), cifrados com `VERATUS_TOKEN_ENCRYPTION_KEY` em `cv_customer_data`. Nunca entram na auditoria, no log nem no Orders Ledger. **Proposta de retenção para o fundador decidir:** apagar 90 dias depois da entrega (`ConversationStore.purge_customer_data`); as obrigações fiscais ficam com o documento fiscal, não com a conversa.
+- **Adaptadores:**
+  - WhatsApp: atual, mais templates de utilidade e marketing só com opt-in registrado (`marketing_allowed`);
+  - Instagram Direct: campo `messages` do webhook atual, `DirectInbox` cifrado, janela de 24 h, tag `HUMAN_AGENT` só para texto escrito por pessoa;
+  - Mercado Livre: perguntas (`/my/received_questions/search`, `/answers`) e pós-venda (`/messages/packs`). O gate do canal proíbe link, @, telefone, e-mail e convite para outro canal;
+  - Shopee, TikTok Shop e Amazon: `API_CONTRACT_UNVERIFIED`, o rascunho vai para a fila para o fundador colar.
+- **Rotas** (admin):
+  - `POST /os/conversations/process` `{channel}`: processa as mensagens novas. Precisa de um cron no Render a cada minuto, que é ação externa e **não foi criado**;
+  - `GET /os/conversations`, `/queue`, `/metrics`, `/readiness`, `/alerts` e `/adapters`;
+  - `POST /os/conversations/queue/<id>/approve|reject`;
+  - `POST /os/conversations/<canal>/<id>/state`.
+- **Métricas por canal e por nível:** tempo da primeira resposta, aprovadas com e sem edição, passagens por motivo, conversa → pedido, pedidos pagos e reprovações do gate.
+- **`test_no_cold_outreach.py`:** responder no Direct exige endereçar pelo id de quem escreveu. O teste passou a permitir só `veratus_agents/channel_adapters.py` (como já fazia com `whatsapp.py`) e ganhou um teste novo provando que esse adaptador recusa quem nunca escreveu ou está fora da janela.
+- **Testes:**
+  - `tests/test_conversations.py`: do "oi" ao link em `AUTO` com cliente falso; cada gatilho; disjuntor; pagamento; contrato dos adaptadores;
+  - pipeline pelas rotas com `requests.Session.post` e `requests.post` falhando em qualquer chamada: nada sai com as chaves desligadas.
+
+### Fase 4 — Repertório (`knowledge/`)
+
+- `veratus_agents/knowledge.py` carrega e valida `voz.md`, `roteiro.md`, `objecoes.md`, `fatos.yaml`, `ofertas.yaml` e `skills/*.md`.
+- `CONFIRMED_SALES_FACTS` agora vem de `fatos.yaml` (só `CONFIRMED`), com os mesmos `evidence_ref`; os fatos embutidos ficam como reserva.
+- Fatos novos confirmados:
+  - `relogios-modelos`;
+  - `relogios-sem-marca-de-terceiros`;
+  - `formas-pagamento`: Pix ou link do Mercado Pago, juros do parcelado com o cliente (seção 0).
+- Pendentes, que viram "a equipe confirma":
+  - material, especificações, origem/prazo, preço das joias e garantia;
+  - número de parcelas, que segue em `SALES_MUST_CONFIRM_WITH_TEAM`.
+- `ofertas.yaml`: só `ACTIVE` dentro da validade chega ao agente. O exemplo é `DRAFT`, um kit sem desconto.
+- `python -m veratus_agents.knowledge lint`: reprova pressão, escassez, material, garantia, origem, marca de terceiros, desconto e fornecedor (o gate ganhou "menção a fornecedor"). Linhas com "nunca", "não diga", "proibido" ou "evite" são regras e não são reprovadas.
+- `python -m veratus_agents.knowledge eval`: roda `conversas-teste.yaml` com o modelo simulado (`TemplateSalesModel`); `--live` usa o modelo real e tem custo. Ambos rodam no CI (`verify.yml`) e o CI quebra em caso obrigatório.
+- **Provisório:** `voz.md`, `roteiro.md`, `objecoes.md` e `conversas-teste.yaml` foram escritos nesta sessão a partir do prompt atual do agente. `skills/` está vazio. **Lembrete ao fundador: entregar as skills e o roteiro de venda do pacote.**
+- `PyYAML` entrou em `integrations/requirements.txt`. O Dockerfile copia `config/` e `knowledge/`.
+
 ## Conexões de marketplace (28/09)
 
 O fundador vende ou vai vender em Mercado Livre, Shopee e Amazon. Os três conectam em **modo leitura**; a publicação continua bloqueada pelas flags.

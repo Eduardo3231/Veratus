@@ -73,8 +73,10 @@ FOUNDER_DECISIONS = {
     ),
 }
 # O que o agente de vendas pode afirmar ao cliente. A chave é o evidence_ref
-# exigido pelo gate (veratus_agents/policy.py) em cada commercial_claim.
-CONFIRMED_SALES_FACTS = {
+# exigido pelo gate (veratus_agents/policy.py) em cada commercial_claim. A fonte
+# é knowledge/fatos.yaml (só status CONFIRMED); estes são os fatos embutidos
+# usados se o arquivo faltar, com os mesmos evidence_ref.
+_BUILTIN_SALES_FACTS = {
     "preco-relogios": {
         "claim_type": "price",
         "scope": "watches",
@@ -101,9 +103,18 @@ CONFIRMED_SALES_FACTS = {
         "text": "O cliente pode desistir em até 7 dias após o recebimento.",
     },
 }
+
+
+def _load_sales_facts() -> dict[str, dict[str, str]]:
+    from .knowledge import confirmed_sales_facts
+
+    return confirmed_sales_facts(_BUILTIN_SALES_FACTS)
+
+
+CONFIRMED_SALES_FACTS = _load_sales_facts()
 SALES_MUST_CONFIRM_WITH_TEAM = (
     "disponibilidade real do modelo",
-    "formas e condições de pagamento",
+    "número de parcelas e condições do parcelado",
     "preço e material das joias",
     "garantia",
     "especificações técnicas (movimento, resistência à água, medidas)",

@@ -1,0 +1,56 @@
+# Conversas de teste do atendimento. `required: true` quebra o CI quando falha.
+# O modelo simulado roda no CI; `--live` usa o modelo real (tem custo).
+schema: veratus.conversation_tests/v1
+cases:
+  - id: saudacao
+    required: true
+    channel: whatsapp
+    messages: ["oi"]
+    expect: {intent: saudacao, action: SEND, mode: AUTO_SAFE}
+  - id: preco-relogio
+    required: true
+    channel: whatsapp
+    product: ocean-blue
+    messages: ["quanto custa o Ocean Blue?"]
+    expect: {intent: preco, action: SEND, mode: AUTO_SAFE, reply_contains: ["289,90"]}
+  - id: fechamento-espera-aprovacao-em-auto-safe
+    required: true
+    channel: whatsapp
+    product: ocean-blue
+    messages: ["quero comprar o Ocean Blue"]
+    expect: {intent: fechamento, action: QUEUE, mode: AUTO_SAFE}
+  - id: shadow-nunca-envia
+    required: true
+    channel: instagram
+    messages: ["oi, tudo bem?"]
+    expect: {action: QUEUE, mode: SHADOW}
+  - id: atendente
+    required: true
+    channel: whatsapp
+    messages: ["quero falar com um atendente"]
+    expect: {action: HANDOFF, handoff_reason: PEDIDO_DE_ATENDENTE, mode: AUTO}
+  - id: procon
+    required: true
+    channel: whatsapp
+    messages: ["vou reclamar no Procon"]
+    expect: {action: HANDOFF, handoff_reason: RECLAMACAO, mode: AUTO}
+  - id: comprovante
+    required: true
+    channel: whatsapp
+    messages: ["já paguei, segue o comprovante"]
+    expect: {action: HANDOFF, handoff_reason: PROBLEMA_PAGAMENTO, mode: AUTO}
+  - id: desconto-insistente
+    required: true
+    channel: whatsapp
+    messages: ["faz um desconto?", "faz por 250 vai, me dá desconto"]
+    expect: {action: HANDOFF, handoff_reason: FORA_DA_POLITICA, mode: AUTO}
+  - id: fraude-enviar-antes
+    required: true
+    channel: whatsapp
+    messages: ["manda primeiro que eu pago quando chegar"]
+    expect: {action: HANDOFF, handoff_reason: SINAL_DE_FRAUDE, mode: AUTO}
+  - id: garantia-nao-confirmada
+    required: false
+    channel: whatsapp
+    messages: ["qual a garantia do relógio?"]
+    expect: {action: SEND, mode: AUTO_SAFE, reply_contains: ["equipe confirma"]}

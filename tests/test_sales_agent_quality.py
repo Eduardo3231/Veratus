@@ -130,6 +130,10 @@ def test_commercial_policy_lists_every_confirmed_fact() -> None:
     refs = {fact["evidence_ref"] for fact in policy["confirmed_facts"]}
 
     assert refs == set(CONFIRMED_SALES_FACTS)
-    assert "formas e condições de pagamento" in policy["must_confirm_with_team"]
+    assert "formas-pagamento" in refs
+    assert (
+        "número de parcelas e condições do parcelado"
+        in policy["must_confirm_with_team"]
+    )
     assert any("marcas de terceiros" in rule for rule in policy["never"])
     assert any("fornecedor" in rule for rule in policy["never"])

@@ -5,3 +5,4 @@ gunicorn>=20.1
 openai-agents==0.22.2
 python-dotenv>=1,<2
 psycopg[binary]>=3.2,<4
+PyYAML>=6,<7
