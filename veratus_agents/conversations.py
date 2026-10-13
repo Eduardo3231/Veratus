@@ -81,6 +81,11 @@ HANDOFF_REASONS = (
 # O fato não confirmado não para a conversa: a equipe confirma e o fundador é
 # avisado, mas o agente segue nos demais assuntos.
 NON_BLOCKING_REASONS = frozenset({"FATO_NAO_CONFIRMADO"})
+# Mensagens transacionais usam sempre o texto determinístico: o link de
+# pagamento e o status do pedido não dependem do modelo.
+TRANSACTIONAL_INTENTS = frozenset(
+    {"dados_pedido", "link_pagamento", "status_pedido", "rastreio", "fato_pendente"}
+)
 STALL_LIMIT = 3
 GATE_FAILURES_TO_TRIP = 2
 BREAKER_WINDOW = timedelta(hours=1)
@@ -1314,11 +1319,12 @@ class ConversationEngine:
             request.payment_url = outcome.get("url")
             if outcome.get("blocked"):
                 risk = 9  # sem link criado, o fundador decide o que dizer
-        draft = self.model.draft(request)
+        model = TemplateSalesModel() if intent in TRANSACTIONAL_INTENTS else self.model
+        draft = model.draft(request)
         reply, issues = self._gate(draft, channel, product)
         if issues:
             self._gate_failed(key, channel, mode, intent, issues)
-            draft = self.model.rewrite(request, draft, issues)
+            draft = model.rewrite(request, draft, issues)
             reply, issues = self._gate(draft, channel, product)
             if issues:
                 self._gate_failed(key, channel, mode, intent, issues)
@@ -1592,6 +1598,10 @@ class ConversationEngine:
         if price is None:
             return {"handoff": "FATO_NAO_CONFIRMADO"}
         self.store.save_customer_data(key, inbound.text)
+        adapter = self.adapters.get(channel)
+        if hasattr(adapter, "redact"):
+            # O texto com nome e endereço fica só cifrado, não na caixa do canal.
+            adapter.redact(inbound.message_id)
         self.store.update(key, awaiting_data=0)
         self.store.event(
             channel, key, "CUSTOMER_DATA_RECEIVED", detail={"encrypted": True}

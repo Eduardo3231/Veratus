@@ -2,3 +2,4 @@
 -r api/requirements.txt
 pytest>=8,<10
 ruff==0.16.8
+Pillow>=10,<13

@@ -138,6 +138,58 @@ O fundador aprovou a seção 0 do prompt nesta sessão, com os valores recomenda
   - `SCHEDULE_APPROVED_CONTENT` só para item `APPROVED`.
 - A auditoria operacional do gerente ("analise o estado atual…") passou a acionar os quatro: níveis por canal, links de pagamento, pós-venda e agendador. O comando de distribuição não os aciona.
 
+### Verificação desta rodada (13/10)
+
+- `pytest -q`: 372 passed, 4 skipped. Os pulados são os casos dourados e o calendário real, que esperam o pacote, além do teste de navegador já existente. Rodado em Python 3.13 e 3.11 (o do CI).
+- `ruff check .` e `ruff format --check .`: limpos.
+- `python -m veratus_agents.knowledge lint`: 0 problemas. `python -m veratus_agents.knowledge eval`: 10/10 com o modelo simulado.
+- Com todas as chaves desligadas, nenhum POST externo (teste com `requests` falhando em qualquer POST, pelas rotas). `run-due` desligado devolve só a prévia, sem item bloqueado.
+- `requirements-dev.txt` ganhou `Pillow` (o teste do importador de fotos já dependia dele e o CI não instalava). `veratus_agents/__init__.py` importa o workflow só quando usado, para `python -m veratus_agents.<módulo>` rodar sem aviso.
+- **Nada foi ligado nem publicado:** nenhuma flag, push para `main`, deploy, cron, webhook nem template criado na Meta, no Mercado Pago ou no Render.
+
+### Para ligar cada canal quando as chaves chegarem
+
+Sempre na ordem: chave → teste em `SHADOW` → readiness → aprovação → subir um nível. Cada mudança de variável no Render é decisão do fundador no momento da ação.
+
+1. **Pacote:** commitar `config/channel_fees_2026-10.json` (substitui o provisório), `tests/golden/channel_economics_cases.json`, `knowledge/` (voz, roteiro, objeções, skills), `social/calendario-2026-10.json`/`.csv` e `landing/social/posts/2026-10/*.jpg`. Depois:
+   - rodar `pytest -q tests/test_channel_economics.py` (os 60 casos);
+   - rodar `knowledge lint` e `knowledge eval`.
+2. **Cron do processamento:** cron no Render a cada minuto chamando `POST /os/conversations/process` com `{"channel":"whatsapp"}` (e um por canal ligado), com `X-Veratus-Admin-Token`.
+3. **WhatsApp:**
+   - aprovar na Meta os templates de utilidade `pedido_confirmado`, `pedido_enviado` e `alerta_fundador` (parâmetros: motivo, resumo e sugestão);
+   - cadastrar `FOUNDER_ALERT_WHATSAPP` no Render;
+   - manter `CONVERSATION_MODE_WHATSAPP=SHADOW` e acompanhar `/os/conversations/queue` e `/readiness`;
+   - quando o readiness abrir o `AUTONOMY_CHANGE` e o fundador aprovar: `WHATSAPP_SEND_ENABLED=true` e o novo nível.
+4. **Mercado Pago:**
+   - `MERCADO_PAGO_ACCESS_TOKEN` e `MERCADO_PAGO_WEBHOOK_SECRET` no Render;
+   - webhook no painel do Mercado Pago para `https://veratus.onrender.com/integrations/mercado-pago/webhook` (tópico Pagamentos);
+   - testar com usuário de teste;
+   - só então `PAYMENT_LINKS_ENABLED=true`.
+5. **Instagram Direct:**
+   - assinar o campo `messages` no app da Meta (o webhook é o mesmo de `/integrations/instagram/webhook`);
+   - permissão `instagram_business_manage_messages`;
+   - `CONVERSATION_MODE_INSTAGRAM` em `SHADOW`;
+   - depois do readiness, `INSTAGRAM_MESSAGING_ENABLED=true`.
+6. **Mercado Livre:** conta já conectada por OAuth (`scripts/conectar_marketplace.py mercado-livre`); `MERCADO_LIVRE_SELLER_ID` para pós-venda; depois do readiness, `MERCADO_LIVRE_ANSWERS_ENABLED=true`.
+7. **Shopee, TikTok Shop e Amazon:** os rascunhos ficam na fila (`API_CONTRACT_UNVERIFIED`) para colar no painel. Para automatizar, falta verificar o contrato da API de chat de cada um.
+8. **Redes sociais:**
+   - `import`, depois `request-approval`, depois aprovar cada semana em `/os/approvals`;
+   - cron no Render a cada 5 min com `python -m veratus_agents.social_scheduler run-due`;
+   - `META_PAGE_ID` para publicar na Página;
+   - conferir a prévia e então `SOCIAL_PUBLISH_ENABLED=true`;
+   - `insights` diário por cron e `report --week` às segundas.
+9. **Alerta por e-mail (opcional):** `FOUNDER_ALERT_EMAIL` e `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`.
+
+### Decisões abertas desta rodada
+
+1. **Pacote e skills de venda:** entregar os arquivos listados acima. Sem eles, taxas e repertório são provisórios.
+2. Prazo de retenção dos dados do cliente (proposta: 90 dias depois da entrega).
+3. Custo real de R$ 65 versionado (ver Fase 1): migrar para o Product Master e trocar os testes por custo fictício.
+4. Gatilho "fato não confirmado": confirmar a interpretação (alerta sem parar a conversa).
+5. Nível inicial de cada canal fora do WhatsApp: todos em `SHADOW`.
+6. Recomposição automática das artes de relógio com a foto real: depende do layout das artes do pacote.
+7. **Fase 7 (iPhones) não foi feita:** pelo prompt, só depois do primeiro teste de 14 dias. Itens de iPhone no calendário e posts ficam `BLOCKED` (`LINHA_IPHONE_DEPOIS_DO_TESTE`).
+
 ## Conexões de marketplace (28/09)
 
 O fundador vende ou vai vender em Mercado Livre, Shopee e Amazon. Os três conectam em **modo leitura**; a publicação continua bloqueada pelas flags.
@@ -255,7 +307,7 @@ Anúncio pago e post de relógio continuam bloqueados até a foto real do item e
 4. Economics: frete pago pela Veratus, taxa de pagamento e tributo (UNVERIFIED).
 5. Preços das joias: nenhuma fonte real (9 × NEEDS_PRICING).
 6. Fornecedor e mídia com marca no histórico do Git: reescrever ou não.
-7. `VERATUS_SELLER_DOCUMENT`, `INSTAGRAM_ACCESS_TOKEN` e `OPENAI_API_KEY` no Render; número do WhatsApp Cloud API; formas de pagamento, que o agente ainda manda confirmar com a equipe.
+7. `VERATUS_SELLER_DOCUMENT`, `INSTAGRAM_ACCESS_TOKEN` e `OPENAI_API_KEY` no Render; número do WhatsApp Cloud API. Formas de pagamento decididas em 13/10: Pix + link do Mercado Pago, juros do parcelado com o cliente.
 
 ## Não faça
 
@@ -266,4 +318,6 @@ Anúncio pago e post de relógio continuam bloqueados até a foto real do item e
 
 ## Próximo passo sugerido
 
-1. Receber as fotos das peças (`incoming/relogios/<id>.jpg`) e rodar o importador para liberar canais externos.
+1. Entregar o pacote do prompt de canais e as skills de venda (`knowledge/skills/`) e rodar os casos dourados.
+2. Receber as fotos das peças (`incoming/relogios/<id>.jpg`) e rodar o importador para liberar canais externos.
+3. Ligar o cron de `/os/conversations/process` com o WhatsApp em `SHADOW` e acompanhar o readiness.

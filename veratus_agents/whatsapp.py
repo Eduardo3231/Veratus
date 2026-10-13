@@ -479,6 +479,18 @@ class WhatsAppChannel(SqlStore):
             {**dict(row), "utm": json.loads(row["utm_json"] or "{}")} for row in rows
         ]
 
+    def redact_inbound(self, message_id: str) -> None:
+        """Nome, CEP e endereço ficam só cifrados no atendimento, não aqui."""
+        with self._connect() as (db, mark):
+            db.execute(
+                self._sql(
+                    "UPDATE wa_messages SET body = ? "
+                    "WHERE message_id = ? AND direction = 'IN'",
+                    mark,
+                ),
+                ["[dados do pedido guardados cifrados]", message_id],
+            )
+
     def mark_inbound(self, message_id: str, status: str) -> None:
         with self._connect() as (db, mark):
             db.execute(

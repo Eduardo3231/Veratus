@@ -311,6 +311,8 @@ def test_whatsapp_conversation_reaches_the_payment_link_in_auto(tmp_path):
     assert "01310-100" in stored
     events = json.dumps(engine.store.events())
     assert "01310" not in events and "Paulista" not in events
+    inbox = json.dumps(wa.get(conversation["conversation_id"]), default=str)
+    assert "01310" not in inbox and "Paulista" not in inbox
 
 
 def test_customer_data_is_not_collected_before_the_yes(tmp_path):

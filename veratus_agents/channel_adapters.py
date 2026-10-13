@@ -33,6 +33,7 @@ from .sqlstore import SqlStore
 SERVICE_WINDOW = timedelta(hours=24)
 HUMAN_AGENT_WINDOW = timedelta(days=7)
 UTILITY_TEMPLATES = ("pedido_confirmado", "pedido_enviado", "alerta_fundador")
+REDACTED_BODY = "[dados do pedido guardados cifrados]"
 
 
 def _now() -> datetime:
@@ -107,6 +108,9 @@ class WhatsAppAdapter:
 
     def mark(self, message_id: str, status: str) -> None:
         self.wa.mark_inbound(message_id, status)
+
+    def redact(self, message_id: str) -> None:
+        self.wa.redact_inbound(message_id)
 
 
 def send_whatsapp_template(
@@ -291,6 +295,13 @@ class DirectInbox(SqlStore):
                     "UPDATE dm_messages SET status = ? WHERE message_id = ?", mark
                 ),
                 [status, message_id],
+            )
+
+    def redact(self, message_id: str) -> None:
+        with self._connect() as (db, mark):
+            db.execute(
+                self._sql("UPDATE dm_messages SET body = ? WHERE message_id = ?", mark),
+                [REDACTED_BODY, message_id],
             )
 
     def sent_before(self, send_key: str) -> str | None:
@@ -485,6 +496,9 @@ class InstagramDirectAdapter:
 
     def mark(self, message_id: str, status: str) -> None:
         self.inbox.mark(message_id, status)
+
+    def redact(self, message_id: str) -> None:
+        self.inbox.redact(message_id)
 
 
 # -- Mercado Livre -----------------------------------------------------------------
