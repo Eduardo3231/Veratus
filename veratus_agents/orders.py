@@ -94,8 +94,11 @@ class OrderRecord(BaseModel):
     sku: str = Field(min_length=2, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")
     channel: OrderChannel
     visit_ref: str | None = Field(default=None, pattern=r"^VT-[A-Z0-9]{1,13}$")
-    # Pseudonymous WhatsApp conversation id (HMAC), never the phone number.
-    conversation_ref: str | None = Field(default=None, pattern=r"^wa_[a-f0-9]{32}$")
+    # Pseudonymous conversation id (HMAC: wa_ WhatsApp, ig_ Instagram), never
+    # the phone number or the account id.
+    conversation_ref: str | None = Field(
+        default=None, pattern=r"^(?:wa|ig)_[a-f0-9]{32}$"
+    )
     utm_source: str | None = Field(default=None, max_length=80)
     utm_medium: str | None = Field(default=None, max_length=80)
     utm_campaign: str | None = Field(default=None, max_length=80)

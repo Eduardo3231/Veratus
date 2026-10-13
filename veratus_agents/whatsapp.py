@@ -461,6 +461,35 @@ class WhatsAppChannel(SqlStore):
                 drafted.append({"message_id": row["message_id"], "run_id": run_id})
         return {"drafted": drafted, "failed": failed}
 
+    def pending_inbound(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        """Mensagens novas de conversas em BOT, para o motor de atendimento."""
+        with self._connect() as (db, mark):
+            rows = db.execute(
+                self._sql(
+                    "SELECT m.message_id, m.conversation_id, m.body, c.product_id, "
+                    "c.utm_json FROM wa_messages m JOIN wa_conversations c "
+                    "ON c.conversation_id = m.conversation_id "
+                    "WHERE m.direction = 'IN' AND m.draft_status = 'NEW' "
+                    "AND c.state = 'BOT' ORDER BY m.sent_at LIMIT ?",
+                    mark,
+                ),
+                [max(1, min(limit, 100))],
+            ).fetchall()
+        return [
+            {**dict(row), "utm": json.loads(row["utm_json"] or "{}")} for row in rows
+        ]
+
+    def mark_inbound(self, message_id: str, status: str) -> None:
+        with self._connect() as (db, mark):
+            db.execute(
+                self._sql(
+                    "UPDATE wa_messages SET draft_status = ? "
+                    "WHERE message_id = ? AND draft_status = 'NEW'",
+                    mark,
+                ),
+                [status[:40], message_id],
+            )
+
     # -- outbound ----------------------------------------------------------------
 
     def send(

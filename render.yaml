@@ -204,3 +204,47 @@ services:
         value: "config/channel_fees_2026-10.json"
       - key: PAID_MEDIA_ECONOMICS_CHANNEL
         value: "direct_card"
+      - key: CONVERSATION_MODE_WHATSAPP
+        value: "SHADOW"
+      - key: CONVERSATION_MODE_INSTAGRAM
+        value: "SHADOW"
+      - key: CONVERSATION_MODE_MERCADO_LIVRE
+        value: "SHADOW"
+      - key: CONVERSATION_MODE_SHOPEE
+        value: "SHADOW"
+      - key: CONVERSATION_MODE_TIKTOK_SHOP
+        value: "SHADOW"
+      - key: CONVERSATION_MODE_AMAZON
+        value: "SHADOW"
+      - key: CONVERSATION_MODEL
+        value: "live"
+      - key: FOUNDER_ALERT_WHATSAPP
+        sync: false
+      - key: FOUNDER_ALERT_EMAIL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: PAYMENT_LINKS_ENABLED
+        value: "false"
+      - key: MERCADO_PAGO_ACCESS_TOKEN
+        sync: false
+      - key: MERCADO_PAGO_WEBHOOK_SECRET
+        sync: false
+      - key: PAYMENT_INSTALLMENTS_INTEREST
+        value: "buyer"
+      - key: DISCOUNT_LIMIT_BRL
+        value: "0"
+      - key: PUBLIC_BASE_URL
+        value: "https://veratus.onrender.com"
+      - key: INSTAGRAM_MESSAGING_ENABLED
+        value: "false"
+      - key: MERCADO_LIVRE_ANSWERS_ENABLED
+        value: "false"
+      - key: MERCADO_LIVRE_SELLER_ID
+        sync: false

@@ -177,10 +177,37 @@ _BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
     (
         re.compile(
+            r"\b(?:fornecedor(?:es|a)?|f[áa]brica\s+parceira|aliexpress|shein|"
+            r"alibaba|1688|dropshipping)\b",
+            re.IGNORECASE,
+        ),
+        "menção a fornecedor",
+    ),
+    (
+        re.compile(
             r"\b(?:OPENAI_API_KEY|VERATUS_ADMIN_TOKEN|VERATUS_AGENT_SHARED_SECRET|system prompt|prompt interno)\b",
             re.IGNORECASE,
         ),
         "conteúdo interno na resposta",
+    ),
+]
+
+
+# Marketplaces proíbem contato externo: nenhum link, @, telefone, e-mail ou
+# convite para outro canal nas respostas (regra extra do Mercado Livre).
+MARKETPLACE_CHANNELS = frozenset(
+    {"mercado_livre", "mercado-livre", "shopee", "tiktok_shop", "tiktok-shop", "amazon"}
+)
+_MARKETPLACE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(
+            r"https?://|\bwww\.|\b[\w-]+\.(?:com|br|net|link|ly|me)\b|@\w+|"
+            r"[^\s@]+@[^\s@]+\.[^\s@]+|\(?\d{2}\)?\s*9?\d{4}[\s.-]?\d{4}|"
+            r"\b(?:whats(?:app)?|zap|wpp|instagram|insta|direct|telegram|"
+            r"telefone|celular|e-?mail|site)\b",
+            re.IGNORECASE,
+        ),
+        "contato externo em marketplace",
     ),
 ]
 
@@ -203,6 +230,7 @@ def hard_review_customer_reply(
     claims: list[dict[str, object]] | None = None,
     *,
     product_collection: str | None = None,
+    channel: str | None = None,
 ) -> list[str]:
     """Return the issues that stop a draft; an empty list means it may go to a human.
 
@@ -210,7 +238,10 @@ def hard_review_customer_reply(
     about: the watch price never applies to jewelry.
     """
     issues: list[str] = []
-    for pattern, issue in _BLOCKED_PATTERNS:
+    patterns = list(_BLOCKED_PATTERNS)
+    if channel in MARKETPLACE_CHANNELS:
+        patterns += _MARKETPLACE_PATTERNS
+    for pattern, issue in patterns:
         for match in pattern.finditer(text or ""):
             if not _confirmed(match, issue, product_collection):
                 issues.append(issue)

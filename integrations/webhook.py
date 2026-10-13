@@ -2389,9 +2389,31 @@ def instagram_webhook():
     from veratus_agents.instagram_comments import load_rules
 
     _, rules = load_rules()
-    counts = _instagram_queue().enqueue(
-        payload, rules, own_account_id=os.getenv("INSTAGRAM_USER_ID", "").strip()
-    )
+    own_account = os.getenv("INSTAGRAM_USER_ID", "").strip()
+    counts = _instagram_queue().enqueue(payload, rules, own_account_id=own_account)
+    # Direct (campo messages): guarda a conversa; responder segue o nível do canal.
+    from veratus_agents.channel_adapters import parse_instagram_messages
+
+    direct = parse_instagram_messages(payload, own_account)
+    if direct:
+        try:
+            inbox = _direct_inbox()
+        except ValueError as exc:
+            app.logger.error("instagram_direct_not_configured %s", exc)
+            return jsonify(
+                {"status": "blocked", "message": "direct_not_configured"}
+            ), 503
+        stored = 0
+        for item in direct:
+            _, inserted = inbox.receive(
+                "instagram",
+                item["contact"],
+                item["message_id"],
+                item["text"],
+                item["sent_at"],
+            )
+            stored += inserted
+        counts = {**counts, "direct_messages": stored}
     return jsonify({"status": "received", **counts}), 200
 
 
@@ -2430,6 +2452,453 @@ def instagram_process_replies():
         rules=rules,
     )
     return jsonify({"status": "ok", **result}), 200
+
+
+# -- Atendimento autônomo (Fase 3) --------------------------------------------
+
+
+@lru_cache(maxsize=4)
+def _conversation_store_cached(operations_db, database_url, encryption_key):
+    from veratus_agents.conversations import ConversationStore
+
+    return ConversationStore(operations_db, database_url, encryption_key=encryption_key)
+
+
+@lru_cache(maxsize=4)
+def _direct_inbox_cached(operations_db, database_url, salt, encryption_key):
+    from veratus_agents.channel_adapters import DirectInbox
+
+    return DirectInbox(
+        operations_db, database_url, salt=salt, encryption_key=encryption_key
+    )
+
+
+def _direct_inbox():
+    settings = AgentSettings.from_env()
+    return _direct_inbox_cached(
+        str(settings.operations_db),
+        settings.database_url,
+        os.getenv("VERATUS_SESSION_SALT", "").strip(),
+        os.getenv("VERATUS_TOKEN_ENCRYPTION_KEY", "").strip(),
+    )
+
+
+def _mercado_livre_token_provider():
+    from veratus_agents.mercado_livre_oauth import persisted_credentials_available
+
+    try:
+        if not persisted_credentials_available():
+            return None
+        from veratus_agents.marketplace_clients import MercadoLivreOAuthTokenManager
+
+        manager = MercadoLivreOAuthTokenManager.from_env()
+    except Exception:  # noqa: BLE001 - sem conexão, o canal só enfileira
+        return None
+    return manager.access_token
+
+
+def _conversation_order_factory(channel, conversation_id, product):
+    from veratus_agents.catalog import public_price
+    from veratus_agents.orders import OrderChannel, OrderRecord, PaymentMethod
+
+    price = public_price(product)
+    if price is None:
+        return None
+    reference = (
+        conversation_id
+        if re.fullmatch(r"(?:wa|ig)_[a-f0-9]{32}", conversation_id)
+        else None
+    )
+    _, order = _order_ledger().record(
+        OrderRecord(
+            order_id=f"ord-{uuid.uuid4().hex[:20]}",
+            sku=product["id"],
+            channel=OrderChannel(channel),
+            conversation_ref=reference,
+            sale_price=price,
+            payment_method=PaymentMethod.UNKNOWN,
+            evidence_ref=f"conversation:{channel}",
+            recorded_by="sales-agent",
+        )
+    )
+    return order
+
+
+def _conversation_payment_linker(order, product):
+    from decimal import Decimal
+
+    from veratus_agents.payments import (
+        MercadoPagoClient,
+        PaymentLinkRequest,
+        create_payment_link,
+    )
+
+    base = os.getenv("PUBLIC_BASE_URL", "https://veratus.onrender.com").rstrip("/")
+    return create_payment_link(
+        PaymentLinkRequest(
+            order_id=order["order_id"],
+            title=f"Veratus {product['name']}",
+            amount=Decimal(str(order["sale_price"])),
+            sku=order["sku"],
+            notification_url=f"{base}/integrations/mercado-pago/webhook",
+        ),
+        client=MercadoPagoClient.from_env(),
+    )
+
+
+def _conversation_engine():
+    from veratus_agents.channel_adapters import (
+        FounderAlertSender,
+        InstagramDirectAdapter,
+        ManualPasteAdapter,
+        MercadoLivreConversationAdapter,
+        WhatsAppAdapter,
+    )
+    from veratus_agents.conversations import (
+        ConversationEngine,
+        LiveSalesModel,
+        TemplateSalesModel,
+    )
+    from veratus_agents.whatsapp import WhatsAppCloudClient
+
+    settings = AgentSettings.from_env()
+    store = _conversation_store_cached(
+        str(settings.operations_db),
+        settings.database_url,
+        os.getenv("VERATUS_TOKEN_ENCRYPTION_KEY", "").strip(),
+    )
+    adapters = {
+        "shopee": ManualPasteAdapter("shopee"),
+        "tiktok_shop": ManualPasteAdapter("tiktok_shop"),
+        "amazon": ManualPasteAdapter("amazon"),
+        "mercado_livre": MercadoLivreConversationAdapter(
+            token_provider=_mercado_livre_token_provider(),
+            seller_id=os.getenv("MERCADO_LIVRE_SELLER_ID", "").strip() or None,
+        ),
+    }
+    try:
+        adapters["whatsapp"] = WhatsAppAdapter(
+            _whatsapp_channel(), client=WhatsAppCloudClient.from_env()
+        )
+    except Exception as exc:  # noqa: BLE001 - canal sem segredo fica sem adaptador
+        app.logger.error("conversation_adapter_unavailable channel=whatsapp %s", exc)
+    try:
+        adapters["instagram"] = InstagramDirectAdapter(
+            _direct_inbox(),
+            access_token=_instagram_token_store().current()
+            or os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
+            or None,
+            ig_user_id=os.getenv("INSTAGRAM_USER_ID", "").strip() or None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("conversation_adapter_unavailable channel=instagram %s", exc)
+    model = (
+        LiveSalesModel()
+        if os.getenv("OPENAI_API_KEY", "").strip()
+        and os.getenv("CONVERSATION_MODEL", "live").strip() != "template"
+        else TemplateSalesModel()
+    )
+    return ConversationEngine(
+        store,
+        adapters=adapters,
+        model=model,
+        alert_sender=FounderAlertSender.from_env(),
+        order_factory=_conversation_order_factory,
+        payment_linker=_conversation_payment_linker,
+        order_lookup=_order_ledger().get,
+    )
+
+
+def _conversations_unavailable(exc):
+    app.logger.error("conversations_not_configured error_type=%s", type(exc).__name__)
+    return jsonify(
+        {"status": "blocked", "message": "conversations_not_configured"}
+    ), 503
+
+
+def _engine_or_error():
+    try:
+        return _conversation_engine(), None
+    except ValueError as exc:
+        return None, _conversations_unavailable(exc)
+
+
+@app.route("/os/conversations/process", methods=["POST"])
+def os_conversations_process():
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    from veratus_agents.conversations import CHANNELS, InboundText
+
+    channel, limit = data.get("channel"), data.get("limit", 20)
+    if (
+        set(data) - {"channel", "limit"}
+        or channel not in CHANNELS
+        or not isinstance(limit, int)
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    adapter = engine.adapters.get(channel)
+    if channel == "mercado_livre":
+        inbound = [
+            InboundText(
+                channel=channel,
+                conversation_id=f"q-{item['question_id']}",
+                message_id=f"q-{item['question_id']}",
+                text=item["text"],
+            )
+            for item in adapter.list_unanswered_questions(limit)
+        ]
+    elif hasattr(adapter, "pending"):
+        inbound = adapter.pending(limit)
+    else:
+        inbound = []
+    results = []
+    for item in inbound:
+        result = engine.handle(item)
+        if result["action"] == "HANDOFF" and channel == "whatsapp":
+            _whatsapp_channel().set_state(
+                item.conversation_id, "HUMAN", actor="sales-agent"
+            )
+        if hasattr(adapter, "mark"):
+            adapter.mark(item.message_id, f"V2_{result['action']}")
+        results.append(
+            {
+                "message_id": item.message_id,
+                **{k: v for k, v in result.items() if k != "reply"},
+            }
+        )
+    return jsonify({"status": "ok", "channel": channel, "results": results}), 200
+
+
+@app.route("/os/conversations", methods=["GET"])
+def os_conversations():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.conversations import public_conversation
+
+    rows = engine.store.conversations(
+        channel=request.args.get("channel") or None,
+        state=request.args.get("state") or None,
+    )
+    return jsonify({"conversations": [public_conversation(row) for row in rows]}), 200
+
+
+@app.route("/os/conversations/queue", methods=["GET"])
+def os_conversations_queue():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    return jsonify(
+        {
+            "drafts": engine.store.queue(
+                channel=request.args.get("channel") or None,
+                status=request.args.get("status") or None,
+            )
+        }
+    ), 200
+
+
+@app.route("/os/conversations/queue/<draft_id>/<decision>", methods=["POST"])
+def os_conversations_decide(draft_id, decision):
+    denied = _admin_required()
+    if denied:
+        return denied
+    if decision not in {"approve", "reject"}:
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    actor, text = data.get("actor"), data.get("text")
+    if (
+        set(data) - {"actor", "text"}
+        or not isinstance(actor, str)
+        or not actor.strip()
+        or (text is not None and not isinstance(text, str))
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    try:
+        if decision == "approve":
+            result = engine.approve_draft(draft_id, actor=actor.strip(), text=text)
+        else:
+            result = engine.reject_draft(draft_id, actor=actor.strip())
+    except KeyError:
+        return jsonify({"status": "error", "message": "draft_not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 409
+    return jsonify(result), 200
+
+
+@app.route("/os/conversations/<channel>/<conversation_id>/state", methods=["POST"])
+def os_conversation_state(channel, conversation_id):
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    if set(data) != {"state", "actor"} or not all(
+        isinstance(data[key], str) and data[key].strip() for key in data
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    try:
+        conversation = engine.set_state(
+            channel, conversation_id, data["state"], actor=data["actor"].strip()
+        )
+    except KeyError:
+        return jsonify({"status": "error", "message": "conversation_not_found"}), 404
+    except ValueError:
+        return jsonify({"status": "error", "message": "invalid_state"}), 400
+    if channel == "whatsapp":
+        try:
+            _whatsapp_channel().set_state(
+                conversation_id, data["state"], actor=data["actor"].strip()
+            )
+        except KeyError:
+            pass
+    return jsonify({"conversation": conversation}), 200
+
+
+@app.route("/os/conversations/readiness", methods=["GET"])
+def os_conversations_readiness():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.operations import ApprovalType, request_approval
+
+    report = engine.readiness()
+    # Subir de nível nunca é automático: o critério atingido vira um pedido de
+    # aprovação, e o fundador muda CONVERSATION_MODE_<CANAL> no Render.
+    for channel, item in report.items():
+        if item["eligible"] and not item["approval_id"]:
+            approval = request_approval(
+                _runtime(),
+                "customer-supervisor",
+                ApprovalType.AUTONOMY_CHANGE,
+                f"{channel}: critérios atingidos para {item['next_mode']}",
+                {
+                    "channel": channel,
+                    "from": item["mode"],
+                    "to": item["next_mode"],
+                    "criteria": item["criteria"],
+                    "action": (
+                        f"definir CONVERSATION_MODE_{channel.upper()}="
+                        f"{item['next_mode']} no Render"
+                    ),
+                    "external_write": False,
+                },
+            )
+            engine.store.save_readiness_request(
+                channel, item["next_mode"], approval.request_id
+            )
+            item["approval_id"] = approval.request_id
+    return jsonify({"channels": report}), 200
+
+
+@app.route("/os/conversations/metrics", methods=["GET"])
+def os_conversations_metrics():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    return jsonify({"channels": engine.metrics()}), 200
+
+
+@app.route("/os/conversations/alerts", methods=["GET"])
+def os_conversations_alerts():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    return jsonify({"alerts": engine.store.alerts()}), 200
+
+
+@app.route("/os/conversations/adapters", methods=["GET"])
+def os_conversations_adapters():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.channel_adapters import adapter_contract
+
+    return jsonify(
+        {
+            "adapters": {
+                name: {**adapter_contract(adapter), "mode": engine.mode(name)}
+                for name, adapter in engine.adapters.items()
+            }
+        }
+    ), 200
+
+
+@app.route("/integrations/mercado-pago/webhook", methods=["POST"])
+def mercado_pago_webhook():
+    from veratus_agents.payments import (
+        MercadoPagoClient,
+        PaymentError,
+        confirm_payment,
+        verify_signature,
+    )
+
+    data_id = request.args.get("data.id") or (
+        (request.get_json(silent=True) or {}).get("data") or {}
+    ).get("id")
+    if not verify_signature(
+        signature_header=request.headers.get("x-signature"),
+        request_id=request.headers.get("x-request-id"),
+        data_id=str(data_id) if data_id else None,
+        secret=os.getenv("MERCADO_PAGO_WEBHOOK_SECRET", "").strip(),
+        now=time.time(),
+    ):
+        return jsonify({"status": "error", "message": "invalid_signature"}), 401
+    topic = request.args.get("type") or (request.get_json(silent=True) or {}).get(
+        "type"
+    )
+    if topic != "payment":
+        return jsonify({"status": "ignored"}), 200
+    client = MercadoPagoClient.from_env()
+    if client is None:
+        return jsonify(
+            {"status": "blocked", "message": "mercado_pago_not_configured"}
+        ), 503
+    try:
+        result = confirm_payment(str(data_id), client=client, ledger=_order_ledger())
+    except PaymentError as exc:
+        app.logger.error("mercado_pago_readback_failed http_status=%s", exc.http_status)
+        # 5xx faz o Mercado Pago tentar de novo.
+        return jsonify({"status": "error", "message": "readback_failed"}), 502
+    if result["status"] == "PAID":
+        engine, _ = _engine_or_error()
+        if engine is not None:
+            engine.payment_confirmed(result["order_id"])
+    return jsonify({"status": "received", "result": result["status"]}), 200
 
 
 # Shopee (and future marketplaces): connection routes, read-only.
