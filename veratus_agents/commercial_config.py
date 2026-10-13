@@ -226,3 +226,42 @@ def watch_channel_blockers(product: dict, channel: str | None = None) -> list[st
     if needs_origin and not origin_confirmed():
         reasons.append("ORIGIN_UNCONFIRMED")
     return reasons
+
+
+def watch_economics_snapshot(channel: str = "direct_pix", config=None) -> dict:
+    """EconomicsSnapshot dos relógios a partir do motor por canal (tipo ``watch``).
+
+    Frete direto de R$ 25 é ASSUMPTION; enquanto frete, pagamento e tributo não
+    forem confirmados, o status não é COMPLETE e o worker de mídia paga segue em
+    SHADOW.
+    """
+    from .channel_economics import PAID_MEDIA_FIELDS, evaluate
+
+    result = evaluate(
+        channel,
+        "watch",
+        OFFICIAL_SALE_PRICE_BRL,
+        cost=OFFICIAL_PRODUCT_COST_BRL,
+        config=config,
+    )
+    rank = {"SOURCED": 0, "CONFIRMED": 0, "ASSUMPTION": 1, "UNVERIFIED": 2}
+    fields = {
+        name: dict(item) for name, item in WATCH_ECONOMICS_SNAPSHOT["fields"].items()
+    }
+    for item in result["items"]:
+        name = PAID_MEDIA_FIELDS[item["kind"]]
+        current = fields.get(name)
+        if current is None or current["value"] is None:
+            fields[name] = {"value": item["amount"], "status": item["status"]}
+            continue
+        total = f"{Decimal(current['value']) + Decimal(item['amount']):.2f}"
+        worst = max(current["status"], item["status"], key=lambda s: rank.get(s, 2))
+        fields[name] = {"value": total, "status": worst}
+    return {
+        "scope": "watches",
+        "channel": channel,
+        "engine": "channel_economics",
+        "status": result["status"],
+        "status_reasons": result["status_reasons"],
+        "fields": fields,
+    }

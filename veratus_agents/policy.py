@@ -103,6 +103,79 @@ _BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         "marca de terceiros",
     ),
     (
+        re.compile(r"\binspirad[oa]s?\s+(?:em|n[oa]s?)\b", re.IGNORECASE),
+        "marca de terceiros",
+    ),
+    (
+        re.compile(
+            r"\b(?:movimento|mecanismo|m[áa]quina\s+(?:autom[áa]tica|qu[áa]rtzo?)|"
+            r"quartzo|autom[áa]tico\s+de\s+corda)\b",
+            re.IGNORECASE,
+        ),
+        "especificação técnica não validada",
+    ),
+    (
+        re.compile(
+            r"\b(?:resist[eê]ncia\s+[àa]\s+[áa]gua|resistente\s+[àa]\s+[áa]gua|"
+            r"\d+\s*atm|\d+\s*(?:m|metros)\s+de\s+profundidade|"
+            r"pode\s+(?:mergulhar|nadar|molhar))\b",
+            re.IGNORECASE,
+        ),
+        "resistência à água não validada",
+    ),
+    (
+        re.compile(
+            r"\b\d+(?:[,.]\d+)?\s*(?:mm|cm|mil[ií]metros|cent[ií]metros)\b|"
+            r"\bdi[âa]metro\b|\bespessura\b",
+            re.IGNORECASE,
+        ),
+        "medida não validada",
+    ),
+    (
+        re.compile(
+            r"\b(?:com|tem|possui|oferecemos|damos|inclui)\s+(?:a\s+)?garantia\b|"
+            r"\bgarantia\s+(?:de\s+f[áa]brica|total|vital[ií]cia|contra)\b",
+            re.IGNORECASE,
+        ),
+        "garantia não validada",
+    ),
+    (
+        re.compile(
+            r"\b(?:importad[oa]s?|importa[çc][ãa]o|alf[âa]ndega|taxad[oa]s?|"
+            r"internacional|do\s+exterior|de\s+fora\s+do\s+pa[ií]s|china|chin[eê]s[ae]?s?|"
+            r"pa[ií]s\s+de\s+origem|origem\s+d[oa]s?\s+(?:produto|pe[çc]a|rel[óo]gio)s?)\b",
+            re.IGNORECASE,
+        ),
+        "origem ou importação não pode ser mencionada",
+    ),
+    (
+        re.compile(
+            r"\b(?:ouro|prata|banhad[oa]s?|banho\s+de|folhead[oa]s?|semijoias?|"
+            r"zirc[ôo]nias?|hipoalerg[eê]nic[oa]s?|a[çc]o\s+cir[úu]rgico|"
+            r"n[ãa]o\s+(?:escurece|enferruja|descasca))\b",
+            re.IGNORECASE,
+        ),
+        "material não validado",
+    ),
+    (
+        re.compile(
+            r"\b(?:s[óo]\s+hoje|acaba\s+hoje|[úu]ltima\s+chance|corr[ae]|"
+            r"por\s+tempo\s+limitado|promo[çc][ãa]o\s+rel[âa]mpago|"
+            r"enquanto\s+durarem|est[aá]\s+acabando|quase\s+esgotad[oa])\b",
+            re.IGNORECASE,
+        ),
+        "urgência ou escassez não validada",
+    ),
+    (
+        re.compile(
+            r"\b(?:dou|damos|fa[çc]o|fazemos|consigo|posso\s+(?:dar|fazer))\s+"
+            r"(?:um\s+|uma\s+)?(?:desconto|abatimento|promo[çc][ãa]o)\b|\bcupom\b|"
+            r"\b\d+\s*%\s*(?:off|de\s+desconto)",
+            re.IGNORECASE,
+        ),
+        "desconto não autorizado",
+    ),
+    (
         re.compile(
             r"\b(?:OPENAI_API_KEY|VERATUS_ADMIN_TOKEN|VERATUS_AGENT_SHARED_SECRET|system prompt|prompt interno)\b",
             re.IGNORECASE,

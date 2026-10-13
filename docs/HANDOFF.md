@@ -25,6 +25,21 @@ O fundador aprovou a seção 0 do prompt nesta sessão, com os valores recomenda
 - **Custo real versionado (reportado, não apagado):** `OFFICIAL_PRODUCT_COST_BRL = 65.00` em `veratus_agents/commercial_config.py`, repetido em `marketplace_ops.py`, `data_discovery.py`, testes e `docs/evidence/founder-round-2026-09-26.md`. O repositório é público. Decisão do fundador: mover para o Product Master (banco) e trocar os testes por custo fictício.
 - `scripts/agent_lock.py` ganhou bit executável no Git: o Ruff no Linux (CI) acusava EXE001.
 
+### Fase 2 — Relógios prontos para o teste
+
+- O gate (`policy.py`) bloqueia, para todo produto:
+  - marca de terceiros, réplica, clone, primeira linha e "inspirado em";
+  - movimento ou mecanismo, resistência à água, medidas (mm, cm, diâmetro) e garantia afirmada;
+  - qualquer menção a origem, importação, alfândega ou "taxado";
+  - claims de material de joia: ouro, prata, banhado, folheado, semijoia, zircônia, hipoalergênico;
+  - urgência ou escassez ("só hoje", "por tempo limitado") e oferta de desconto ou cupom (`DISCOUNT_LIMIT_BRL=0`).
+- `commercial_config.watch_economics_snapshot(channel)`: o EconomicsSnapshot dos relógios vem do motor. Frete direto R$ 25 = `ASSUMPTION`; pagamento e tributo `UNVERIFIED`, então o worker de mídia paga continua sem CPA final. `WATCH_ECONOMICS_SNAPSHOT` fica como registro histórico de 26/09.
+- `watch_channel_blockers(produto, canal)`:
+  - `NEEDS_REAL_PHOTO` em qualquer canal sem `REAL_PHOTO`;
+  - `ORIGIN_UNCONFIRMED` nos marketplaces enquanto `delivery-vs-registered-origin` estiver pendente. Para liberar, o status passa a `ANSWERED_DOMESTIC` em `FOUNDER_OPEN_QUESTIONS`.
+- Fotos reais: o fluxo não mudou (`incoming/relogios/<id>.jpg` → `scripts/import_watch_photos.py --sem-marca-de-terceiros`). A quarentena não mudou.
+- Testes: `tests/test_watch_readiness.py`.
+
 ## Conexões de marketplace (28/09)
 
 O fundador vende ou vai vender em Mercado Livre, Shopee e Amazon. Os três conectam em **modo leitura**; a publicação continua bloqueada pelas flags.
