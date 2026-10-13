@@ -40,7 +40,7 @@ def _products() -> list[dict[str, object]]:
 
 
 def test_registry_has_the_amazon_agent_and_paid_acquisition() -> None:
-    assert len(AGENT_REGISTRY) == 15
+    assert len(AGENT_REGISTRY) == 19
     assert AGENT_REGISTRY["amazon-agent"].supervisor == "distribution-supervisor"
     assert AGENT_REGISTRY["paid-acquisition-worker"].supervisor == "general-manager"
 
@@ -58,8 +58,13 @@ def test_manager_command_traverses_real_hierarchy_and_blocks_external_writes(
     )
 
     assert report["status"] == "COMPLETED"
+    # Distribuir não envolve mídia paga, atendimento nem redes sociais.
     assert set(report["agents_invoked"]) == set(AGENT_REGISTRY) - {
-        "paid-acquisition-worker"
+        "paid-acquisition-worker",
+        "customer-supervisor",
+        "sales-agent",
+        "aftersales-agent",
+        "social-media-worker",
     }
     assert report["external_writes"] == "BLOCKED"
     tasks = report["tasks"]

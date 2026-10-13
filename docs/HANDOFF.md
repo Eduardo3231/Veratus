@@ -122,6 +122,22 @@ O fundador aprovou a seção 0 do prompt nesta sessão, com os valores recomenda
 - **Rota:** `GET /os/social/posts`.
 - Variáveis: `SOCIAL_PUBLISH_ENABLED=false` e `META_PAGE_ID` (vazio). O Dockerfile copia `social/`.
 
+### Fase 6 — Papéis novos (aprovados na seção 0)
+
+| id | nível | pai | permissões |
+| --- | --- | --- | --- |
+| `customer-supervisor` | 2 | `general-manager` | READ_PRODUCT, READ_ORDERS, CONVERSE, HANDOFF, REPORT |
+| `sales-agent` (Sales Agent V2) | 3 | `customer-supervisor` | READ_PRODUCT, CONVERSE, CREATE_ORDER_DRAFT, CREATE_PAYMENT_LINK, REPORT |
+| `aftersales-agent` | 3 | `customer-supervisor` | READ_ORDERS, CONVERSE, REPORT |
+| `social-media-worker` | 2 | `general-manager` | READ_PRODUCT, CREATE_DRAFT, SCHEDULE_APPROVED_CONTENT, READ_INSIGHTS, REPORT |
+
+- O registro tem 19 papéis, e `/os/agents` lista os quatro novos. Nenhum tem `external_write` nem permissão de publicar, gastar ou enviar marketing.
+- `operations.permission_allowed`:
+  - `CONVERSE` só envia em `AUTO_SAFE` (risco 0) ou `AUTO` (risco ≤ 1);
+  - `CREATE_PAYMENT_LINK` só em `AUTO`;
+  - `SCHEDULE_APPROVED_CONTENT` só para item `APPROVED`.
+- A auditoria operacional do gerente ("analise o estado atual…") passou a acionar os quatro: níveis por canal, links de pagamento, pós-venda e agendador. O comando de distribuição não os aciona.
+
 ## Conexões de marketplace (28/09)
 
 O fundador vende ou vai vender em Mercado Livre, Shopee e Amazon. Os três conectam em **modo leitura**; a publicação continua bloqueada pelas flags.

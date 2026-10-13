@@ -342,7 +342,95 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
             "attribution-anomaly",
         ),
     ),
+    # Papéis aprovados pelo fundador em 2026-10-13 (seção 0 do prompt de canais).
+    # Nenhum publica, gasta ou envia marketing; CONVERSE e CREATE_PAYMENT_LINK
+    # seguem o nível do canal e SCHEDULE_APPROVED_CONTENT só publica item aprovado.
+    "customer-supervisor": AgentDefinition(
+        "customer-supervisor",
+        "Customer Supervisor",
+        2,
+        "customer",
+        "general-manager",
+        frozenset({"READ_PRODUCT", "READ_ORDERS", "CONVERSE", "HANDOFF", "REPORT"}),
+    ),
+    "sales-agent": AgentDefinition(
+        "sales-agent",
+        "Sales Agent V2",
+        3,
+        "customer",
+        "customer-supervisor",
+        frozenset(
+            {
+                "READ_PRODUCT",
+                "CONVERSE",
+                "CREATE_ORDER_DRAFT",
+                "CREATE_PAYMENT_LINK",
+                "REPORT",
+            }
+        ),
+    ),
+    "aftersales-agent": AgentDefinition(
+        "aftersales-agent",
+        "Aftersales Agent",
+        3,
+        "customer",
+        "customer-supervisor",
+        frozenset({"READ_ORDERS", "CONVERSE", "REPORT"}),
+    ),
+    "social-media-worker": AgentDefinition(
+        "social-media-worker",
+        "Social Media Worker",
+        2,
+        "social",
+        "general-manager",
+        frozenset(
+            {
+                "READ_PRODUCT",
+                "CREATE_DRAFT",
+                "SCHEDULE_APPROVED_CONTENT",
+                "READ_INSIGHTS",
+                "REPORT",
+            }
+        ),
+    ),
 }
+
+# Permissões que dependem de um estado externo ao registro.
+CHANNEL_GATED_PERMISSIONS = frozenset({"CONVERSE", "CREATE_PAYMENT_LINK"})
+APPROVAL_GATED_PERMISSIONS = frozenset({"SCHEDULE_APPROVED_CONTENT"})
+FORBIDDEN_FOR_NEW_ROLES = frozenset(
+    {"PUBLISH", "SPEND", "SEND_MARKETING", "WRITE_PRICE", "EXTERNAL_WRITE"}
+)
+
+
+def permission_allowed(
+    agent_id: str,
+    permission: str,
+    *,
+    channel_mode: str | None = None,
+    risk: int | None = None,
+    item_status: str | None = None,
+) -> bool:
+    """Permissão do registro somada ao nível do canal ou à aprovação do item.
+
+    ``CONVERSE`` só envia sozinho em ``AUTO_SAFE`` (risco 0) ou ``AUTO``
+    (risco até 1); ``CREATE_PAYMENT_LINK`` só em ``AUTO``;
+    ``SCHEDULE_APPROVED_CONTENT`` só para item ``APPROVED``.
+    """
+    definition = AGENT_REGISTRY.get(agent_id)
+    if definition is None or permission not in definition.permissions:
+        return False
+    if permission == "CONVERSE":
+        level = risk if risk is not None else 0
+        return (channel_mode == "AUTO_SAFE" and level == 0) or (
+            channel_mode == "AUTO" and level <= 1
+        )
+    if permission == "CREATE_PAYMENT_LINK":
+        return channel_mode == "AUTO"
+    if permission in APPROVAL_GATED_PERMISSIONS:
+        return item_status == "APPROVED"
+    return True
+
 
 _TEAM_CONTRACTS = {
     "general-manager": (
@@ -365,6 +453,34 @@ _TEAM_CONTRACTS = {
         ("task-engine", "audit-log"),
         ("approved-products",),
         ("external-action", "timeout"),
+    ),
+    "customer-supervisor": (
+        "supervisionar o atendimento por canal, passagens ao fundador e disjuntor",
+        ("assign", "handoff", "report"),
+        ("conversation-engine", "approval-engine", "audit-log"),
+        ("product-master", "orders", "knowledge"),
+        ("handoff-trigger", "gate-failure", "complaint"),
+    ),
+    "sales-agent": (
+        "conduzir a conversa até o pagamento confirmado pelo provedor",
+        ("converse", "order-draft", "payment-link"),
+        ("conversation-engine", "payments", "audit-log"),
+        ("product-master", "knowledge"),
+        ("handoff-trigger", "gate-failure"),
+    ),
+    "aftersales-agent": (
+        "responder status de pedido e rastreio depois do pagamento",
+        ("converse", "order-status"),
+        ("conversation-engine", "audit-log"),
+        ("orders",),
+        ("complaint", "payment-problem"),
+    ),
+    "social-media-worker": (
+        "montar o calendário, pedir aprovação semanal e publicar só o aprovado",
+        ("draft", "schedule", "insights", "weekly-report"),
+        ("social-scheduler", "approval-engine", "audit-log"),
+        ("product-master", "insights"),
+        ("publish-failure", "blocked-media"),
     ),
 }
 for _agent_id, _definition in list(AGENT_REGISTRY.items()):
@@ -392,6 +508,10 @@ for _agent_id, _definition in list(AGENT_REGISTRY.items()):
                 "WRITE_CREATIVE",
                 "WRITE_PRICE_RECOMMENDATION",
                 "CREATE_DRAFT",
+                "CREATE_ORDER_DRAFT",
+                "CREATE_PAYMENT_LINK",
+                "SCHEDULE_APPROVED_CONTENT",
+                "CONVERSE",
             }
         ),
         escalation_rules=_escalations,
@@ -2129,6 +2249,65 @@ class OperationalRuntime:
             parent_task_id=manager.task_id,
             depends_on=[task.task_id for task in product_tasks],
         )
+        from .conversations import CHANNELS, channel_mode
+        from .meta_webhooks import env_flag
+
+        modes = {channel: channel_mode(channel) for channel in CHANNELS}
+        customer = self._run_task(
+            command,
+            "customer-supervisor",
+            "AUDIT_CONVERSATION_LEVELS",
+            "conversations",
+            {"modes": modes, "upgrade": "APPROVAL_ONLY", "external_write": False},
+            parent_task_id=manager.task_id,
+        )
+        conversation_tasks = [
+            customer,
+            self._run_task(
+                command,
+                "sales-agent",
+                "AUDIT_SALES_READINESS",
+                "conversations",
+                {
+                    "payment_links": (
+                        "ENABLED" if env_flag("PAYMENT_LINKS_ENABLED") else "BLOCKED"
+                    ),
+                    "auto_channels": [
+                        channel for channel, mode in modes.items() if mode != "SHADOW"
+                    ],
+                    "external_write": False,
+                },
+                parent_task_id=customer.task_id,
+                depends_on=[customer.task_id],
+            ),
+            self._run_task(
+                command,
+                "aftersales-agent",
+                "AUDIT_AFTERSALES_READINESS",
+                "orders",
+                {
+                    "templates": ["pedido_confirmado", "pedido_enviado"],
+                    "external_write": False,
+                },
+                parent_task_id=customer.task_id,
+                depends_on=[customer.task_id],
+            ),
+            self._run_task(
+                command,
+                "social-media-worker",
+                "AUDIT_SOCIAL_SCHEDULE",
+                "social",
+                {
+                    "publish": (
+                        "ENABLED"
+                        if env_flag("SOCIAL_PUBLISH_ENABLED")
+                        else "PREVIEW_ONLY"
+                    ),
+                    "external_write": False,
+                },
+                parent_task_id=manager.task_id,
+            ),
+        ]
         next_actions = []
         if blocked:
             next_actions.append("COMPLETE_BLOCKING_PRODUCT_DATA")
@@ -2150,7 +2329,11 @@ class OperationalRuntime:
                 "external_writes": False,
             },
             parent_task_id=manager.task_id,
-            depends_on=[sync.task_id, paid_media.task_id],
+            depends_on=[
+                sync.task_id,
+                paid_media.task_id,
+                *(task.task_id for task in conversation_tasks),
+            ],
         )
 
     def _report(self, command: Command) -> dict[str, Any]:
