@@ -874,6 +874,180 @@ def os_calculate_pricing():
     return jsonify({"status": "ok", "pricing": result}), 200
 
 
+def _economics_product(sku: str):
+    """Product Master primeiro; os relógios do catálogo como reserva."""
+    product = _product_store().get(sku)
+    if product is not None:
+        return product
+    from veratus_agents.data_discovery import discover_products
+
+    return next(
+        (
+            item
+            for item in discover_products()
+            if sku in (item.get("sku"), item.get("id"))
+        ),
+        None,
+    )
+
+
+def _fee_config_or_error():
+    from veratus_agents.channel_economics import FeeConfigError, default_config
+
+    try:
+        return default_config(), None
+    except FeeConfigError as exc:
+        app.logger.error("channel_fees_invalid error=%s", exc)
+        return None, (
+            jsonify({"status": "blocked", "message": "channel_fees_invalid"}),
+            503,
+        )
+
+
+@app.route("/os/economics/<sku>", methods=["GET"])
+def os_economics(sku):
+    denied = _admin_required()
+    if denied:
+        return denied
+    config, error = _fee_config_or_error()
+    if error:
+        return error
+    from veratus_agents import channel_economics as engine
+    from veratus_agents.pricing_agent import product_cost, product_price
+
+    product = _economics_product(sku)
+    if product is None:
+        return jsonify({"status": "error", "message": "product_not_found"}), 404
+    price = product_price(product)
+    if price is None or price <= 0:
+        return jsonify({"status": "error", "message": "price_missing"}), 409
+    channel = request.args.get("channel") or None
+    if channel and channel not in config.channels:
+        return jsonify({"status": "error", "message": "unknown_channel"}), 400
+    channels = [channel] if channel else list(config.channels)
+    product_type = engine.product_type_of(product)
+    results = {
+        name: engine.evaluate(
+            name, product_type, price, cost=product_cost(product), config=config
+        )
+        for name in channels
+    }
+    return jsonify(
+        {
+            "sku": sku,
+            "product_type": product_type,
+            "channels": results,
+            "external_write": False,
+        }
+    ), 200
+
+
+@app.route("/os/economics/simulate", methods=["POST"])
+def os_economics_simulate():
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    config, error = _fee_config_or_error()
+    if error:
+        return error
+    from decimal import Decimal, InvalidOperation
+
+    from veratus_agents import channel_economics as engine
+
+    allowed = {"channel", "product_type", "price", "cost", "assumptions"}
+    if set(data) - allowed or not {"channel", "product_type", "price"} <= set(data):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    try:
+        assumptions = engine.Assumptions.from_mapping(data.get("assumptions"))
+        price = Decimal(str(data["price"]))
+        cost = None if data.get("cost") is None else Decimal(str(data["cost"]))
+        result = engine.evaluate(
+            str(data["channel"]),
+            str(data["product_type"]),
+            price,
+            cost=cost,
+            assumptions=assumptions,
+            config=config,
+        )
+        result["price_to_match_reference"] = str(
+            engine.price_to_match(
+                result["channel"],
+                result["product_type"],
+                price,
+                assumptions=assumptions,
+                config=config,
+            )
+        )
+        if cost is not None:
+            minimum = engine.price_for_target_margin(
+                result["channel"],
+                result["product_type"],
+                cost,
+                assumptions=assumptions,
+                config=config,
+            )
+            result["min_price_for_target_margin"] = (
+                None if minimum is None else str(minimum)
+            )
+    except (ValueError, InvalidOperation, TypeError) as exc:
+        message = str(exc) if str(exc) else "invalid_request"
+        return jsonify({"status": "error", "message": message[:80]}), 400
+    return jsonify({"simulation": result, "external_write": False}), 200
+
+
+def _pricing_agent():
+    from veratus_agents.pricing_agent import PricingAgent
+
+    return PricingAgent(_economics_product)
+
+
+@app.route("/os/pricing/channel-plan/<sku>", methods=["GET"])
+def os_pricing_channel_plan(sku):
+    denied = _admin_required()
+    if denied:
+        return denied
+    _, error = _fee_config_or_error()
+    if error:
+        return error
+    try:
+        plan = _pricing_agent().channel_price_plan(sku)
+    except KeyError:
+        return jsonify({"status": "error", "message": "product_not_found"}), 404
+    return jsonify(plan), 200
+
+
+@app.route("/os/pricing/channel-plan/<sku>/request", methods=["POST"])
+def os_pricing_request_price(sku):
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    if set(data) != {"channel", "price", "reason"} or not all(
+        isinstance(data[key], str) and data[key].strip() for key in data
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        result = _pricing_agent().request_price_change(
+            _runtime(),
+            sku,
+            data["channel"],
+            Decimal(data["price"]),
+            reason=data["reason"].strip()[:300],
+        )
+    except KeyError:
+        return jsonify({"status": "error", "message": "product_not_found"}), 404
+    except (ValueError, InvalidOperation):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    return jsonify(result), 202
+
+
 def _validation_errors(exc: ValidationError) -> list[dict[str, str]]:
     # Field and reason only: submitted values are never echoed back.
     return [

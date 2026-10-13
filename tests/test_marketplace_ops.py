@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from veratus_agents import commercial_config
 from veratus_agents.marketplace_adapters import Marketplace, build_distribution_draft
 from veratus_agents.marketplace_ops import (
     CategoryMappingStatus,
@@ -53,10 +54,12 @@ def test_channel_registry_starts_disabled_and_readiness_is_draft(tmp_path):
     )
 
 
-def test_listing_draft_is_idempotent_and_survives_restart(tmp_path):
+def test_listing_draft_is_idempotent_and_survives_restart(tmp_path, monkeypatch):
+    # Relógio com foto real e origem confirmada: o rascunho é criado.
+    monkeypatch.setattr(commercial_config, "origin_confirmed", lambda: True)
     path = tmp_path / "marketplace.sqlite3"
     store = MarketplaceStore(path)
-    product = approved_product()
+    product = {**approved_product(), "image_status": "REAL_PHOTO"}
     payload = build_distribution_draft(product, Marketplace.SHOPEE)["payload"]
 
     first = prepare_listing(store, product, Marketplace.SHOPEE, payload)
@@ -177,3 +180,26 @@ def test_marketplace_store_factory_prefers_postgres_when_configured(tmp_path):
 
     assert store is marker
     postgres.assert_called_once_with("postgresql://example")
+
+
+def test_watch_draft_waits_for_real_photo_and_confirmed_origin(tmp_path):
+    store = MarketplaceStore(tmp_path / "marketplace.sqlite3")
+    product = approved_product()
+    payload = build_distribution_draft(product, Marketplace.MERCADO_LIVRE)["payload"]
+
+    listing = prepare_listing(store, product, Marketplace.MERCADO_LIVRE, payload)
+
+    assert listing["state"] == ListingState.BLOCKED.value
+    assert "NEEDS_REAL_PHOTO" in listing["last_error"]
+    assert "ORIGIN_UNCONFIRMED" in listing["last_error"]
+
+
+def test_real_photo_alone_does_not_release_a_watch_to_marketplace(tmp_path):
+    store = MarketplaceStore(tmp_path / "marketplace.sqlite3")
+    product = {**approved_product(), "image_status": "REAL_PHOTO"}
+    payload = build_distribution_draft(product, Marketplace.SHOPEE)["payload"]
+
+    listing = prepare_listing(store, product, Marketplace.SHOPEE, payload)
+
+    assert listing["state"] == ListingState.BLOCKED.value
+    assert listing["last_error"] == "ORIGIN_UNCONFIRMED"

@@ -1,0 +1,229 @@
+{
+  "schema": "veratus.channel_fees/v1",
+  "as_of": "2026-10",
+  "package_status": "PLACEHOLDER",
+  "notes": [
+    "Arquivo provisório criado pelo Claude Code em 13/10/2026: o pacote do fundador (com fontes e datas) ainda não foi entregue.",
+    "Os valores abaixo vêm de memória pública de 2025-2026 e estão marcados UNVERIFIED; nenhum canal fica COMPLETE até o arquivo do fundador substituir este.",
+    "Não há custo de produto, margem, fornecedor nem dado de cliente neste arquivo."
+  ],
+  "statuses": ["SOURCED", "CONFIRMED", "ASSUMPTION", "UNVERIFIED"],
+  "product_types": ["jewelry", "watch", "smartphone"],
+  "defaults": {
+    "target_margin": {"value": "0.20", "status": "ASSUMPTION", "source": "margem-alvo inicial sugerida; o fundador confirma"},
+    "reference_channel": "direct_pix"
+  },
+  "requirements": {
+    "watch": {
+      "domestic_origin_required_on": ["mercado_livre", "shopee", "tiktok_shop", "amazon"],
+      "reason": "Relógio em marketplace exige envio de dentro do Brasil; enquanto a origem não for confirmada, o canal fica BLOCKED_BY_ORIGIN."
+    }
+  },
+  "common_rules": [
+    {
+      "id": "packaging",
+      "kind": "packaging",
+      "label": "Embalagem",
+      "type": "fixed",
+      "fixed_by_type": {"jewelry": "3.00", "watch": "5.00", "smartphone": "6.00"},
+      "status": "UNVERIFIED",
+      "source": "a confirmar com o fundador"
+    },
+    {
+      "id": "tax",
+      "kind": "tax",
+      "label": "Tributo sobre a venda",
+      "type": "percent",
+      "rate": "0.00",
+      "status": "UNVERIFIED",
+      "source": "regime tributário a confirmar com o fundador"
+    },
+    {
+      "id": "returns",
+      "kind": "returns",
+      "label": "Provisão de devoluções",
+      "type": "percent",
+      "rate": "0.00",
+      "status": "UNVERIFIED",
+      "source": "a confirmar com o fundador"
+    }
+  ],
+  "channels": {
+    "mercado_livre": {
+      "label": "Mercado Livre (Clássico)",
+      "kind": "marketplace",
+      "rules": [
+        {
+          "id": "ml_commission",
+          "kind": "channel_fee",
+          "label": "Comissão Clássico",
+          "type": "percent",
+          "rate_by_type": {"jewelry": "0.14", "watch": "0.14", "smartphone": "0.13"},
+          "status": "UNVERIFIED",
+          "source": "tabela de tarifas do Mercado Livre por categoria (a confirmar)"
+        },
+        {
+          "id": "ml_unit_cost",
+          "kind": "channel_fee",
+          "label": "Custo por unidade abaixo de R$ 79",
+          "type": "band",
+          "bands": [
+            {"min": "0.00", "max": "29.00", "fixed": "6.25"},
+            {"min": "29.00", "max": "50.00", "fixed": "6.50"},
+            {"min": "50.00", "max": "79.00", "fixed": "6.75"}
+          ],
+          "status": "UNVERIFIED",
+          "source": "custo operacional por unidade do Mercado Livre (a confirmar)"
+        },
+        {
+          "id": "ml_shipping",
+          "kind": "shipping",
+          "label": "Parte do frete grátis a partir de R$ 79",
+          "type": "fixed",
+          "min_price": "79.00",
+          "fixed_by_type": {"jewelry": "19.95", "watch": "21.45", "smartphone": "22.45"},
+          "status": "UNVERIFIED",
+          "source": "tabela de frete do Mercado Envios por peso (a confirmar)"
+        }
+      ]
+    },
+    "shopee": {
+      "label": "Shopee",
+      "kind": "marketplace",
+      "rules": [
+        {
+          "id": "shopee_commission",
+          "kind": "channel_fee",
+          "label": "Comissão + tarifa por item (faixa de preço)",
+          "type": "band",
+          "bands": [
+            {"min": "0.00", "max": "80.00", "rate": "0.20", "fixed": "4.00"},
+            {"min": "80.00", "max": "100.00", "rate": "0.14", "fixed": "16.00"},
+            {"min": "100.00", "max": "200.00", "rate": "0.14", "fixed": "20.00"},
+            {"min": "200.00", "rate": "0.14", "fixed": "26.00"}
+          ],
+          "status": "UNVERIFIED",
+          "source": "política de comissões da Shopee Brasil 2026 (a confirmar)"
+        }
+      ]
+    },
+    "tiktok_shop": {
+      "label": "TikTok Shop",
+      "kind": "marketplace",
+      "rules": [
+        {
+          "id": "tiktok_commission",
+          "kind": "channel_fee",
+          "label": "Comissão + tarifa fixa (faixa de preço)",
+          "type": "band",
+          "bands": [
+            {"min": "0.00", "max": "50.00", "rate": "0.06", "fixed": "2.00"},
+            {"min": "50.00", "rate": "0.06", "fixed": "4.00"}
+          ],
+          "status": "UNVERIFIED",
+          "source": "tarifas do TikTok Shop Brasil (a confirmar)"
+        },
+        {
+          "id": "tiktok_free_shipping_program",
+          "kind": "shipping",
+          "label": "Programa de frete grátis (6%, teto R$ 50)",
+          "type": "percent",
+          "rate": "0.06",
+          "cap": "50.00",
+          "when": "tiktok_free_shipping",
+          "status": "UNVERIFIED",
+          "source": "programa de frete grátis do TikTok Shop (a confirmar)"
+        }
+      ]
+    },
+    "amazon": {
+      "label": "Amazon (DBA)",
+      "kind": "marketplace",
+      "rules": [
+        {
+          "id": "amazon_referral",
+          "kind": "channel_fee",
+          "label": "Tarifa de indicação",
+          "type": "percent",
+          "rate_by_type": {"jewelry": "0.14", "watch": "0.13", "smartphone": "0.11"},
+          "minimum": "1.00",
+          "status": "UNVERIFIED",
+          "source": "tabela de tarifas de venda da Amazon Brasil (a confirmar)"
+        },
+        {
+          "id": "amazon_dba_shipping",
+          "kind": "shipping",
+          "label": "Frete DBA pago pelo vendedor",
+          "type": "fixed",
+          "min_price": "79.00",
+          "fixed_by_type": {"jewelry": "18.90", "watch": "20.90", "smartphone": "22.90"},
+          "status": "UNVERIFIED",
+          "source": "tabela DBA da Amazon (a confirmar)"
+        }
+      ]
+    },
+    "direct_pix": {
+      "label": "Venda direta — Pix",
+      "kind": "direct",
+      "rules": [
+        {
+          "id": "pix_fee",
+          "kind": "payment_fee",
+          "label": "Tarifa do Pix",
+          "type": "percent",
+          "rate": "0.0099",
+          "status": "UNVERIFIED",
+          "source": "tarifa de Pix do Mercado Pago (a confirmar)"
+        },
+        {
+          "id": "direct_shipping",
+          "kind": "shipping",
+          "label": "Frete grátis pago pela Veratus",
+          "type": "fixed",
+          "fixed_by_type": {"jewelry": "18.00", "watch": "25.00", "smartphone": "30.00"},
+          "status_by_type": {"watch": "ASSUMPTION"},
+          "status": "UNVERIFIED",
+          "source": "estimativa de frete direto; relógio R$ 25 é premissa do fundador"
+        }
+      ]
+    },
+    "direct_card": {
+      "label": "Venda direta — link do Mercado Pago (cartão)",
+      "kind": "direct",
+      "rules": [
+        {
+          "id": "card_processing",
+          "kind": "payment_fee",
+          "label": "Processamento do cartão",
+          "type": "percent",
+          "rate": "0.0498",
+          "status": "UNVERIFIED",
+          "source": "tarifa de cartão do Mercado Pago na hora (a confirmar)"
+        },
+        {
+          "id": "card_installments",
+          "kind": "payment_fee",
+          "label": "Juros do parcelado pagos pelo vendedor",
+          "type": "installments",
+          "rate_by_installments": {
+            "2": "0.0459", "3": "0.0597", "4": "0.0733", "5": "0.0866", "6": "0.0996",
+            "7": "0.1124", "8": "0.1250", "9": "0.1373", "10": "0.1494", "11": "0.1613", "12": "0.1729"
+          },
+          "when": "seller_pays_installments",
+          "status": "UNVERIFIED",
+          "source": "tabela de parcelamento do Mercado Pago (a confirmar)"
+        },
+        {
+          "id": "direct_shipping",
+          "kind": "shipping",
+          "label": "Frete grátis pago pela Veratus",
+          "type": "fixed",
+          "fixed_by_type": {"jewelry": "18.00", "watch": "25.00", "smartphone": "30.00"},
+          "status_by_type": {"watch": "ASSUMPTION"},
+          "status": "UNVERIFIED",
+          "source": "estimativa de frete direto; relógio R$ 25 é premissa do fundador"
+        }
+      ]
+    }
+  }
+}

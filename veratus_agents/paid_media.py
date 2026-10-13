@@ -161,6 +161,8 @@ class PaidMediaConfig:
     reconciliation_required: bool = True
     circuit_breaker_enabled: bool = True
     safety_factor: Decimal = Decimal("0.70")
+    # Canal cujas taxas o motor por canal usa; None mantém os campos do produto.
+    economics_channel: str | None = None
 
     @classmethod
     def from_env(cls) -> PaidMediaConfig:
@@ -183,6 +185,10 @@ class PaidMediaConfig:
                 "PAID_MEDIA_CIRCUIT_BREAKER_ENABLED", True
             ),
             safety_factor=_safety_factor(),
+            economics_channel=os.getenv(
+                "PAID_MEDIA_ECONOMICS_CHANNEL", "direct_card"
+            ).strip()
+            or None,
         )
 
 
@@ -419,7 +425,7 @@ ECONOMICS_REVENUE = ("price", "customer_shipping", "customer_fees")
 ECONOMICS_COSTS = ("unit_cost", "shipping_cost_paid_by_veratus", "payment_fee", "tax")
 _ECONOMICS_ALIASES = {
     "price": ("price", "sale_price", "price_brl"),
-    "unit_cost": ("unit_cost", "cost"),
+    "unit_cost": ("unit_cost", "cost", "cost_brl"),
 }
 
 
@@ -432,8 +438,25 @@ def _first_field(product: dict[str, Any], names: tuple[str, ...]) -> Any:
 
 
 def calculate_economics(
-    product: dict[str, Any], safety_factor: Decimal = Decimal("0.70")
+    product: dict[str, Any],
+    safety_factor: Decimal = Decimal("0.70"),
+    *,
+    channel: str | None = None,
+    fee_config: Any = None,
+    assumptions: Any = None,
 ) -> dict[str, Any]:
+    """CPA de equilíbrio do produto.
+
+    Com ``channel``, taxa do canal, taxa de pagamento, frete pago pela Veratus,
+    tributo, devoluções e embalagem vêm do motor por canal
+    (``channel_economics``). A autonomia financeira continua exigindo
+    ``COMPLETE``: com premissa ou valor não verificado, o status é o do motor e
+    nenhum CPA é final.
+    """
+    if channel is not None:
+        return _channel_economics(
+            product, safety_factor, channel, fee_config, assumptions
+        )
     from .commercial_config import CUSTOMER_EXTRA_FEES_BRL, CUSTOMER_SHIPPING_BRL
 
     # Free shipping and no extra fees are the founder's policy for every product;
@@ -475,6 +498,79 @@ def calculate_economics(
         "status": "COMPLETE",
         "inputs": {k: str(v) for k, v in inputs.items()},
         "missing_fields": [],
+        "safety_factor": str(safety_factor),
+        "contribution_before_ads": f"{contribution:.2f}",
+        "break_even_cpa": f"{contribution:.2f}",
+        "break_even_cpa_final": True,
+        "target_cpa": f"{target_cpa:.2f}",
+        "break_even_roas": f"{revenue / contribution:.4f}",
+        "target_roas": f"{revenue / target_cpa:.4f}",
+    }
+
+
+def _channel_economics(
+    product: dict[str, Any],
+    safety_factor: Decimal,
+    channel: str,
+    fee_config: Any,
+    assumptions: Any,
+) -> dict[str, Any]:
+    from . import channel_economics as engine
+    from .commercial_config import CUSTOMER_EXTRA_FEES_BRL, CUSTOMER_SHIPPING_BRL
+
+    price = _decimal(_first_field(product, _ECONOMICS_ALIASES["price"]))
+    unit_cost = _decimal(_first_field(product, _ECONOMICS_ALIASES["unit_cost"]))
+    base = {
+        "channel": channel,
+        "contribution_before_ads": None,
+        "break_even_cpa": None,
+        "break_even_cpa_final": False,
+        "target_cpa": None,
+        "break_even_roas": None,
+        "target_roas": None,
+    }
+    missing = [
+        name
+        for name, value in (("price", price), ("unit_cost", unit_cost))
+        if value is None
+    ]
+    if missing:
+        return {**base, "status": "INCOMPLETE", "missing_fields": missing}
+    result = engine.evaluate(
+        channel,
+        engine.product_type_of(product),
+        price,
+        cost=unit_cost,
+        assumptions=assumptions,
+        config=fee_config,
+    )
+    costs = dict.fromkeys(engine.PAID_MEDIA_FIELDS.values(), Decimal(0))
+    for item in result["items"]:
+        costs[engine.PAID_MEDIA_FIELDS[item["kind"]]] += Decimal(item["amount"])
+    revenue = price + CUSTOMER_SHIPPING_BRL + CUSTOMER_EXTRA_FEES_BRL
+    contribution = revenue - unit_cost - sum(costs.values())
+    inputs = {
+        "price": f"{price:.2f}",
+        "customer_shipping": f"{CUSTOMER_SHIPPING_BRL:.2f}",
+        "customer_fees": f"{CUSTOMER_EXTRA_FEES_BRL:.2f}",
+        "unit_cost": f"{unit_cost:.2f}",
+        **{name: f"{value:.2f}" for name, value in costs.items()},
+    }
+    base.update(
+        inputs=inputs,
+        items=result["items"],
+        status_reasons=result["status_reasons"],
+        missing_fields=[],
+        estimated_contribution_before_ads=f"{contribution:.2f}",
+    )
+    if result["status"] != "COMPLETE":
+        return {**base, "status": result["status"]}
+    if contribution <= 0 or safety_factor <= 0:
+        return {**base, "status": "INVALID"}
+    target_cpa = contribution * safety_factor
+    return {
+        **base,
+        "status": "COMPLETE",
         "safety_factor": str(safety_factor),
         "contribution_before_ads": f"{contribution:.2f}",
         "break_even_cpa": f"{contribution:.2f}",
@@ -659,7 +755,11 @@ class PaidAcquisitionWorker:
             "product_focus": "single_sku",
         }
         review = review_creative(candidate, creative_input)
-        economics = calculate_economics(candidate, self.config.safety_factor)
+        economics = calculate_economics(
+            candidate,
+            self.config.safety_factor,
+            channel=self.config.economics_channel,
+        )
         tracking = self.adapter.get_tracking_status()
         meta_health = self.adapter.health()
         blockers = []

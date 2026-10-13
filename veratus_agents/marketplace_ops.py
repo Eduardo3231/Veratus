@@ -771,6 +771,23 @@ def prepare_listing(
             {"channel": channel.value, "external_write": False},
         )
         return result
+    from .commercial_config import watch_channel_blockers
+
+    # Relógio só vai a marketplace com foto real e origem confirmada.
+    if blockers := watch_channel_blockers(product, channel.value):
+        result = store.upsert_listing(
+            product["sku"],
+            channel.value,
+            ListingState.BLOCKED,
+            payload=payload,
+            error=",".join(blockers),
+        )
+        store.event(
+            "DRAFT_BLOCKED_WATCH",
+            product["sku"],
+            {"channel": channel.value, "reasons": blockers, "external_write": False},
+        )
+        return result
     key = f"{channel.value}:{product['sku']}:CREATE_DRAFT:{product.get('updated_at', '1')}"
     existing = store.listing(channel.value, product["sku"])
     remembered = store.recalled(key)

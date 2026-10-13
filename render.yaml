@@ -200,3 +200,7 @@ services:
         value: "1"
       - key: OPENAI_AGENTS_DONT_LOG_TOOL_DATA
         value: "1"
+      - key: CHANNEL_FEES_PATH
+        value: "config/channel_fees_2026-10.json"
+      - key: PAID_MEDIA_ECONOMICS_CHANNEL
+        value: "direct_card"

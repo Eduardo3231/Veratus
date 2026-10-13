@@ -182,3 +182,47 @@ def calculate_official_economics() -> dict[str, str]:
         "contribution_margin": "NOT_CALCULATED_WITHOUT_CHANNEL_COSTS",
         "maximum_sustainable_cpa": "NOT_CALCULATED_WITHOUT_OPERATIONAL_COSTS",
     }
+
+
+def origin_confirmed() -> bool:
+    """Respondida a pergunta ``delivery-vs-registered-origin``?
+
+    Enquanto estiver pendente, relógio não vai a marketplace (ORIGIN_UNCONFIRMED)
+    e a economia por canal marca os marketplaces como BLOCKED_BY_ORIGIN.
+    """
+    return any(
+        item["id"] == "delivery-vs-registered-origin"
+        and item["status"] == "ANSWERED_DOMESTIC"
+        for item in FOUNDER_OPEN_QUESTIONS
+    )
+
+
+def is_watch(product: dict) -> bool:
+    text = " ".join(
+        str(product.get(name) or "")
+        for name in ("category", "subcategory", "collection", "product_type")
+    ).casefold()
+    return any(token in text for token in ("watch", "relog", "relóg"))
+
+
+# Marketplaces que exigem envio de dentro do Brasil para relógio.
+DOMESTIC_ORIGIN_MARKETPLACES = frozenset(
+    {"mercado-livre", "mercado_livre", "shopee", "tiktok-shop", "tiktok_shop", "amazon"}
+)
+
+
+def watch_channel_blockers(product: dict, channel: str | None = None) -> list[str]:
+    """Motivos que impedem um relógio de ir a post, anúncio ou marketplace.
+
+    Vazio para joias. Só ``REAL_PHOTO`` libera a imagem; nos marketplaces (ou
+    sem canal informado) a origem também precisa estar confirmada.
+    """
+    if not is_watch(product):
+        return []
+    reasons = []
+    if product.get("image_status") != "REAL_PHOTO":
+        reasons.append("NEEDS_REAL_PHOTO")
+    needs_origin = channel is None or channel in DOMESTIC_ORIGIN_MARKETPLACES
+    if needs_origin and not origin_confirmed():
+        reasons.append("ORIGIN_UNCONFIRMED")
+    return reasons

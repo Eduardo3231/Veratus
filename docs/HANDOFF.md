@@ -1,7 +1,29 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 28/09/2026, Claude Code (conexões de marketplace).
+**Última atualização:** 13/10/2026, Claude Code (canais, atendimento autônomo e redes sociais).
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
+
+## Rodada de 13/10 — canais, atendimento autônomo e redes sociais
+
+O fundador aprovou a seção 0 do prompt nesta sessão, com os valores recomendados: papéis novos, atendimento em `SHADOW`, Pix + link do Mercado Pago com juros pagos pelo cliente e desconto máximo de R$ 0. A Fase 7 (iPhones) fica para depois do primeiro teste.
+
+> **Pacote do fundador pendente.** Os arquivos do pacote (`config/channel_fees_2026-10.json` com fontes, `tests/golden/channel_economics_cases.json`, `knowledge/`, `social/calendario-2026-10.*` e as 33 artes em `landing/social/posts/2026-10/`) estavam só no VS Code local e não chegaram ao repositório. O código está pronto para recebê-los; os arquivos versionados hoje são provisórios e mínimos, marcados `PLACEHOLDER`/`UNVERIFIED`. **Lembrete ao fundador: entregar o pacote e as skills de venda (`knowledge/skills/*.md`).**
+
+### Fase 1 — Economia por canal
+
+- `veratus_agents/channel_economics.py`: `load_fee_config` (schema `veratus.channel_fees/v1`, objetos imutáveis), `evaluate`, `price_for_target_margin`, `price_to_match` (preços terminados em ,90: varredura de real em real abaixo de R$ 250, busca binária acima) e `channel_price_plan`. Os tipos de produto são `jewelry`, `watch` e `smartphone`. O status é `COMPLETE`, `ESTIMATED` ou `INCOMPLETE`; um relógio em marketplace com origem não confirmada fica `BLOCKED_BY_ORIGIN`.
+- `custo_maximo` = sobra − margem-alvo × preço. `cpa_maximo` = lucro − margem-alvo × preço. A margem-alvo padrão (20%) é `ASSUMPTION` no arquivo.
+- `config/channel_fees_2026-10.json` é **provisório**: valores de memória pública, todos `UNVERIFIED`; só o frete direto do relógio (R$ 25) é `ASSUMPTION`. Nenhum canal chega a `COMPLETE` até o arquivo do fundador substituir este. Se o arquivo do pacote usar outro formato, adapte o loader (o formato esperado está na docstring do módulo).
+- `paid_media.calculate_economics(..., channel=)`: taxa do canal, taxa de pagamento, frete, tributo, devoluções e embalagem vêm do motor. O worker usa `PAID_MEDIA_ECONOMICS_CHANNEL` (padrão `direct_card`, o mais caro). A autonomia continua exigindo `COMPLETE`.
+- Rotas com `X-Veratus-Admin-Token`:
+  - `GET /os/economics/<sku>?channel=`;
+  - `POST /os/economics/simulate`;
+  - `GET /os/pricing/channel-plan/<sku>`;
+  - `POST /os/pricing/channel-plan/<sku>/request`, que abre um `PRICE_APPROVAL` e não aplica nada.
+- Relógio em rascunho de marketplace: `prepare_listing` bloqueia com `NEEDS_REAL_PHOTO` e/ou `ORIGIN_UNCONFIRMED` (`commercial_config.watch_channel_blockers`).
+- Testes: `tests/test_channel_economics.py`. Os casos dourados ficam *skipped* até o arquivo existir; as bordas (R$ 49,99/50, 78,99/79, 79,99/80) usam o arquivo provisório.
+- **Custo real versionado (reportado, não apagado):** `OFFICIAL_PRODUCT_COST_BRL = 65.00` em `veratus_agents/commercial_config.py`, repetido em `marketplace_ops.py`, `data_discovery.py`, testes e `docs/evidence/founder-round-2026-09-26.md`. O repositório é público. Decisão do fundador: mover para o Product Master (banco) e trocar os testes por custo fictício.
+- `scripts/agent_lock.py` ganhou bit executável no Git: o Ruff no Linux (CI) acusava EXE001.
 
 ## Conexões de marketplace (28/09)
 

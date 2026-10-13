@@ -46,6 +46,7 @@ class ApprovalType(StrEnum):
     PUBLISH_APPROVAL = "PUBLISH_APPROVAL"
     DESTRUCTIVE_ACTION = "DESTRUCTIVE_ACTION"
     CREDENTIAL_CHANGE = "CREDENTIAL_CHANGE"
+    AUTONOMY_CHANGE = "AUTONOMY_CHANGE"
 
 
 class ApprovalStatus(StrEnum):
@@ -2117,7 +2118,9 @@ class OperationalRuntime:
                 "tracking": MetaAdsAdapter().get_tracking_status()["status"],
                 "economics": {
                     str(item.get("sku") or item.get("id")): calculate_economics(
-                        item, paid_config.safety_factor
+                        item,
+                        paid_config.safety_factor,
+                        channel=paid_config.economics_channel,
                     )["status"]
                     for item in eligible
                 },
@@ -2169,3 +2172,35 @@ class OperationalRuntime:
             ],
             "external_writes": "BLOCKED",
         }
+
+
+def runtime_persistence() -> str:
+    """Onde o CommandEngine guarda tarefas e aprovações (o mesmo do servidor)."""
+    from .config import AgentSettings
+
+    settings = AgentSettings.from_env()
+    return settings.database_url or str(settings.runtime_dir / "runtime.sqlite3")
+
+
+def request_approval(
+    engine: CommandEngine,
+    requested_by: str,
+    approval_type: ApprovalType,
+    reason: str,
+    payload: dict[str, Any],
+) -> ApprovalRequest:
+    """Abre um ApprovalRequest e registra na auditoria, sob a trava comum."""
+    with engine.synchronized():
+        approval = engine.approvals.request(
+            requested_by, approval_type, reason, payload
+        )
+        engine.tasks.record(
+            requested_by, "APPROVAL_REQUESTED", approval.request_id, "PENDING"
+        )
+    return approval
+
+
+def approval_status(engine: CommandEngine, request_id: str | None) -> str | None:
+    engine.refresh()
+    item = engine.approvals.requests.get(request_id or "")
+    return item.status.value if item else None
