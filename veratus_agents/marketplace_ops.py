@@ -736,6 +736,12 @@ class ExternalWriteGuard:
             reasons.append("PUBLISH_APPROVAL_REQUIRED")
         if self.store.is_overridden(product.get("sku", ""), channel, "PUBLISH"):
             reasons.append("CEO_OVERRIDE_BLOCK")
+        from .commercial_config import watch_channel_blockers
+
+        reasons += [
+            f"WATCH_INFO_PENDING:{code}"
+            for code in watch_channel_blockers(product, channel)
+        ]
         return not reasons, reasons
 
 
@@ -771,21 +777,33 @@ def prepare_listing(
             {"channel": channel.value, "external_write": False},
         )
         return result
-    from .commercial_config import watch_channel_blockers
+    from .commercial_config import is_watch, watch_channel_blockers
 
-    # Relógio só vai a marketplace com foto real e origem confirmada.
-    if blockers := watch_channel_blockers(product, channel.value):
+    if is_watch(product):
+        from .watch_sheet import default_sheet, model_id
+
+        sheet = default_sheet()
+        if sheet is not None:
+            # O anúncio já sai com o que o fundador confirmou na ficha.
+            payload = {
+                **payload,
+                "ficha": sheet.listing_attributes(model_id(product)),
+            }
+    # Relógio sobe: o rascunho é preparado já, e o que falta (foto real,
+    # envio do Brasil, campos da ficha) fica listado até o fundador preencher.
+    # Publicar continua bloqueado pelo ExternalWriteGuard enquanto faltar algo.
+    if pending := watch_channel_blockers(product, channel.value):
         result = store.upsert_listing(
             product["sku"],
             channel.value,
-            ListingState.BLOCKED,
-            payload=payload,
-            error=",".join(blockers),
+            ListingState.DRAFT,
+            payload={**payload, "pending_info": pending},
+            error="PENDENTE:" + ",".join(pending),
         )
         store.event(
-            "DRAFT_BLOCKED_WATCH",
+            "DRAFT_PENDING_INFO",
             product["sku"],
-            {"channel": channel.value, "reasons": blockers, "external_write": False},
+            {"channel": channel.value, "pending": pending, "external_write": False},
         )
         return result
     key = f"{channel.value}:{product['sku']}:CREATE_DRAFT:{product.get('updated_at', '1')}"

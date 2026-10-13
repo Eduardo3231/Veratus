@@ -91,20 +91,42 @@ def test_watch_marketplace_snapshot_is_blocked_by_origin():
     assert snapshot["status"] == "BLOCKED_BY_ORIGIN"
 
 
-def test_watch_without_real_photo_is_blocked_everywhere():
-    watch = {"category": "accessories", "subcategory": "watches"}
+def test_watch_goes_up_and_each_channel_lists_what_is_missing():
+    watch = {"id": "ocean-blue", "category": "accessories", "subcategory": "watches"}
     photographed = {**watch, "image_status": "REAL_PHOTO"}
 
+    # À venda no site e nas conversas, sem esperar nada.
+    for channel in ("site", "whatsapp", "instagram_direct"):
+        assert config.watch_channel_blockers(watch, channel) == []
+    # Post e anúncio esperam só a foto real.
     assert config.watch_channel_blockers(watch, "meta") == ["NEEDS_REAL_PHOTO"]
-    assert config.watch_channel_blockers(watch, "shopee") == [
-        "NEEDS_REAL_PHOTO",
-        "ORIGIN_UNCONFIRMED",
-    ]
     assert config.watch_channel_blockers(photographed, "meta") == []
-    assert config.watch_channel_blockers(photographed, "amazon") == [
-        "ORIGIN_UNCONFIRMED"
-    ]
+    # Marketplace espera foto, envio do Brasil e os campos da ficha.
+    shopee = config.watch_channel_blockers(watch, "shopee")
+    assert shopee[:2] == ["NEEDS_REAL_PHOTO", "ORIGIN_UNCONFIRMED"]
+    assert "FICHA:ocean-blue.cor_mostrador" in shopee
+    amazon = config.watch_channel_blockers(photographed, "amazon")
+    assert "FICHA:ocean-blue.gtin" in amazon
+    assert "FICHA:ocean-blue.gtin" not in config.watch_channel_blockers(
+        photographed, "shopee"
+    )
     assert config.watch_channel_blockers({"category": "jewelry_accessories"}) == []
+
+
+def test_filled_sheet_releases_marketplaces_and_economics(filled_watch_sheet):
+    photographed = {
+        "id": "ocean-blue",
+        "category": "accessories",
+        "subcategory": "watches",
+        "image_status": "REAL_PHOTO",
+    }
+
+    assert config.origin_confirmed() is True
+    for channel in ("mercado-livre", "shopee", "tiktok-shop", "amazon"):
+        assert config.watch_channel_blockers(photographed, channel) == []
+    assert config.watch_economics_snapshot("mercado_livre")["status"] != (
+        "BLOCKED_BY_ORIGIN"
+    )
 
 
 def test_storefront_blocker_and_open_question_stay_in_place():

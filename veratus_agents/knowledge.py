@@ -74,6 +74,7 @@ class Fact:
     scope: str
     text: str
     evidence: str
+    gate_issue: str | None = None
 
 
 @dataclass(frozen=True)
@@ -102,15 +103,18 @@ class Knowledge:
 
     def confirmed_facts(self) -> dict[str, dict[str, str]]:
         """Formato de ``CONFIRMED_SALES_FACTS``: evidence_ref → claim."""
-        return {
-            fact.id: {
+        facts = {}
+        for fact in self.facts:
+            if fact.status != "CONFIRMED":
+                continue
+            facts[fact.id] = {
                 "claim_type": fact.claim_type,
                 "scope": fact.scope,
                 "text": fact.text,
             }
-            for fact in self.facts
-            if fact.status == "CONFIRMED"
-        }
+            if fact.gate_issue:
+                facts[fact.id]["gate_issue"] = fact.gate_issue
+        return facts
 
     def pending_facts(self) -> list[Fact]:
         return [fact for fact in self.facts if fact.status != "CONFIRMED"]
@@ -129,7 +133,10 @@ class Knowledge:
                 {"evidence_ref": ref, **fact}
                 for ref, fact in self.confirmed_facts().items()
             ],
-            "a_equipe_confirma": [fact.text for fact in self.pending_facts()],
+            "a_equipe_confirma": [
+                *(fact.text for fact in self.pending_facts()),
+                *_watch_sheet_pending(),
+            ],
             "ofertas": [
                 {
                     "id": offer.id,
@@ -183,6 +190,9 @@ def _facts(path: Path) -> tuple[Fact, ...]:
         if item["id"] in seen:
             raise KnowledgeError(f"{where}: id repetido {item['id']}")
         seen.add(item["id"])
+        gate_issue = item.get("gate_issue")
+        if gate_issue is not None and not isinstance(gate_issue, str):
+            raise KnowledgeError(f"{where}: gate_issue precisa ser texto")
         facts.append(
             Fact(
                 id=str(item["id"]).strip(),
@@ -191,6 +201,7 @@ def _facts(path: Path) -> tuple[Fact, ...]:
                 scope=str(item["scope"]).strip(),
                 text=" ".join(str(item["text"]).split()),
                 evidence=str(item["evidence"]).strip(),
+                gate_issue=gate_issue,
             )
         )
     return tuple(facts)
@@ -260,15 +271,42 @@ def default_knowledge() -> Knowledge:
     return _cached(str(KNOWLEDGE_DIR))
 
 
+def _watch_sheet_facts() -> dict[str, dict[str, str]]:
+    try:
+        from .catalog import load_catalog
+        from .watch_sheet import default_sheet
+
+        sheet = default_sheet()
+        names = {product["id"]: product["name"] for product in load_catalog()}
+    except (ValueError, OSError, ImportError):
+        return {}
+    return sheet.sales_facts(names) if sheet else {}
+
+
+def _watch_sheet_pending() -> list[str]:
+    try:
+        from .watch_sheet import default_sheet
+
+        sheet = default_sheet()
+    except ImportError:
+        return []
+    return sheet.pending_texts() if sheet else []
+
+
 def confirmed_sales_facts(
     fallback: dict[str, dict[str, str]],
 ) -> dict[str, dict[str, str]]:
-    """Fatos confirmados de ``fatos.yaml``; sem o arquivo, os fatos embutidos."""
+    """Fatos confirmados de ``fatos.yaml`` e da ficha dos relógios.
+
+    Sem ``fatos.yaml``, os fatos embutidos. A ficha
+    (``catalog/ficha-relogios.yaml``) acrescenta o que o fundador confirmou:
+    material, movimento, medidas, garantia, envio e cores.
+    """
     try:
-        facts = default_knowledge().confirmed_facts()
+        facts = default_knowledge().confirmed_facts() or dict(fallback)
     except (KnowledgeError, ImportError):
-        return dict(fallback)
-    return facts or dict(fallback)
+        facts = dict(fallback)
+    return {**facts, **_watch_sheet_facts()}
 
 
 # -- lint -----------------------------------------------------------------------

@@ -107,9 +107,12 @@ _BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         "marca de terceiros",
     ),
     (
+        # A palavra seguinte entra no trecho: com o movimento confirmado na
+        # ficha, "movimento quartzo" passa e "movimento automático" não.
         re.compile(
-            r"\b(?:movimento|mecanismo|m[áa]quina\s+(?:autom[áa]tica|qu[áa]rtzo?)|"
-            r"quartzo|autom[áa]tico\s+de\s+corda)\b",
+            r"\b(?:movimento|mecanismo)\b(?:\s+(?:[eé]\s+)?\w+)?|"
+            r"\bm[áa]quina\s+(?:autom[áa]tica|qu[áa]rtzo?)\b|"
+            r"\bquartzo\b|\bautom[áa]tico\s+de\s+corda\b",
             re.IGNORECASE,
         ),
         "especificação técnica não validada",
@@ -212,6 +215,72 @@ _MARKETPLACE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
+# Bloqueios que um fato CONFIRMADO (ficha dos relógios ou fatos.yaml com
+# ``gate_issue``) libera, só no texto desse fato: "41 mm" passa se a ficha diz
+# 41 mm; "40 mm" continua bloqueado. Marca de terceiros, origem, fornecedor,
+# urgência, desconto, estoque e contato externo nunca são liberados assim.
+EXEMPTABLE_ISSUES = frozenset(
+    {
+        "especificação técnica não validada",
+        "resistência à água não validada",
+        "medida não validada",
+        "garantia não validada",
+        "material não validado",
+    }
+)
+_STOPWORDS = frozenset(
+    {
+        "a",
+        "o",
+        "as",
+        "os",
+        "de",
+        "da",
+        "do",
+        "das",
+        "dos",
+        "e",
+        "em",
+        "com",
+        "tem",
+        "possui",
+        "oferecemos",
+        "damos",
+        "inclui",
+        "dele",
+        "dela",
+        "deste",
+        "desse",
+        "relogio",
+        "relogios",
+        "modelo",
+        "peca",
+    }
+)
+
+
+def _tokens(text: str) -> set[str]:
+    from .meta_webhooks import normalize_text
+
+    normalized = normalize_text(text).replace(".", ",")
+    return set(re.findall(r"\d+(?:,\d+)?|[a-z]+", normalized))
+
+
+def _fact_allows(fragment: str, issue: str, collection: str | None) -> bool:
+    if issue not in EXEMPTABLE_ISSUES:
+        return False
+    wanted = _tokens(fragment) - _STOPWORDS
+    for fact in CONFIRMED_SALES_FACTS.values():
+        if fact.get("gate_issue") != issue:
+            continue
+        scope = fact.get("scope")
+        if scope not in (None, "all") and collection not in (None, scope):
+            continue
+        if wanted <= _tokens(fact["text"]):
+            return True
+    return False
+
+
 def _confirmed(match: re.Match[str], issue: str, collection: str | None) -> bool:
     """A match that states exactly a founder-confirmed fact is allowed."""
     if issue == "valor monetário não validado":
@@ -243,7 +312,9 @@ def hard_review_customer_reply(
         patterns += _MARKETPLACE_PATTERNS
     for pattern, issue in patterns:
         for match in pattern.finditer(text or ""):
-            if not _confirmed(match, issue, product_collection):
+            if not _confirmed(match, issue, product_collection) and not _fact_allows(
+                match.group(0), issue, product_collection
+            ):
                 issues.append(issue)
                 break
     for claim in claims or []:

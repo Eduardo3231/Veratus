@@ -1,0 +1,187 @@
+# Ficha dos relógios Veratus — o fundador preenche.
+#
+# Como preencher: coloque o valor em `valor` e troque `status: PENDENTE` por
+# `status: CONFIRMADO`. Só campo CONFIRMADO sai para o cliente, para anúncio e
+# para marketplace. Valor com PENDENTE é só sugestão e nunca é usado.
+#
+# Para ver o que ainda falta, por modelo e por canal:
+#     python -m veratus_agents.watch_sheet status
+#
+# Nunca coloque aqui custo, margem, fornecedor, endereço de origem ou dado de
+# cliente: este repositório é público. A foto real de cada modelo entra pelo
+# importador (incoming/relogios/<id>.jpg), não por esta ficha.
+schema: veratus.watch_sheet/v1
+
+geral:
+  # Envio e prazo (os marketplaces exigem envio de dentro do Brasil).
+  envio_do_brasil:
+    valor: null  # true se o relógio sai de dentro do Brasil
+    status: PENDENTE
+  cidade_de_envio:
+    valor: São Paulo/SP  # aparece no anúncio e na conversa
+    status: PENDENTE
+  prazo_postagem_dias_uteis:
+    valor: 2  # dias úteis entre o pagamento e a postagem
+    status: PENDENTE
+
+  # Especificações (viram fatos que o atendimento pode afirmar).
+  material_caixa:
+    valor: Aço inoxidável
+    status: PENDENTE
+  material_pulseira:
+    valor: Aço inoxidável
+    status: PENDENTE
+  movimento:
+    valor: null  # ex.: quartzo (bateria) ou automático
+    status: PENDENTE
+  resistencia_agua:
+    valor: null  # ex.: 3 ATM, resistente a respingos
+    status: PENDENTE
+  diametro_caixa_mm:
+    valor: 41  # estimativa; confirme medindo a peça
+    status: PENDENTE
+  espessura_caixa_mm:
+    valor: 12.5  # estimativa
+    status: PENDENTE
+  largura_pulseira_mm:
+    valor: 20  # estimativa
+    status: PENDENTE
+  garantia:
+    valor: null  # ex.: 90 dias contra defeito de fabricação
+    status: PENDENTE
+
+  # Pacote enviado (frete dos marketplaces).
+  embalagem_peso_g:
+    valor: 350
+    status: PENDENTE
+  embalagem_comprimento_cm:
+    valor: 18
+    status: PENDENTE
+  embalagem_largura_cm:
+    valor: 14
+    status: PENDENTE
+  embalagem_altura_cm:
+    valor: 10
+    status: PENDENTE
+
+# Por modelo: cores (atributo obrigatório nos marketplaces), código de barras
+# (EAN/GTIN; a Amazon exige, escreva ISENTO se não houver) e estoque para os
+# marketplaces.
+modelos:
+  arctic-white:  # Arctic White
+    cor_mostrador:
+      valor: Branco
+      status: PENDENTE
+    cor_pulseira:
+      valor: Prateado
+      status: PENDENTE
+    gtin:
+      valor: null
+      status: PENDENTE
+    estoque:
+      valor: null
+      status: PENDENTE
+  ocean-blue:  # Ocean Blue
+    cor_mostrador:
+      valor: Azul
+      status: PENDENTE
+    cor_pulseira:
+      valor: Prateado
+      status: PENDENTE
+    gtin:
+      valor: null
+      status: PENDENTE
+    estoque:
+      valor: null
+      status: PENDENTE
+  black-gmt:  # Black GMT
+    cor_mostrador:
+      valor: Preto
+      status: PENDENTE
+    cor_pulseira:
+      valor: Prateado
+      status: PENDENTE
+    gtin:
+      valor: null
+      status: PENDENTE
+    estoque:
+      valor: null
+      status: PENDENTE
+  royal-blue:  # Royal Blue
+    cor_mostrador:
+      valor: Azul
+      status: PENDENTE
+    cor_pulseira:
+      valor: Bicolor (prateado e dourado)
+      status: PENDENTE
+    gtin:
+      valor: null
+      status: PENDENTE
+    estoque:
+      valor: null
+      status: PENDENTE
+  platinum-classic:  # Platinum Classic
+    cor_mostrador:
+      valor: Prata claro
+      status: PENDENTE
+    cor_pulseira:
+      valor: Prateado
+      status: PENDENTE
+    gtin:
+      valor: null
+      status: PENDENTE
+    estoque:
+      valor: null
+      status: PENDENTE
+  emerald-signature:  # Emerald Signature
+    cor_mostrador:
+      valor: Verde
+      status: PENDENTE
+    cor_pulseira:
+      valor: Prateado
+      status: PENDENTE
+    gtin:
+      valor: null
+      status: PENDENTE
+    estoque:
+      valor: null
+      status: PENDENTE
+  silver-prestige:  # Silver Prestige
+    cor_mostrador:
+      valor: Prata
+      status: PENDENTE
+    cor_pulseira:
+      valor: Prateado
+      status: PENDENTE
+    gtin:
+      valor: null
+      status: PENDENTE
+    estoque:
+      valor: null
+      status: PENDENTE
+  polar-blue:  # Polar Blue
+    cor_mostrador:
+      valor: Branco
+      status: PENDENTE
+    cor_pulseira:
+      valor: Prateado
+      status: PENDENTE
+    gtin:
+      valor: null
+      status: PENDENTE
+    estoque:
+      valor: null
+      status: PENDENTE
+  bronze-heritage:  # Bronze Heritage
+    cor_mostrador:
+      valor: Marrom
+      status: PENDENTE
+    cor_pulseira:
+      valor: Dourado
+      status: PENDENTE
+    gtin:
+      valor: null
+      status: PENDENTE
+    estoque:
+      valor: null
+      status: PENDENTE

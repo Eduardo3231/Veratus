@@ -9,6 +9,37 @@ O fundador aprovou a seção 0 do prompt nesta sessão, com os valores recomenda
 
 > **Pacote do fundador pendente.** Os arquivos do pacote (`config/channel_fees_2026-10.json` com fontes, `tests/golden/channel_economics_cases.json`, `knowledge/`, `social/calendario-2026-10.*` e as 33 artes em `landing/social/posts/2026-10/`) estavam só no VS Code local e não chegaram ao repositório. O código está pronto para recebê-los; os arquivos versionados hoje são provisórios e mínimos, marcados `PLACEHOLDER`/`UNVERIFIED`. **Lembrete ao fundador: entregar o pacote e as skills de venda (`knowledge/skills/*.md`).**
 
+### Relógios sobem: ficha preenchida pelo fundador (13/10, à tarde)
+
+O fundador decidiu que **os relógios sobem**: entram nos posts, nos anúncios e nos marketplaces, e ele preenche as informações que faltam. As travas que estavam no código viraram campos de uma ficha. Ao confirmar um campo, o relógio libera sozinho no que dependia dele, sem mudança de código.
+
+- **Ficha:** `catalog/ficha-relogios.yaml`.
+  - Cada campo tem `valor` e `status`. Para usar, preencha o valor e troque `PENDENTE` por `CONFIRMADO`.
+  - Os valores que já estão lá (aço inoxidável, 41 mm, 350 g…) são **sugestões** e não são usados enquanto estiverem `PENDENTE`.
+  - Nada de custo, fornecedor ou endereço de origem na ficha: o repositório é público.
+- **O que falta:** `python -m veratus_agents.watch_sheet status`, que mostra o checklist por modelo e por canal (também em `GET /os/watches/readiness`). `python -m veratus_agents.watch_sheet check` só valida a ficha e aponta o campo com erro.
+- **O que cada campo libera:**
+
+| Canal | Espera |
+| --- | --- |
+| Site, WhatsApp, Direct | nada: o relógio já está à venda (9/9) |
+| Post no Instagram/Facebook, anúncio pago | foto real (importador) |
+| Mercado Livre, Shopee, TikTok Shop | foto real + `envio_do_brasil: true` + cidade, prazo de postagem, materiais, movimento, diâmetro, embalagem; por modelo: cores e estoque |
+| Amazon | o mesmo + código de barras (`gtin`, ou `ISENTO`) |
+
+- **Marketplace:** o rascunho do relógio é criado já (`DRAFT`), com `pending_info` listando o que falta e os campos confirmados em `payload.ficha`. Publicar continua barrado pelo `ExternalWriteGuard` enquanto houver pendência (`WATCH_INFO_PENDING:*`), além das flags e da aprovação de sempre.
+- **Origem:** `envio_do_brasil: true` + `CONFIRMADO` substitui a pergunta `delivery-vs-registered-origin`. Libera os marketplaces e tira o `BLOCKED_BY_ORIGIN` da economia por canal.
+- **Atendimento e gate:**
+  - material, movimento, resistência à água, medidas, garantia, envio e cores confirmados viram fatos (`relogios-*`) que o agente afirma, em vez de "a equipe confirma";
+  - o gate libera exatamente o texto do fato: "41 mm" passa se a ficha diz 41 mm, e "40 mm" continua bloqueado;
+  - marca de terceiros, origem, fornecedor, urgência, desconto e estoque nunca são liberados assim.
+- **Calendário:** os posts de relógio entram `NEEDS_INFO` (esperando a foto real), não mais `BLOCKED`. Quando a foto chega:
+  - o importador gera também o JPEG 1080 × 1350 em `landing/social/posts/watches/<id>.jpg`;
+  - `refresh` (que também roda dentro de `run-due`) troca a arte-modelo pelo JPEG e manda o item para a aprovação semanal.
+  - Item de relógio com arte final do fundador mantém a mídia dele.
+  - Só o iPhone segue `BLOCKED` (Fase 7).
+- **Não muda:** a foto com marca de terceiros (quarentena) não entra em post, anúncio nem marketplace, e o site segue com a ilustração/criativo de vitrine até a foto real chegar. Nada é publicado sem as flags e a aprovação.
+
 ### Fase 1 — Economia por canal
 
 - `veratus_agents/channel_economics.py`: `load_fee_config` (schema `veratus.channel_fees/v1`, objetos imutáveis), `evaluate`, `price_for_target_margin`, `price_to_match` (preços terminados em ,90: varredura de real em real abaixo de R$ 250, busca binária acima) e `channel_price_plan`. Os tipos de produto são `jewelry`, `watch` e `smartphone`. O status é `COMPLETE`, `ESTIMATED` ou `INCOMPLETE`; um relógio em marketplace com origem não confirmada fica `BLOCKED_BY_ORIGIN`.
@@ -34,9 +65,7 @@ O fundador aprovou a seção 0 do prompt nesta sessão, com os valores recomenda
   - claims de material de joia: ouro, prata, banhado, folheado, semijoia, zircônia, hipoalergênico;
   - urgência ou escassez ("só hoje", "por tempo limitado") e oferta de desconto ou cupom (`DISCOUNT_LIMIT_BRL=0`).
 - `commercial_config.watch_economics_snapshot(channel)`: o EconomicsSnapshot dos relógios vem do motor. Frete direto R$ 25 = `ASSUMPTION`; pagamento e tributo `UNVERIFIED`, então o worker de mídia paga continua sem CPA final. `WATCH_ECONOMICS_SNAPSHOT` fica como registro histórico de 26/09.
-- `watch_channel_blockers(produto, canal)`:
-  - `NEEDS_REAL_PHOTO` em qualquer canal sem `REAL_PHOTO`;
-  - `ORIGIN_UNCONFIRMED` nos marketplaces enquanto `delivery-vs-registered-origin` estiver pendente. Para liberar, o status passa a `ANSWERED_DOMESTIC` em `FOUNDER_OPEN_QUESTIONS`.
+- `watch_channel_blockers(produto, canal)`: lista o que falta para o canal (vazio = liberado), lendo a ficha `catalog/ficha-relogios.yaml`. Ver "Relógios sobem" acima, que substituiu o bloqueio por origem fixo no código.
 - Fotos reais: o fluxo não mudou (`incoming/relogios/<id>.jpg` → `scripts/import_watch_photos.py --sem-marca-de-terceiros`). A quarentena não mudou.
 - Testes: `tests/test_watch_readiness.py`.
 
@@ -117,7 +146,7 @@ O fundador aprovou a seção 0 do prompt nesta sessão, com os valores recomenda
   - faz 3 tentativas (espera de 10, 20 e 40 min) e depois `FAILED` + alerta.
   - Story na Página do Facebook fica `NEEDS_MANUAL`. TikTok: `TikTokDraftAdapter` `UNVERIFIED`, devolve `NEEDS_MANUAL`.
 - **Palavras-chave por post:** `instagram_comment_rules.json` ganhou `keyword_replies` (QUERO, CATÁLOGO, PRESENTE, TREVO, CORAÇÃO, LUZ, IPHONE). O id da mídia vem do registro de publicação, e a regra vale só no post que pediu a palavra (`CommentReplyQueue.enqueue(..., media_rules=)`). O envio continua dependendo de `INSTAGRAM_DM_ENABLED`.
-- **Relógios (Fase 2.6):** `refresh-blocks` marca `AGUARDA_ARTE_COM_FOTO` quando o modelo ganha `REAL_PHOTO` e registra o pedido ao Creative Agent. A arte nova entra por `edit_item(media=...)` e o item volta para `PENDING_APPROVAL`. **A recomposição automática da arte não foi implementada:** o layout das joias está nas artes do pacote, que não chegaram.
+- **Relógios (Fase 2.6):** os posts de relógio esperam a foto real em `NEEDS_INFO`. Com a foto, `refresh` troca a arte-modelo pelo JPEG da foto real e o item vai para `PENDING_APPROVAL` (ver "Relógios sobem"). Uma arte com o layout das joias pode substituir o JPEG por `edit_item(media=...)` quando chegar no pacote.
 - **Métricas:** `insights` lê alcance, salvamentos, comentários e compartilhamentos em +24 h e +7 dias. `report --week` gera o relatório semanal, e `insights_csv` exporta no formato de `social/medicao.csv`.
 - **Rota:** `GET /os/social/posts`.
 - Variáveis: `SOCIAL_PUBLISH_ENABLED=false` e `META_PAGE_ID` (vazio). O Dockerfile copia `social/`.
@@ -140,7 +169,7 @@ O fundador aprovou a seção 0 do prompt nesta sessão, com os valores recomenda
 
 ### Verificação desta rodada (13/10)
 
-- `pytest -q`: 372 passed, 4 skipped. Os pulados são os casos dourados e o calendário real, que esperam o pacote, além do teste de navegador já existente. Rodado em Python 3.13 e 3.11 (o do CI).
+- `pytest -q`: 404 passed, 4 skipped (depois da ficha dos relógios). Os pulados são os casos dourados e o calendário real, que esperam o pacote, além do teste de navegador já existente. Rodado em Python 3.13 e 3.11 (o do CI).
 - `ruff check .` e `ruff format --check .`: limpos.
 - `python -m veratus_agents.knowledge lint`: 0 problemas. `python -m veratus_agents.knowledge eval`: 10/10 com o modelo simulado.
 - Com todas as chaves desligadas, nenhum POST externo (teste com `requests` falhando em qualquer POST, pelas rotas). `run-due` desligado devolve só a prévia, sem item bloqueado.
@@ -187,7 +216,7 @@ Sempre na ordem: chave → teste em `SHADOW` → readiness → aprovação → s
 3. Custo real de R$ 65 versionado (ver Fase 1): migrar para o Product Master e trocar os testes por custo fictício.
 4. Gatilho "fato não confirmado": confirmar a interpretação (alerta sem parar a conversa).
 5. Nível inicial de cada canal fora do WhatsApp: todos em `SHADOW`.
-6. Recomposição automática das artes de relógio com a foto real: depende do layout das artes do pacote.
+6. **Ficha dos relógios:** preencher `catalog/ficha-relogios.yaml` e importar as fotos reais (o fundador vai preencher). `python -m veratus_agents.watch_sheet status` mostra o que falta.
 7. **Fase 7 (iPhones) não foi feita:** pelo prompt, só depois do primeiro teste de 14 dias. Itens de iPhone no calendário e posts ficam `BLOCKED` (`LINHA_IPHONE_DEPOIS_DO_TESTE`).
 
 ## Conexões de marketplace (28/09)
@@ -318,6 +347,6 @@ Anúncio pago e post de relógio continuam bloqueados até a foto real do item e
 
 ## Próximo passo sugerido
 
-1. Entregar o pacote do prompt de canais e as skills de venda (`knowledge/skills/`) e rodar os casos dourados.
-2. Receber as fotos das peças (`incoming/relogios/<id>.jpg`) e rodar o importador para liberar canais externos.
+1. Preencher a ficha dos relógios (`catalog/ficha-relogios.yaml`) e importar as fotos reais; conferir com `python -m veratus_agents.watch_sheet status`.
+2. Entregar o pacote do prompt de canais e as skills de venda (`knowledge/skills/`) e rodar os casos dourados.
 3. Ligar o cron de `/os/conversations/process` com o WhatsApp em `SHADOW` e acompanhar o readiness.

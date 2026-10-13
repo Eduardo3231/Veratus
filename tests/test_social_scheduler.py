@@ -118,24 +118,29 @@ def ok_media(url):
 # -- importação ---------------------------------------------------------------------
 
 
-def test_import_creates_44_items_with_6_blocked(store, calendar):
+def test_import_creates_44_items_watches_wait_for_the_photo(store, calendar):
     result = social.import_calendar(store, calendar)
 
     assert result["items"] == 44
     assert result["by_status"] == {
         "PENDING_APPROVAL": 31,
         "NEEDS_VIDEO": 7,
-        "BLOCKED": 6,
+        "NEEDS_INFO": 5,
+        "BLOCKED": 1,
     }
+    # Relógio sobe: espera só a foto real; o iPhone fica para a Fase 7.
+    waiting = store.items(status="NEEDS_INFO")
+    assert {tuple(item["products"]) for item in waiting} == {(w,) for w in WATCHES}
+    assert all(item["block_reason"] == "NEEDS_REAL_PHOTO" for item in waiting)
+    assert all(item["template_media"] for item in waiting)
     blocked = store.items(status="BLOCKED")
-    assert all("esperando foto real" in i["block_reason"] for i in blocked[:5])
-    assert "LINHA_IPHONE_DEPOIS_DO_TESTE" in blocked[-1]["block_reason"]
+    assert "LINHA_IPHONE_DEPOIS_DO_TESTE" in blocked[0]["block_reason"]
     assert store.get("out-01")["format"] == "CAROUSEL"
     assert store.get("out-01")["media"][0].startswith(
         "https://veratus.onrender.com/social/posts/2026-10/"
     )
     again = social.import_calendar(store, calendar)
-    # Itens bloqueados e vídeos são reavaliados a cada importação.
+    # Itens pendentes, bloqueados e vídeos são reavaliados a cada importação.
     assert (again["unchanged"], again["updated"]) == (31, 13)
 
 
@@ -144,12 +149,12 @@ def test_founder_calendar_imports_44_items(store):
     result = social.import_calendar(store, REAL_CALENDAR)
 
     assert result["items"] == 44
-    assert result["by_status"].get("BLOCKED") == 6
+    by_status = result["by_status"]
+    # 5 relógios esperando foto real e 1 iPhone, como no pacote.
+    assert by_status.get("NEEDS_INFO", 0) + by_status.get("BLOCKED", 0) == 6
 
 
-def test_watch_without_real_photo_is_blocked_even_if_the_calendar_forgets(
-    store, tmp_path
-):
+def test_watch_without_real_photo_waits_even_if_the_calendar_forgets(store, tmp_path):
     path = tmp_path / "c.json"
     path.write_text(
         json.dumps(
@@ -168,8 +173,9 @@ def test_watch_without_real_photo_is_blocked_even_if_the_calendar_forgets(
     )
     social.import_calendar(store, path)
 
-    assert store.get("relogio-esquecido")["status"] == "BLOCKED"
+    assert store.get("relogio-esquecido")["status"] == "NEEDS_INFO"
     assert store.get("relogio-esquecido")["block_reason"] == "NEEDS_REAL_PHOTO"
+    assert store.get("relogio-esquecido")["template_media"] is False
 
 
 def test_quarantined_media_never_enters_the_plan(store, tmp_path):
@@ -245,7 +251,11 @@ def test_run_due_with_flag_off_only_previews(store, calendar, engine):
     assert publisher.calls == []
     ids = {item["id"] for item in result["would_publish"]}
     assert len(ids) == 31
-    blocked = {item["id"] for item in store.items(status="BLOCKED")}
+    blocked = {
+        item["id"]
+        for status in ("BLOCKED", "NEEDS_INFO")
+        for item in store.items(status=status)
+    }
     assert not ids & blocked
 
 
@@ -375,26 +385,65 @@ def test_meta_publisher_handles_carousel_story_page_and_tiktok():
 # -- relógios: foto real libera a arte nova -----------------------------------------
 
 
-def test_real_photo_asks_the_creative_agent_and_new_art_goes_to_approval(
-    store, calendar
+def test_real_photo_replaces_the_template_and_goes_to_approval(
+    store, calendar, tmp_path, monkeypatch
 ):
     social.import_calendar(store, calendar)
+    photos = tmp_path / "watches"
+    photos.mkdir()
+    monkeypatch.setattr(social, "WATCH_PHOTO_DIR", photos)
     catalog = social._catalog()
     catalog["ocean-blue"] = {**catalog["ocean-blue"], "image_status": "REAL_PHOTO"}
-    watch_item = next(
-        item
-        for item in store.items(status="BLOCKED")
-        if item["products"] == ["ocean-blue"]
+    catalog["black-gmt"] = {**catalog["black-gmt"], "image_status": "REAL_PHOTO"}
+    (photos / "ocean-blue.jpg").write_bytes(b"jpeg")  # black-gmt sem o JPEG
+    ocean = next(
+        i for i in store.items(status="NEEDS_INFO") if i["products"] == ["ocean-blue"]
+    )
+    black = next(
+        i for i in store.items(status="NEEDS_INFO") if i["products"] == ["black-gmt"]
     )
 
-    result = social.refresh_blocks(store, catalog)
+    result = social.refresh_pending(store, catalog)
 
-    assert watch_item["id"] in result["awaiting_creative"]
-    assert store.get(watch_item["id"])["block_reason"] == "AGUARDA_ARTE_COM_FOTO"
-    other = next(
-        i for i in store.items(status="BLOCKED") if i["products"] == ["black-gmt"]
+    assert ocean["id"] in result["ready"]
+    ready = store.get(ocean["id"])
+    assert ready["status"] == "PENDING_APPROVAL"
+    assert ready["media"] == [
+        "https://veratus.onrender.com/social/posts/watches/ocean-blue.jpg"
+    ]
+    assert ready["template_media"] is False
+    assert ready["content_hash"] != ocean["content_hash"]
+    assert black["id"] in result["still_pending"]
+    assert store.get(black["id"])["block_reason"] == "WATCH_JPEG_MISSING:black-gmt"
+    others = {i["id"] for i in store.items(status="NEEDS_INFO")} - {black["id"]}
+    assert len(others) == 3  # os outros três relógios seguem esperando a foto
+
+
+def test_watch_item_with_founder_art_keeps_its_media(store, tmp_path):
+    path = tmp_path / "c.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "arte-pronta",
+                    "data": "2026-10-20 10:00",
+                    "formato": "feed",
+                    "midias": ["ocean-arte-final.jpg"],
+                    "legenda": "Ocean Blue.",
+                    "produtos": ["ocean-blue"],
+                }
+            ]
+        ),
+        encoding="utf-8",
     )
-    assert other["id"] in result["still_blocked"]
+    catalog = social._catalog()
+    catalog["ocean-blue"] = {**catalog["ocean-blue"], "image_status": "REAL_PHOTO"}
+
+    social.import_calendar(store, path, catalog=catalog)
+
+    item = store.get("arte-pronta")
+    assert item["status"] == "PENDING_APPROVAL"
+    assert item["media"][0].endswith("/social/posts/2026-10/ocean-arte-final.jpg")
 
 
 # -- palavras-chave por post ------------------------------------------------------

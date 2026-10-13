@@ -942,6 +942,21 @@ def os_economics(sku):
     ), 200
 
 
+@app.route("/os/watches/readiness", methods=["GET"])
+def os_watches_readiness():
+    """O que falta na ficha dos relógios, por modelo e por canal."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.watch_sheet import WatchSheetError, load_sheet, readiness_report
+
+    try:
+        report = readiness_report(load_sheet())
+    except WatchSheetError as exc:
+        return jsonify({"status": "error", "message": f"ficha: {exc}"[:200]}), 409
+    return jsonify(_json_safe(report)), 200
+
+
 @app.route("/os/economics/simulate", methods=["POST"])
 def os_economics_simulate():
     denied = _admin_required()

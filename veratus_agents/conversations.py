@@ -58,6 +58,7 @@ INTENT_RISK = {
     "prazo": 0,
     "como_pedir": 0,
     "fato_pendente": 0,
+    "fato_confirmado": 0,
     "fechamento": 1,
     "dados_pedido": 1,
     "link_pagamento": 1,
@@ -84,7 +85,14 @@ NON_BLOCKING_REASONS = frozenset({"FATO_NAO_CONFIRMADO"})
 # Mensagens transacionais usam sempre o texto determinístico: o link de
 # pagamento e o status do pedido não dependem do modelo.
 TRANSACTIONAL_INTENTS = frozenset(
-    {"dados_pedido", "link_pagamento", "status_pedido", "rastreio", "fato_pendente"}
+    {
+        "dados_pedido",
+        "link_pagamento",
+        "status_pedido",
+        "rastreio",
+        "fato_pendente",
+        "fato_confirmado",
+    }
 )
 STALL_LIMIT = 3
 GATE_FAILURES_TO_TRIP = 2
@@ -242,14 +250,26 @@ _PENDING_TOPICS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "as especificações",
+        "o movimento",
         _phrases(
-            "movimento",
+            "movimento", "quartzo", "automático", "automatico", "bateria", "pilha"
+        ),
+    ),
+    (
+        "a resistência à água",
+        _phrases(
             "à prova d",
             "a prova d",
             "resistente à água",
             "resistente a agua",
             "pode molhar",
+            "mergulhar",
+            "nadar",
+        ),
+    ),
+    (
+        "as medidas",
+        _phrases(
             "tamanho",
             "diâmetro",
             "diametro",
@@ -265,6 +285,7 @@ _PENDING_TOPICS: tuple[tuple[str, tuple[str, ...]], ...] = (
         _phrases(
             "de onde vem",
             "vem de onde",
+            "de onde sai",
             "nacional ou importado",
             "é importado",
             "e importado",
@@ -275,6 +296,33 @@ _PENDING_TOPICS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
 )
+# Fatos da ficha dos relógios que respondem cada assunto. Com todos
+# confirmados, o agente responde com eles; senão, "a equipe confirma".
+TOPIC_FACTS: dict[str, tuple[str, ...]] = {
+    "a garantia": ("relogios-garantia",),
+    "o material": ("relogios-material-caixa", "relogios-material-pulseira"),
+    "o movimento": ("relogios-movimento",),
+    "a resistência à água": ("relogios-resistencia-agua",),
+    "as medidas": ("relogios-diametro",),
+    "a origem do envio": ("relogios-envio",),
+}
+
+
+def topic_facts(topic: str | None, product: dict[str, Any] | None) -> tuple[list, bool]:
+    """(fatos confirmados do assunto, todos confirmados?) — só para relógios."""
+    from .commercial_config import CONFIRMED_SALES_FACTS
+
+    refs = TOPIC_FACTS.get(topic or "", ())
+    if not refs or (product and (product.get("collection") or "watches") != "watches"):
+        return [], False
+    confirmed = [
+        (ref, CONFIRMED_SALES_FACTS[ref]["text"])
+        for ref in refs
+        if ref in CONFIRMED_SALES_FACTS
+    ]
+    return confirmed, len(confirmed) == len(refs)
+
+
 _INTENTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("rastreio", _phrases("rastreio", "rastreamento", "código de rastreio")),
     (
@@ -446,6 +494,7 @@ class DraftRequest:
     order: dict[str, Any] | None = None
     payment_url: str | None = None
     discount_request: bool = False
+    topic_facts: list[tuple[str, str]] = field(default_factory=list)
 
 
 class DraftModel(Protocol):
@@ -544,6 +593,14 @@ class TemplateSalesModel:
             if marketplace:
                 reply = "É só finalizar a compra pelo próprio anúncio."
                 claims = []
+        elif intent == "fato_confirmado" and request.topic_facts:
+            reply = " ".join(text for _, text in request.topic_facts)
+            reply += " Posso ajudar com mais alguma coisa?"
+            claims = _claims(*(ref for ref, _ in request.topic_facts))
+        elif intent == "fato_pendente" and request.topic_facts:
+            reply = " ".join(text for _, text in request.topic_facts)
+            reply += " O restante, a equipe confirma por aqui em seguida."
+            claims = _claims(*(ref for ref, _ in request.topic_facts))
         elif intent == "fato_pendente":
             reply = (
                 f"Sobre {request.topic or 'isso'}, a equipe confirma por aqui em "
@@ -1279,6 +1336,13 @@ class ConversationEngine:
         if product and product["id"] != conversation["product_id"]:
             self.store.update(key, product_id=product["id"])
         intent = classification.intent
+        trigger = classification.trigger
+        facts_for_topic: list[tuple[str, str]] = []
+        if trigger == "FATO_NAO_CONFIRMADO":
+            # Campo confirmado na ficha dos relógios: o agente responde com o fato.
+            facts_for_topic, complete = topic_facts(classification.topic, product)
+            if complete:
+                intent, trigger = "fato_confirmado", None
         changes: dict[str, Any] = {}
         if classification.discount_request:
             changes["discount_requests"] = int(conversation["discount_requests"]) + 1
@@ -1290,7 +1354,6 @@ class ConversationEngine:
         changes.update(last_intent=intent, repeat_count=repeat)
         self.store.update(key, **changes)
 
-        trigger = classification.trigger
         if trigger is None and repeat >= STALL_LIMIT:
             trigger = "IA_TRAVADA"
         if trigger and trigger not in NON_BLOCKING_REASONS:
@@ -1307,6 +1370,7 @@ class ConversationEngine:
             context=self.knowledge_context(),
             order=self._order(conversation),
             discount_request=classification.discount_request,
+            topic_facts=facts_for_topic,
         )
         if intent == "fechamento" and product and channel not in MARKETPLACES:
             self.store.update(key, awaiting_data=1)

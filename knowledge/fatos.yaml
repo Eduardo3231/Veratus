@@ -1,6 +1,10 @@
 # Fatos que o Sales Agent pode afirmar. Só status CONFIRMED vai para o cliente;
 # o resto vira "a equipe confirma" e entra na fila do fundador.
 # O id é o evidence_ref exigido pelo gate (veratus_agents/policy.py).
+# Material, movimento, medidas, garantia e envio dos relógios ficam na ficha
+# catalog/ficha-relogios.yaml: ao confirmar lá, viram fatos aqui sozinhos.
+# Um fato pode ter gate_issue (ex.: "material não validado") para liberar no
+# gate exatamente o texto dele.
 schema: veratus.facts/v1
 facts:
   - id: preco-relogios
@@ -56,24 +60,6 @@ facts:
       O pagamento é por Pix ou pelo link do Mercado Pago; no parcelado, os juros
       são do cliente.
     evidence: FOUNDER_CONFIRMED 2026-10-13 (seção 0 do prompt de canais)
-  - id: relogios-material
-    status: PENDING
-    claim_type: specification
-    scope: watches
-    text: Material da caixa e da pulseira.
-    evidence: aguardando o fundador
-  - id: relogios-especificacoes
-    status: PENDING
-    claim_type: specification
-    scope: watches
-    text: Movimento, resistência à água e medidas.
-    evidence: aguardando o fundador
-  - id: relogios-origem-prazo
-    status: PENDING
-    claim_type: delivery
-    scope: watches
-    text: Origem do envio e início da contagem do prazo.
-    evidence: pergunta delivery-vs-registered-origin
   - id: joias-preco
     status: PENDING
     claim_type: price

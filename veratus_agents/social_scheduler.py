@@ -9,13 +9,16 @@ Fluxo::
 - Item editado depois de aprovado volta para ``PENDING_APPROVAL``.
 - Vídeo entra ``NEEDS_VIDEO``. Só TikTok fica ``NEEDS_MANUAL``, porque o app
   ainda não passou pela auditoria.
-- Relógio sem ``REAL_PHOTO``, linha de iPhone e mídia em quarentena entram
-  ``BLOCKED`` e nunca aparecem num plano de publicação.
+- Relógio sem ``REAL_PHOTO`` entra ``NEEDS_INFO`` (o fundador fornece a foto
+  pelo importador). Quando a foto chega, ``refresh`` troca a arte-modelo pela
+  foto real e o item vai para a aprovação semanal; nada sai sem ela.
+- Linha de iPhone e mídia em quarentena entram ``BLOCKED`` e nunca aparecem
+  num plano de publicação.
 - Sem ``SOCIAL_PUBLISH_ENABLED=true``, ``run-due`` só devolve a prévia, sem
   chamar a Meta.
 
 CLI: ``python -m veratus_agents.social_scheduler import|request-approval|run-due|
-refresh-blocks|insights|report|list``.
+refresh|insights|report|list``.
 """
 
 from __future__ import annotations
@@ -37,6 +40,8 @@ from .sqlstore import SqlStore
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CALENDAR = BASE_DIR / "social" / "calendario-2026-10.json"
+# JPEG 1080 × 1350 de cada relógio, gerado pelo importador de fotos reais.
+WATCH_PHOTO_DIR = BASE_DIR / "landing" / "social" / "posts" / "watches"
 PUBLIC_BASE = "https://veratus.onrender.com"
 SAO_PAULO = timezone(timedelta(hours=-3))
 FORMATS = ("IMAGE", "CAROUSEL", "STORY", "REEL")
@@ -49,6 +54,7 @@ STATUSES = (
     "FAILED",
     "NEEDS_MANUAL",
     "NEEDS_VIDEO",
+    "NEEDS_INFO",
     "BLOCKED",
 )
 META_CHANNELS = frozenset({"instagram", "facebook"})
@@ -143,10 +149,27 @@ def _catalog() -> dict[str, dict[str, Any]]:
     return {product["id"]: product for product in load_catalog()}
 
 
+def _watch_products(
+    item: dict[str, Any], catalog: dict[str, dict[str, Any]]
+) -> list[str]:
+    return [
+        product_id
+        for product_id in item["products"]
+        if product_id in catalog
+        and (catalog[product_id].get("collection") or "watches") == "watches"
+    ]
+
+
+def watch_photo_url(product_id: str) -> str:
+    return f"{PUBLIC_BASE}/social/posts/watches/{product_id}.jpg"
+
+
 def block_reasons(
     item: dict[str, Any], catalog: dict[str, dict[str, Any]]
 ) -> list[str]:
-    """Por que um item não pode ir ao ar, olhando produto, linha e mídia."""
+    """Bloqueios definitivos: linha de iPhone (Fase 7) e mídia em quarentena."""
+    from urllib.parse import urlsplit
+
     from integrations.meta_content_publisher import quarantined_media_paths
 
     reasons = []
@@ -155,24 +178,34 @@ def block_reasons(
     )
     if "iphone" in text or item.get("category") == "smartphone":
         reasons.append("LINHA_IPHONE_DEPOIS_DO_TESTE")
-    for product_id in item["products"]:
-        product = catalog.get(product_id)
-        is_watch = product is not None and (
-            (product.get("collection") or "watches") == "watches"
-        )
-        if (is_watch or item.get("category") in ("watch", "relogio")) and (
-            product or {}
-        ).get("image_status") != "REAL_PHOTO":
-            reasons.append("NEEDS_REAL_PHOTO")
-            break
-    if not item["products"] and item.get("category") in ("watch", "relogio"):
-        reasons.append("NEEDS_REAL_PHOTO")
     quarantined = quarantined_media_paths()
-    from urllib.parse import urlsplit
-
     if any(urlsplit(url).path in quarantined for url in item["media"]):
         reasons.append("MEDIA_IN_QUARANTINE")
-    return list(dict.fromkeys(reasons))
+    return reasons
+
+
+def pending_info(item: dict[str, Any], catalog: dict[str, dict[str, Any]]) -> list[str]:
+    """O que o fundador ainda fornece para o relógio ir ao ar (vazio = pronto)."""
+    watches = _watch_products(item, catalog)
+    if not watches:
+        return (
+            ["NEEDS_REAL_PHOTO"] if item.get("category") in ("watch", "relogio") else []
+        )
+    if any(
+        catalog[product_id].get("image_status") != "REAL_PHOTO"
+        for product_id in watches
+    ):
+        return ["NEEDS_REAL_PHOTO"]
+    if item.get("template_media"):
+        missing = [
+            product_id
+            for product_id in watches
+            if not (WATCH_PHOTO_DIR / f"{product_id}.jpg").exists()
+        ]
+        if missing:
+            # A foto entrou antes do importador gerar o JPEG: rodar de novo.
+            return [f"WATCH_JPEG_MISSING:{','.join(missing)}"]
+    return []
 
 
 def parse_calendar(data: Any) -> list[dict[str, Any]]:
@@ -233,23 +266,53 @@ def parse_calendar(data: Any) -> list[dict[str, Any]]:
     return items
 
 
-def initial_status(
+def plan_item(
     item: dict[str, Any], catalog: dict[str, dict[str, Any]]
-) -> tuple[str, str | None]:
-    reasons = block_reasons(item, catalog)
-    if item["calendar_status"] == "BLOCKED":
-        reasons.insert(0, item["calendar_block_reason"] or "BLOCKED_IN_CALENDAR")
-    if reasons:
-        return "BLOCKED", ",".join(dict.fromkeys(reasons))
+) -> tuple[dict[str, Any], str, str | None]:
+    """Status inicial do item e, para relógio com foto real, a mídia final.
+
+    No calendário, o item de relógio marcado ``BLOCKED`` traz uma arte-modelo
+    com espaço para a foto. Ele espera a foto real (``NEEDS_INFO``) e, quando
+    ela chega, a arte-modelo é trocada pelo JPEG da foto real.
+    """
+    watches = _watch_products(item, catalog)
+    template = bool(item.get("template_media")) or (
+        item.get("calendar_status") == "BLOCKED" and bool(watches)
+    )
+    item = {**item, "template_media": template}
+    hard = block_reasons(item, catalog)
+    calendar_reason = item.get("calendar_block_reason") or "BLOCKED_IN_CALENDAR"
+    if hard:
+        if item.get("calendar_status") == "BLOCKED":
+            hard.insert(0, calendar_reason)
+        return item, "BLOCKED", ",".join(dict.fromkeys(hard))
+    if item.get("calendar_status") == "BLOCKED" and not watches:
+        return item, "BLOCKED", calendar_reason
+    pending = pending_info(item, catalog)
+    if pending:
+        return item, "NEEDS_INFO", ",".join(pending)
+    if template:
+        media = [watch_photo_url(product_id) for product_id in watches][:CAROUSEL_LIMIT]
+        fmt = item["format"]
+        if fmt == "CAROUSEL" and len(media) < 2:
+            fmt = "IMAGE"
+        item = {**item, "media": media, "format": fmt, "template_media": False}
     if item["format"] == "REEL" and not any(
         url.lower().endswith(".mp4") for url in item["media"]
     ):
-        return "NEEDS_VIDEO", "vídeo ainda não produzido"
+        return item, "NEEDS_VIDEO", "vídeo ainda não produzido"
     if not (set(item["channels"]) & META_CHANNELS):
-        return "NEEDS_MANUAL", "TIKTOK_UNVERIFIED"
+        return item, "NEEDS_MANUAL", "TIKTOK_UNVERIFIED"
     if not item["media"] or not item["caption"]:
-        return "DRAFT", "faltam mídia ou legenda"
-    return "PENDING_APPROVAL", None
+        return item, "DRAFT", "faltam mídia ou legenda"
+    return item, "PENDING_APPROVAL", None
+
+
+def initial_status(
+    item: dict[str, Any], catalog: dict[str, dict[str, Any]]
+) -> tuple[str, str | None]:
+    _, status, reason = plan_item(item, catalog)
+    return status, reason
 
 
 SCHEMA = """
@@ -265,6 +328,7 @@ CREATE TABLE IF NOT EXISTS scheduled_posts (
     keywords_json TEXT NOT NULL,
     products_json TEXT NOT NULL,
     category TEXT NOT NULL,
+    template_media INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL,
     block_reason TEXT,
     content_hash TEXT NOT NULL,
@@ -329,6 +393,7 @@ class SocialScheduleStore(SqlStore):
         item = dict(row)
         for name in ("channels", "media", "keywords", "products", "published"):
             item[name] = json.loads(item.pop(f"{name}_json"))
+        item["template_media"] = bool(item.get("template_media"))
         return item
 
     def event(self, item_id: str | None, event: str, detail: dict[str, Any]) -> None:
@@ -401,6 +466,7 @@ class SocialScheduleStore(SqlStore):
             "keywords_json": json.dumps(item["keywords"]),
             "products_json": json.dumps(item["products"]),
             "category": item.get("category") or "",
+            "template_media": int(bool(item.get("template_media"))),
             "content_hash": digest,
         }
         with self._connect() as (db, mark):
@@ -418,6 +484,7 @@ class SocialScheduleStore(SqlStore):
             if existing["content_hash"] == digest and existing["status"] not in (
                 "BLOCKED",
                 "NEEDS_VIDEO",
+                "NEEDS_INFO",
             ):
                 return "unchanged"
             if existing["status"] in ("PUBLISHING", "PUBLISHED"):
@@ -597,7 +664,7 @@ def import_calendar(
     counts: dict[str, int] = {}
     statuses: dict[str, int] = {}
     for item in parse_calendar(data):
-        status, reason = initial_status(item, catalog)
+        item, status, reason = plan_item(item, catalog)
         outcome = store.upsert(item, status, reason)
         counts[outcome] = counts.get(outcome, 0) + 1
         statuses[status] = statuses.get(status, 0) + 1
@@ -616,35 +683,46 @@ def edit_item(
     if set(changes) - editable:
         raise ValueError("campo_nao_editavel")
     updated = {**item, **changes, "calendar_status": "", "calendar_block_reason": ""}
-    status, reason = initial_status(updated, _catalog())
+    if "media" in changes:
+        updated["template_media"] = False  # mídia nova vem pronta do fundador
+    updated, status, reason = plan_item(updated, _catalog())
     outcome = store.upsert(updated, status, reason)
     store.event(item_id, "ITEM_EDITED", {"actor": actor, "outcome": outcome})
     return store.get(item_id) or {}
 
 
-def refresh_blocks(
+def refresh_pending(
     store: SocialScheduleStore, catalog: dict[str, dict[str, Any]] | None = None
 ) -> dict[str, list[str]]:
-    """Relógio que ganhou REAL_PHOTO: o Creative Agent refaz a arte com a foto.
+    """Itens de relógio que esperavam a foto real: com a foto, vão à aprovação.
 
-    Enquanto a arte nova não substituir a mídia (``edit_item(media=...)``), o
-    item segue bloqueado com ``AGUARDA_ARTE_COM_FOTO``.
+    A arte-modelo vira o JPEG da foto real (``landing/social/posts/watches/``),
+    o ``content_hash`` muda e o item entra em ``PENDING_APPROVAL``: o fundador
+    aprova na semana antes de qualquer publicação.
     """
     catalog = catalog if catalog is not None else _catalog()
-    result: dict[str, list[str]] = {"awaiting_creative": [], "still_blocked": []}
-    for item in store.items(status="BLOCKED"):
-        reasons = block_reasons({**item, "category": item["category"]}, catalog)
-        if "NEEDS_REAL_PHOTO" not in (item["block_reason"] or "") or reasons:
-            result["still_blocked"].append(item["id"])
+    result: dict[str, list[str]] = {"ready": [], "still_pending": []}
+    for item in store.items(status="NEEDS_INFO"):
+        planned, status, reason = plan_item(
+            {**item, "calendar_status": "", "calendar_block_reason": ""}, catalog
+        )
+        if status == "NEEDS_INFO":
+            if reason != item["block_reason"]:
+                store.set_status(item["id"], "NEEDS_INFO", block_reason=reason)
+            result["still_pending"].append(item["id"])
             continue
-        store.set_status(item["id"], "BLOCKED", block_reason="AGUARDA_ARTE_COM_FOTO")
+        store.upsert(planned, status, reason)
         store.event(
             item["id"],
-            "CREATIVE_RERENDER_REQUESTED",
-            {"agent": "creative-agent", "products": item["products"]},
+            "WATCH_PHOTO_READY",
+            {"status": status, "media": planned["media"]},
         )
-        result["awaiting_creative"].append(item["id"])
+        result["ready"].append(item["id"])
     return result
+
+
+# Nome antigo, mantido para scripts existentes.
+refresh_blocks = refresh_pending
 
 
 def request_weekly_approvals(
@@ -766,6 +844,7 @@ def run_due(
 ) -> dict[str, Any]:
     now = now or _now()
     enabled = env_flag("SOCIAL_PUBLISH_ENABLED") if enabled is None else enabled
+    refresh_pending(store)  # relógio que ganhou foto real vai à aprovação
     synced = sync_approvals(store, approval_status)
     due = [
         item
@@ -1127,7 +1206,8 @@ def main(argv: list[str] | None = None) -> int:
     approval = sub.add_parser("request-approval", help="um pedido por semana")
     approval.add_argument("--week")
     sub.add_parser("run-due", help="publica os aprovados vencidos (ou mostra a prévia)")
-    sub.add_parser("refresh-blocks", help="relógios que ganharam foto real")
+    sub.add_parser("refresh", help="relógios que ganharam foto real")
+    sub.add_parser("refresh-blocks", help="nome antigo de refresh")
     sub.add_parser("insights", help="lê métricas em +24 h e +7 dias")
     report = sub.add_parser("report", help="relatório semanal")
     report.add_argument("--week", required=True)
@@ -1140,8 +1220,8 @@ def main(argv: list[str] | None = None) -> int:
             output: Any = import_calendar(store, args.path)
         elif args.command == "list":
             output = store.items(status=args.status)
-        elif args.command == "refresh-blocks":
-            output = refresh_blocks(store)
+        elif args.command in ("refresh", "refresh-blocks"):
+            output = refresh_pending(store)
         elif args.command == "report":
             output = weekly_report(store, args.week)
         else:

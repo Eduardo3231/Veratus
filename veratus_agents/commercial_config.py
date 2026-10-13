@@ -196,16 +196,17 @@ def calculate_official_economics() -> dict[str, str]:
 
 
 def origin_confirmed() -> bool:
-    """Respondida a pergunta ``delivery-vs-registered-origin``?
+    """O fundador confirmou na ficha que o relógio sai de dentro do Brasil?
 
-    Enquanto estiver pendente, relógio não vai a marketplace (ORIGIN_UNCONFIRMED)
-    e a economia por canal marca os marketplaces como BLOCKED_BY_ORIGIN.
+    O campo é ``geral.envio_do_brasil`` em ``catalog/ficha-relogios.yaml``.
+    Enquanto não for ``true`` com ``CONFIRMADO``, o rascunho de marketplace fica
+    pendente (ORIGIN_UNCONFIRMED) e a economia por canal marca os marketplaces
+    como BLOCKED_BY_ORIGIN. Ao confirmar, os dois liberam sem mudar código.
     """
-    return any(
-        item["id"] == "delivery-vs-registered-origin"
-        and item["status"] == "ANSWERED_DOMESTIC"
-        for item in FOUNDER_OPEN_QUESTIONS
-    )
+    from .watch_sheet import default_sheet
+
+    sheet = default_sheet()
+    return bool(sheet and sheet.origin_confirmed())
 
 
 def is_watch(product: dict) -> bool:
@@ -223,20 +224,28 @@ DOMESTIC_ORIGIN_MARKETPLACES = frozenset(
 
 
 def watch_channel_blockers(product: dict, channel: str | None = None) -> list[str]:
-    """Motivos que impedem um relógio de ir a post, anúncio ou marketplace.
+    """O que ainda falta para o relógio entrar no canal; vazio = liberado.
 
-    Vazio para joias. Só ``REAL_PHOTO`` libera a imagem; nos marketplaces (ou
-    sem canal informado) a origem também precisa estar confirmada.
+    Vazio para joias. Os códigos são ``NEEDS_REAL_PHOTO`` (foto real pelo
+    importador), ``ORIGIN_UNCONFIRMED`` (``envio_do_brasil`` na ficha) e
+    ``FICHA:<campo>`` (campo pendente em ``catalog/ficha-relogios.yaml``).
+    Site, WhatsApp e Direct não esperam nada: o relógio já está à venda. Sem
+    canal informado, vale a regra mais exigente (marketplace).
     """
     if not is_watch(product):
         return []
-    reasons = []
-    if product.get("image_status") != "REAL_PHOTO":
-        reasons.append("NEEDS_REAL_PHOTO")
-    needs_origin = channel is None or channel in DOMESTIC_ORIGIN_MARKETPLACES
-    if needs_origin and not origin_confirmed():
-        reasons.append("ORIGIN_UNCONFIRMED")
-    return reasons
+    from .watch_sheet import default_sheet, model_id
+
+    real_photo = product.get("image_status") == "REAL_PHOTO"
+    channel = channel or "mercado_livre"
+    sheet = default_sheet()
+    if sheet is None:
+        # Ficha ausente ou com erro: posts esperam a foto e marketplaces, a ficha.
+        reasons = [] if real_photo else ["NEEDS_REAL_PHOTO"]
+        if channel in DOMESTIC_ORIGIN_MARKETPLACES:
+            reasons += ["ORIGIN_UNCONFIRMED", "FICHA:invalida"]
+        return reasons
+    return sheet.missing(model_id(product), channel, real_photo=real_photo)
 
 
 def watch_economics_snapshot(channel: str = "direct_pix", config=None) -> dict:

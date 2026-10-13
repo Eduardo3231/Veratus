@@ -1,6 +1,5 @@
 from unittest.mock import patch
 
-from veratus_agents import commercial_config
 from veratus_agents.marketplace_adapters import Marketplace, build_distribution_draft
 from veratus_agents.marketplace_ops import (
     CategoryMappingStatus,
@@ -54,9 +53,8 @@ def test_channel_registry_starts_disabled_and_readiness_is_draft(tmp_path):
     )
 
 
-def test_listing_draft_is_idempotent_and_survives_restart(tmp_path, monkeypatch):
-    # Relógio com foto real e origem confirmada: o rascunho é criado.
-    monkeypatch.setattr(commercial_config, "origin_confirmed", lambda: True)
+def test_listing_draft_is_idempotent_and_survives_restart(tmp_path, filled_watch_sheet):
+    # Relógio com foto real e ficha preenchida: o rascunho sai completo.
     path = tmp_path / "marketplace.sqlite3"
     store = MarketplaceStore(path)
     product = {**approved_product(), "image_status": "REAL_PHOTO"}
@@ -182,24 +180,54 @@ def test_marketplace_store_factory_prefers_postgres_when_configured(tmp_path):
     postgres.assert_called_once_with("postgresql://example")
 
 
-def test_watch_draft_waits_for_real_photo_and_confirmed_origin(tmp_path):
+def test_watch_draft_is_prepared_and_lists_what_is_missing(tmp_path):
     store = MarketplaceStore(tmp_path / "marketplace.sqlite3")
     product = approved_product()
     payload = build_distribution_draft(product, Marketplace.MERCADO_LIVRE)["payload"]
 
     listing = prepare_listing(store, product, Marketplace.MERCADO_LIVRE, payload)
 
-    assert listing["state"] == ListingState.BLOCKED.value
-    assert "NEEDS_REAL_PHOTO" in listing["last_error"]
-    assert "ORIGIN_UNCONFIRMED" in listing["last_error"]
+    # O relógio sobe: o rascunho existe e espera só o que o fundador preenche.
+    assert listing["state"] == ListingState.DRAFT.value
+    assert listing["last_error"].startswith("PENDENTE:")
+    pending = listing["payload"]["pending_info"]
+    assert pending[:2] == ["NEEDS_REAL_PHOTO", "ORIGIN_UNCONFIRMED"]
+    assert "FICHA:movimento" in pending
+    assert "FICHA:royal-blue.estoque" in pending
+    allowed, reasons = ExternalWriteGuard(store).check("mercado-livre", product)
+    assert not allowed
+    assert "WATCH_INFO_PENDING:NEEDS_REAL_PHOTO" in reasons
 
 
-def test_real_photo_alone_does_not_release_a_watch_to_marketplace(tmp_path):
+def test_real_photo_alone_still_waits_for_the_sheet(tmp_path):
     store = MarketplaceStore(tmp_path / "marketplace.sqlite3")
     product = {**approved_product(), "image_status": "REAL_PHOTO"}
     payload = build_distribution_draft(product, Marketplace.SHOPEE)["payload"]
 
     listing = prepare_listing(store, product, Marketplace.SHOPEE, payload)
 
-    assert listing["state"] == ListingState.BLOCKED.value
-    assert listing["last_error"] == "ORIGIN_UNCONFIRMED"
+    assert listing["state"] == ListingState.DRAFT.value
+    assert "NEEDS_REAL_PHOTO" not in listing["payload"]["pending_info"]
+    assert listing["payload"]["pending_info"][0] == "ORIGIN_UNCONFIRMED"
+
+
+def test_filled_sheet_releases_the_watch_draft(tmp_path, filled_watch_sheet):
+    store = MarketplaceStore(tmp_path / "marketplace.sqlite3")
+    product = {**approved_product(), "image_status": "REAL_PHOTO"}
+    payload = build_distribution_draft(product, Marketplace.AMAZON)["payload"]
+    pending_first = prepare_listing(
+        MarketplaceStore(tmp_path / "other.sqlite3"),
+        approved_product(),
+        Marketplace.AMAZON,
+        payload,
+    )
+
+    listing = prepare_listing(store, product, Marketplace.AMAZON, payload)
+
+    assert pending_first["payload"]["pending_info"] == ["NEEDS_REAL_PHOTO"]
+    assert listing["state"] == ListingState.DRAFT.value
+    assert listing["last_error"] is None
+    assert listing["payload"]["ficha"]["movimento"] == "quartzo"
+    assert listing["payload"]["ficha"]["gtin"] == "ISENTO"
+    _, reasons = ExternalWriteGuard(store).check("amazon", product)
+    assert not any(reason.startswith("WATCH_INFO_PENDING") for reason in reasons)
