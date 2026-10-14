@@ -225,7 +225,7 @@ Sempre na ordem: chave → teste em `SHADOW` → readiness → aprovação → s
    - (b) o QA aceita material e disponibilidade vindos da ficha, e o rascunho sai com a lista do que falta. Recomendo (b): a foto continua obrigatória para publicar;
    - (c) relaxar também a foto no rascunho.
 9. **`estoque` por modelo na ficha.** O produto é sob encomenda (`INVENTORY_MODE = ON_DEMAND`) e tem teto por canal (`CHANNEL_STOCK_CAP_FALLBACK = 20`). Proposta: trocar o campo por "teto de estoque por canal". Como o repositório é público, quantidade real deve ficar no Product Master (banco), não na ficha.
-10. **Limpeza pendente (não feita, fora do pedido):** `FOUNDER_OPEN_QUESTIONS`, `STOREFRONT_BLOCKERS` e `WATCH_ECONOMICS_SNAPSHOT` em `commercial_config.py` ainda descrevem a regra antiga do relógio. Os testes os citam, então ficaram. `veratus_agents/watch_sheet.py` tem cerca de 520 linhas e pode ser reduzido pela metade (o relatório de economia e o texto de status são o que mais pesa).
+10. **Limpeza pendente (não feita, fora do pedido):** `FOUNDER_OPEN_QUESTIONS`, `STOREFRONT_BLOCKERS` e `WATCH_ECONOMICS_SNAPSHOT` em `commercial_config.py` ainda descrevem a regra antiga do relógio. Os testes os citam, então ficaram. `veratus_agents/watch_sheet.py` tem 547 linhas e pode ser reduzido pela metade (o relatório de economia e o texto de status são o que mais pesa).
 
 ## Conexões de marketplace (28/09)
 
