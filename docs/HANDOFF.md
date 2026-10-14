@@ -1,7 +1,52 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 14/10/2026, Claude Code (revisão do gate da ficha dos relógios; correção do que o rascunho de marketplace faz de fato).
+**Última atualização:** 14/10/2026, Claude Code (prévia da reestruturação do site em `design/reestruturacao-2026-10/`, aguardando o fundador).
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
+
+## Reestruturação do site: prévia aguardando o fundador (14/10)
+
+**Nada foi publicado.** `landing/` não foi tocado: o site no ar segue igual. A prévia mora em `design/reestruturacao-2026-10/`, e `design/` não entra no Docker do Render.
+
+- **Pedido do fundador:**
+  - um modelo novo com as imagens originais dos relógios (`landing/assets/catalog/`);
+  - tirar a página do símbolo 3D (`#inspecao`, "O símbolo ganha forma") e manter o primeiro slide;
+  - 3D como combinado em 26/09: o relógio gira com a rolagem, na visualização do produto;
+  - ver antes de confirmar.
+- **Arquivos:**
+  - `index.html` é gerado por `gerar.py` a partir de `landing/catalog.json`;
+  - `estilo.css` e `vitrine.js`;
+  - `projeto.html` é o documento do projeto, com as capturas em `capturas/`;
+  - `empacotar.py` gera um HTML único para ver no app.
+  - Para ver localmente: `python3 -m http.server` na raiz e abrir `/design/reestruturacao-2026-10/`.
+- **Estrutura:** primeiro slide (igual), Relógios (os 9 criativos inteiros + filtros), Joias (9 peças em colares/pulseiras/tornozeleiras), Como comprar, rodapé. Saem a abertura, a faixa, o manifesto como seção, a página do símbolo, a troca Relógios/Feminino e a barra de progresso.
+- **Medido:**
+  - Celular (390 px): 16,1 → 9,2 telas.
+  - Computador (1440 px): 10,1 → 8,4 telas.
+- **Palco 3D** (`?relogio=<id>` abre direto; o histórico do navegador fecha):
+  - gira o **criativo inteiro** com a rolagem, sobre um mostrador dourado; o ponteiro inclina;
+  - com movimento reduzido, a imagem fica parada;
+  - não amplia o mostrador, porque os criativos têm marca de terceiros. A regra de 26/09 proíbe isso no 3D.
+  - Com as fotos reais sem marca, o painel dá lugar à sequência de 60 quadros do brief.
+- **Igual ao ar:** mensagem e referência `VT-…` do WhatsApp (com UTM), eventos do Pixel (ViewContent ao abrir, Contact no WhatsApp), preço, frete, prazo, desistência e identificação do vendedor. A prévia **não** carrega o código do Pixel: ele volta quando a página for para `landing/`.
+- **Verificação:**
+  - capturas 390/1440;
+  - fluxo da vista: abrir, fechar, voltar, Esc, trocar de modelo, foco no título;
+  - filtros e links com UTM;
+  - movimento reduzido e página sem JS (as 18 peças visíveis, links preenchidos);
+  - HTML único aberto em `file://` sem erros;
+  - `pytest -q`: 408 passed, 4 skipped; `ruff check .` e `ruff format --check .` limpos.
+- **Decisões abertas (fundador):**
+  1. Aprovar a prévia ou pedir ajustes.
+  2. Jost nos textos pequenos do slide (hoje Arial).
+  3. Descrição do Black GMT cita "aço" com o material PENDENTE na ficha; sugestão: "Preto e uma presença visual definida por contrastes."
+  4. Noir Clover (alerta de 26/09).
+  5. Preço das joias.
+  6. Alpes no slide (alerta de origem).
+- **Depois do "ok":**
+  1. Gerar com prefixos `assets/` e `""` e levar para `landing/`, com o Pixel de volta e `/api/catalog`.
+  2. Atualizar `tests/test_landing_browser.py` e `tests/test_landing_resilience.py`, que citam a página do símbolo e a abertura.
+  3. Capturas e conferência do WhatsApp/Pixel.
+  4. Merge e deploy só com confirmação na hora.
 
 ## Rodada de 13/10 — canais, atendimento autônomo e redes sociais
 

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Reestruturação do site Veratus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Jost:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root { --obsidiana: #0d0d0d; --grafite: #5e5a54; --marfim: #f6f4f0; --ouro: #c8a56a; --linha: rgba(13, 13, 13, .16); }
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; }
+    html { background: #e9e4dc; }
+    body { max-width: 178mm; margin: 0 auto; padding: 24px 0 64px; background: var(--marfim); color: var(--obsidiana); font: 400 10.5pt/1.55 "Jost", "Helvetica Neue", Arial, sans-serif; }
+    @media screen { body { padding: 40px 32px 72px; } }
+    @media print { html, body { background: var(--marfim); -webkit-print-color-adjust: exact; print-color-adjust: exact; } body { max-width: none; padding: 15mm 16mm 16mm; } }
+    h1, h2, h3 { margin: 0; font-family: "Cormorant Garamond", Georgia, serif; font-weight: 500; letter-spacing: -.01em; }
+    h1 { font-size: 40pt; line-height: .95; }
+    h2 { margin: 0 0 10pt; font-size: 22pt; line-height: 1.05; }
+    h3 { margin: 14pt 0 4pt; font-size: 14pt; }
+    p, ul, ol { margin: 0 0 8pt; }
+    ul, ol { padding-left: 16pt; }
+    li { margin-bottom: 3pt; }
+    li::marker { color: var(--ouro); }
+    a { color: inherit; }
+    .capa { display: grid; gap: 10pt; padding-bottom: 14pt; border-bottom: 1px solid var(--linha); margin-bottom: 16pt; }
+    .capa img { width: 26pt; height: auto; }
+    .capa p { color: var(--grafite); font-size: 11pt; }
+    .secao { margin-top: 18pt; }
+    .quebra { break-before: page; }
+    .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 14pt; }
+    table { width: 100%; margin: 4pt 0 10pt; border-collapse: collapse; font-size: 10pt; }
+    th, td { padding: 6pt 6pt 6pt 0; border-bottom: 1px solid var(--linha); text-align: left; vertical-align: top; }
+    th { color: var(--grafite); font-weight: 500; }
+    td b { font-weight: 500; }
+    figure { margin: 8pt 0 12pt; break-inside: avoid; }
+    figure img { display: block; width: 100%; height: auto; border: 1px solid var(--linha); }
+    .larga img { max-height: 96mm; width: auto; max-width: 100%; }
+    figcaption { margin-top: 4pt; color: var(--grafite); font-size: 9pt; }
+    .celulares { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8pt; }
+    .nota { padding: 8pt 10pt; border-left: 2px solid var(--ouro); background: rgba(200, 165, 106, .1); }
+    .pequena { color: var(--grafite); font-size: 9pt; }
+  </style>
+</head>
+<body>
+  <header class="capa">
+    <img src="../../landing/assets/veratus-v-wheat-160.webp" alt="Veratus">
+    <h1>Reestruturação do site Veratus</h1>
+    <p>Prévia para aprovação, 14 de outubro de 2026. Nada foi publicado: o site no ar continua igual.</p>
+  </header>
+
+  <section>
+    <h2>O que você pediu</h2>
+    <ul>
+      <li>Um modelo novo do site com as imagens originais dos nove relógios.</li>
+      <li>Tirar a página em que o símbolo gira ("O símbolo ganha forma").</li>
+      <li>Manter o primeiro slide.</li>
+      <li>Trazer o 3D do jeito que você queria: o relógio gira conforme a rolagem, na visualização do produto.</li>
+      <li>Ver tudo antes de confirmar.</li>
+    </ul>
+  </section>
+
+  <section class="secao">
+    <h2>Em números</h2>
+    <table>
+      <thead><tr><th>Medido nas capturas</th><th>Site no ar</th><th>Prévia</th></tr></thead>
+      <tbody>
+        <tr><td>Altura no celular (390 px)</td><td>16,1 telas</td><td><b>9,2 telas</b></td></tr>
+        <tr><td>Altura no computador (1440 px)</td><td>10,1 telas</td><td><b>8,4 telas</b></td></tr>
+        <tr><td>Espera antes do primeiro slide</td><td>abertura de até 2,6 s</td><td><b>nenhuma</b></td></tr>
+        <tr><td>Seções antes do rodapé</td><td>8</td><td><b>4</b>, mais a vista do relógio</td></tr>
+      </tbody>
+    </table>
+    <figure class="larga">
+      <img src="capturas/computador-1-primeiro-slide.jpg" alt="Primeiro slide da prévia no computador">
+      <figcaption>O primeiro slide continua igual: texto, símbolo, anéis e paisagem.</figcaption>
+    </figure>
+  </section>
+
+  <section class="secao quebra">
+    <h2>A nova ordem da página</h2>
+    <ol>
+      <li><b>Primeiro slide</b>, igual ao do ar.</li>
+      <li><b>Relógios</b>: os nove, com a imagem original inteira, preço, "Ver de perto" e "Pedir". Filtros por estilo: clássicos, esportivos e marcantes.</li>
+      <li><b>Joias</b>: as nove peças à vista, em colares, pulseiras e tornozeleiras, só com "tom dourado" e "tom prateado".</li>
+      <li><b>Como comprar</b>: os quatro passos e a desistência em até 7 dias.</li>
+      <li><b>Rodapé</b>: "Você faz parte do tempo.", a conversa no WhatsApp e a identificação do vendedor.</li>
+    </ol>
+    <div class="duas">
+      <figure><img src="capturas/computador-2-relogios.jpg" alt="Capítulo de relógios no computador"><figcaption>Relógios: o preço único ao lado do título e as imagens originais.</figcaption></figure>
+      <figure><img src="capturas/computador-4-joias.jpg" alt="Capítulo de joias no computador"><figcaption>Joias: um capítulo claro, separado dos relógios, com uma peça em destaque.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="secao quebra">
+    <h2>O palco 3D</h2>
+    <p>Ao abrir um relógio, ele sobe num palco escuro, apoiado num mostrador dourado. Conforme você rola o texto ao lado, a peça gira de um lado para o outro, a luz passa por ela e o mostrador do chão acompanha. No computador, o ponteiro também inclina a peça. Quem configurou o celular para menos movimento vê a imagem parada.</p>
+    <div class="duas">
+      <figure><img src="capturas/computador-8-vista-relogio.jpg" alt="Vista do Black GMT ao abrir"><figcaption>Ao abrir: nome, preço e o pedido pelo WhatsApp.</figcaption></figure>
+      <figure><img src="capturas/computador-9-vista-girando.jpg" alt="Vista do Black GMT girando com a rolagem"><figcaption>Rolando: a peça gira e o mostrador do chão anda.</figcaption></figure>
+    </div>
+    <p class="nota">Gira o criativo inteiro, e não só o relógio, porque os criativos têm nome e símbolo de terceiros no mostrador. Ampliar o mostrador deixaria essa marca legível e em destaque. A regra de 26/09 para o 3D diz o contrário: sem nome ou símbolo de terceiros no mostrador. Quando chegarem as fotos reais, sem marca, o palco troca o painel pela sequência de 60 quadros do próprio relógio girando, como no brief de 26/09.</p>
+    <p>Cada modelo ganha um link próprio, que abre direto no palco: <b>veratus.onrender.com/?relogio=ocean-blue</b>. Serve para anúncio, Direct e bio.</p>
+    <div class="celulares">
+      <figure><img src="capturas/celular-2-relogios.jpg" alt="Relógios no celular"><figcaption>Relógios</figcaption></figure>
+      <figure><img src="capturas/celular-4-joias.jpg" alt="Joias no celular"><figcaption>Joias</figcaption></figure>
+      <figure><img src="capturas/celular-8-vista-relogio.jpg" alt="Palco 3D no celular"><figcaption>Palco 3D</figcaption></figure>
+      <figure><img src="capturas/celular-6-como-comprar.jpg" alt="Como comprar no celular"><figcaption>Como comprar</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="secao quebra">
+    <h2>O que sai, o que fica, o que é novo</h2>
+    <h3>Sai</h3>
+    <ul>
+      <li>A página "O símbolo ganha forma": o símbolo em 3D, os pontos Precisão, Equilíbrio e Permanência e o relógio de São Paulo.</li>
+      <li>A abertura com o símbolo e a hora antes do primeiro slide.</li>
+      <li>A faixa "Seu tempo, seu estilo, sua presença" e o manifesto como seção própria. A frase "Você faz parte do tempo." fecha o site.</li>
+      <li>A troca entre Relógios e Feminino dentro do catálogo: cada coleção tem o seu capítulo.</li>
+      <li>A barra de progresso no topo.</li>
+    </ul>
+    <h3>Fica igual</h3>
+    <ul>
+      <li>O primeiro slide.</li>
+      <li>R$ 289,90 por relógio, frete grátis, entrega em até 7 dias, sem taxas e desistência em até 7 dias.</li>
+      <li>A mensagem do WhatsApp e a referência da visita (VT-…), inclusive com UTM.</li>
+      <li>Os eventos do Pixel: ViewContent ao abrir um modelo e Contact ao tocar no WhatsApp.</li>
+      <li>A identificação do vendedor e as páginas de condições de compra e privacidade.</li>
+    </ul>
+    <h3>Novo</h3>
+    <ul>
+      <li>O palco 3D na visualização do relógio, com "Outros modelos".</li>
+      <li>O link direto por modelo.</li>
+      <li>A barra de pedido fixa no celular, com o preço.</li>
+      <li>As joias agrupadas por tipo, todas à vista.</li>
+      <li>Jost nos textos. Os títulos seguem em Cormorant Garamond, como hoje.</li>
+    </ul>
+    <div class="duas">
+      <figure><img src="capturas/antes-pagina-do-simbolo.jpg" alt="Página do símbolo no site atual"><figcaption>A página que sai, como está hoje no ar.</figcaption></figure>
+      <figure><img src="capturas/computador-6-como-comprar.jpg" alt="Como comprar na prévia"><figcaption>Como comprar, na prévia.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="secao quebra">
+    <h2>Para você decidir antes de publicar</h2>
+    <ol>
+      <li>Aprovar a estrutura e o palco 3D, ou pedir ajustes.</li>
+      <li>Jost nos textos pequenos do primeiro slide: a composição não muda, só a letra. Se preferir, o slide volta para Arial.</li>
+      <li>Black GMT: a descrição atual diz "Preto, aço e uma presença visual definida por contrastes." O material ainda está pendente na ficha. Sugestão até confirmar: "Preto e uma presença visual definida por contrastes."</li>
+      <li>Noir Clover: o alerta de semelhança com um trevo de marca conhecida (26/09) continua aberto. A prévia mantém a peça, como está no ar.</li>
+      <li>Joias sem preço: as nove seguem com "disponibilidade e valor confirmados na conversa" até ter preço com fonte.</li>
+      <li>Paisagem do primeiro slide: o alerta de que os Alpes podem sugerir origem suíça continua aberto. A prévia não mexe no slide.</li>
+    </ol>
+
+    <h2 class="secao">Depois do seu "ok"</h2>
+    <p>Nada disto foi feito ainda:</p>
+    <ol>
+      <li>Levar o protótipo para <b>landing/</b>: caminhos de imagem, código do Pixel de volta e catálogo lido de /api/catalog.</li>
+      <li>Atualizar os testes do site que citam a página do símbolo e a abertura.</li>
+      <li>Conferir celular e computador, WhatsApp e Pixel.</li>
+      <li>Merge na main e deploy no Render, só com a sua confirmação na hora.</li>
+    </ol>
+
+    <h2 class="secao">Skills usadas</h2>
+    <ul>
+      <li><b>frontend-design</b>: plano de cores, tipos e layout, revisão contra o pedido e três rodadas de captura e crítica. Elas acharam joias esticadas (16 telas no celular), marca de terceiros ampliada no palco e o 3D achatado pela animação de entrada. Os três foram corrigidos.</li>
+      <li><b>karpathy-guidelines</b>: mudança cirúrgica. Nada em landing/ foi tocado; o protótipo fica em design/ e cada etapa foi conferida contra o objetivo.</li>
+      <li><b>Navegador automático (Playwright)</b>: capturas em 390 e 1440 px e conferência da vista (abrir, fechar, voltar, Esc, trocar de modelo), dos filtros, dos links com UTM, do movimento reduzido e da página sem JavaScript.</li>
+      <li><b>pdf</b>: este documento, gerado e conferido.</li>
+      <li><b>find-skills</b>: a busca no skills.sh segue bloqueada pela política de rede deste ambiente. Não contornei.</li>
+    </ul>
+    <p class="pequena">Arquivos: design/reestruturacao-2026-10/ (index.html, estilo.css, vitrine.js, capturas/ e este projeto). A pasta design/ não entra no Docker do Render.</p>
+  </section>
+</body>
+</html>

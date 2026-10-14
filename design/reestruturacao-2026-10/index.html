@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="Prévia da reestruturação do site Veratus. Não publicada.">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>Veratus — prévia da reestruturação</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Jost:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="estilo.css">
+  <!-- Prévia: sem o código do Meta Pixel. Ele volta igual ao do ar quando a página substituir landing/index.html. -->
+</head>
+<body>
+  <a class="pular" href="#conteudo">Ir para o conteúdo</a>
+
+  <header class="topo" id="topo">
+    <a class="marca" href="#hero" aria-label="Veratus, início"><img src="../../landing/assets/veratus-v-wheat-160.webp" alt="" width="180" height="180"><span>VERATUS</span></a>
+    <nav class="topo__nav" aria-label="Navegação principal">
+      <a href="#relogios">Relógios</a>
+      <a href="#joias">Joias</a>
+      <a class="topo__extra" href="#como-comprar">Como comprar</a>
+    </nav>
+    <a class="topo__conversar purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20quero%20conhecer%20as%20cole%C3%A7%C3%B5es.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2" target="_blank" rel="noopener">Conversar</a>
+  </header>
+
+  <main id="conteudo">
+    <!-- Primeiro slide: mantido como está no ar (texto, símbolo e anéis). -->
+    <section class="hero" id="hero" aria-labelledby="hero-title">
+      <div class="hero-still" aria-hidden="true"></div>
+      <div class="hero-veil" aria-hidden="true"></div>
+      <div class="hero-layout shell">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> Veratus / Tempo e presença</p>
+          <h1 id="hero-title">O tempo<br><em>reconhece</em><br>você.</h1>
+          <p>Relógios, joias e acessórios escolhidos para marcar presença.</p>
+          <ul class="hero-offer" aria-label="Condições dos relógios"><li><b>R$ 289,90</b> cada relógio</li><li>Frete grátis</li><li>Entrega em até 7 dias</li></ul>
+          <div class="hero-actions">
+            <a class="button button-accent" href="#relogios">Ver os relógios</a>
+            <a class="text-link purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20quero%20conhecer%20as%20cole%C3%A7%C3%B5es.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2" target="_blank" rel="noopener">Consultar <span aria-hidden="true">↗</span></a>
+          </div>
+        </div>
+        <div class="brand-universe" aria-label="Símbolo original Veratus com anéis em movimento">
+          <div class="brand-universe__halo" aria-hidden="true"></div>
+          <div class="brand-universe__ring brand-universe__ring--outer" aria-hidden="true"></div>
+          <div class="brand-universe__ring brand-universe__ring--middle" aria-hidden="true"></div>
+          <div class="brand-universe__ring brand-universe__ring--inner" aria-hidden="true"></div>
+          <div class="brand-universe__mark"><img src="../../landing/assets/veratus-v-wheat-720.webp" alt="Símbolo Veratus: V dourado com espiga de trigo" width="1254" height="1254"></div>
+          <span class="brand-universe__caption">PRECISÃO · EQUILÍBRIO · PERMANÊNCIA</span>
+        </div>
+      </div>
+      <div class="hero-footer shell"><span>VERATUS / 2026</span><a href="#relogios">Entre na experiência <i aria-hidden="true">↓</i></a></div>
+    </section>
+
+    <section class="capitulo relogios" id="relogios" aria-labelledby="relogios-titulo">
+      <div class="shell">
+        <div class="capitulo__topo">
+          <h2 id="relogios-titulo">Relógios</h2>
+          <div class="relogios__oferta">
+            <p class="relogios__preco">R$ 289,90 <span>cada</span></p>
+            <p>Frete grátis e entrega em até 7 dias.</p>
+            <p>Abra um modelo para vê-lo girar.</p>
+          </div>
+        </div>
+        <div class="relogios__filtros" role="group" aria-label="Filtrar relógios por estilo" data-filtros hidden>
+          <button type="button" aria-pressed="true" data-filtro="todos">Todos</button>
+          <button type="button" aria-pressed="false" data-filtro="classico">Clássicos</button>
+          <button type="button" aria-pressed="false" data-filtro="esportivo">Esportivos</button>
+          <button type="button" aria-pressed="false" data-filtro="marcante">Marcantes</button>
+          <span class="relogios__contagem" aria-live="polite" data-contagem>9 modelos</span>
+        </div>
+        <ul class="relogios__grade" role="list">
+          <li class="relogio" data-id="arctic-white" data-estilos="classico" data-nome="Arctic White" data-estilo="Clássico, versátil" data-descricao="Uma composição clara, equilibrada e direta para diferentes momentos." data-preco="R$ 289,90" data-alt="Imagem de apresentação do relógio Arctic White" data-fx="0.483" data-fy="0.566">
+            <a class="relogio__foto" href="?relogio=arctic-white" data-abrir tabindex="-1" aria-hidden="true">
+              <img src="../../landing/assets/catalog/arctic-white.webp" alt="" width="1122" height="1402" loading="lazy" decoding="async">
+            </a>
+            <div class="relogio__info">
+              <h3><a href="?relogio=arctic-white" data-abrir>Arctic White</a></h3>
+              <p class="relogio__estilo">Clássico, versátil</p>
+              <p class="relogio__preco">R$ 289,90</p>
+              <div class="relogio__acoes">
+                <a class="acao acao--ver" href="?relogio=arctic-white" data-abrir>Ver de perto</a>
+                <a class="acao acao--pedir purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Arctic%20White.%0AQuero%20fazer%20o%20pedido%20e%20confirmar%20a%20disponibilidade.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Darctic-white" target="_blank" rel="noopener" data-product-id="arctic-white" data-product-name="Arctic White" data-pedido="1" aria-label="Pedir o Arctic White pelo WhatsApp">Pedir</a>
+              </div>
+            </div>
+          </li>
+          <li class="relogio" data-id="ocean-blue" data-estilos="esportivo" data-nome="Ocean Blue" data-estilo="Esportivo, versátil" data-descricao="Tons profundos e contraste preciso em uma leitura esportiva." data-preco="R$ 289,90" data-alt="Imagem de apresentação do relógio Ocean Blue" data-fx="0.494" data-fy="0.563">
+            <a class="relogio__foto" href="?relogio=ocean-blue" data-abrir tabindex="-1" aria-hidden="true">
+              <img src="../../landing/assets/catalog/ocean-blue.webp" alt="" width="1122" height="1402" loading="lazy" decoding="async">
+            </a>
+            <div class="relogio__info">
+              <h3><a href="?relogio=ocean-blue" data-abrir>Ocean Blue</a></h3>
+              <p class="relogio__estilo">Esportivo, versátil</p>
+              <p class="relogio__preco">R$ 289,90</p>
+              <div class="relogio__acoes">
+                <a class="acao acao--ver" href="?relogio=ocean-blue" data-abrir>Ver de perto</a>
+                <a class="acao acao--pedir purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Ocean%20Blue.%0AQuero%20fazer%20o%20pedido%20e%20confirmar%20a%20disponibilidade.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Docean-blue" target="_blank" rel="noopener" data-product-id="ocean-blue" data-product-name="Ocean Blue" data-pedido="1" aria-label="Pedir o Ocean Blue pelo WhatsApp">Pedir</a>
+              </div>
+            </div>
+          </li>
+          <li class="relogio" data-id="black-gmt" data-estilos="esportivo marcante" data-nome="Black GMT" data-estilo="Esportivo, marcante" data-descricao="Preto, aço e uma presença visual definida por contrastes." data-preco="R$ 289,90" data-alt="Imagem de apresentação do relógio Black GMT" data-fx="0.494" data-fy="0.576">
+            <a class="relogio__foto" href="?relogio=black-gmt" data-abrir tabindex="-1" aria-hidden="true">
+              <img src="../../landing/assets/catalog/black-gmt.webp" alt="" width="1122" height="1402" loading="lazy" decoding="async">
+            </a>
+            <div class="relogio__info">
+              <h3><a href="?relogio=black-gmt" data-abrir>Black GMT</a></h3>
+              <p class="relogio__estilo">Esportivo, marcante</p>
+              <p class="relogio__preco">R$ 289,90</p>
+              <div class="relogio__acoes">
+                <a class="acao acao--ver" href="?relogio=black-gmt" data-abrir>Ver de perto</a>
+                <a class="acao acao--pedir purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Black%20GMT.%0AQuero%20fazer%20o%20pedido%20e%20confirmar%20a%20disponibilidade.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dblack-gmt" target="_blank" rel="noopener" data-product-id="black-gmt" data-product-name="Black GMT" data-pedido="1" aria-label="Pedir o Black GMT pelo WhatsApp">Pedir</a>
+              </div>
+            </div>
+          </li>
+          <li class="relogio" data-id="royal-blue" data-estilos="marcante esportivo" data-nome="Royal Blue" data-estilo="Marcante, esportivo" data-descricao="Azul intenso e acabamento dourado para uma escolha de destaque." data-preco="R$ 289,90" data-alt="Imagem de apresentação do relógio Royal Blue" data-fx="0.49" data-fy="0.515">
+            <a class="relogio__foto" href="?relogio=royal-blue" data-abrir tabindex="-1" aria-hidden="true">
+              <img src="../../landing/assets/catalog/royal-blue.webp" alt="" width="1122" height="1402" loading="lazy" decoding="async">
+            </a>
+            <div class="relogio__info">
+              <h3><a href="?relogio=royal-blue" data-abrir>Royal Blue</a></h3>
+              <p class="relogio__estilo">Marcante, esportivo</p>
+              <p class="relogio__preco">R$ 289,90</p>
+              <div class="relogio__acoes">
+                <a class="acao acao--ver" href="?relogio=royal-blue" data-abrir>Ver de perto</a>
+                <a class="acao acao--pedir purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Royal%20Blue.%0AQuero%20fazer%20o%20pedido%20e%20confirmar%20a%20disponibilidade.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Droyal-blue" target="_blank" rel="noopener" data-product-id="royal-blue" data-product-name="Royal Blue" data-pedido="1" aria-label="Pedir o Royal Blue pelo WhatsApp">Pedir</a>
+              </div>
+            </div>
+          </li>
+          <li class="relogio" data-id="platinum-classic" data-estilos="classico" data-nome="Platinum Classic" data-estilo="Clássico, versátil" data-descricao="Mostrador claro e linhas sóbrias em uma composição atemporal." data-preco="R$ 289,90" data-alt="Imagem de apresentação do relógio Platinum Classic" data-fx="0.5" data-fy="0.6">
+            <a class="relogio__foto" href="?relogio=platinum-classic" data-abrir tabindex="-1" aria-hidden="true">
+              <img src="../../landing/assets/catalog/platinum-classic.webp" alt="" width="1122" height="1402" loading="lazy" decoding="async">
+            </a>
+            <div class="relogio__info">
+              <h3><a href="?relogio=platinum-classic" data-abrir>Platinum Classic</a></h3>
+              <p class="relogio__estilo">Clássico, versátil</p>
+              <p class="relogio__preco">R$ 289,90</p>
+              <div class="relogio__acoes">
+                <a class="acao acao--ver" href="?relogio=platinum-classic" data-abrir>Ver de perto</a>
+                <a class="acao acao--pedir purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Platinum%20Classic.%0AQuero%20fazer%20o%20pedido%20e%20confirmar%20a%20disponibilidade.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dplatinum-classic" target="_blank" rel="noopener" data-product-id="platinum-classic" data-product-name="Platinum Classic" data-pedido="1" aria-label="Pedir o Platinum Classic pelo WhatsApp">Pedir</a>
+              </div>
+            </div>
+          </li>
+          <li class="relogio" data-id="emerald-signature" data-estilos="marcante" data-nome="Emerald Signature" data-estilo="Marcante" data-descricao="Verde profundo em uma composição de personalidade visual." data-preco="R$ 289,90" data-alt="Imagem de apresentação do relógio Emerald Signature" data-fx="0.494" data-fy="0.58">
+            <a class="relogio__foto" href="?relogio=emerald-signature" data-abrir tabindex="-1" aria-hidden="true">
+              <img src="../../landing/assets/catalog/emerald-signature.webp" alt="" width="1122" height="1402" loading="lazy" decoding="async">
+            </a>
+            <div class="relogio__info">
+              <h3><a href="?relogio=emerald-signature" data-abrir>Emerald Signature</a></h3>
+              <p class="relogio__estilo">Marcante</p>
+              <p class="relogio__preco">R$ 289,90</p>
+              <div class="relogio__acoes">
+                <a class="acao acao--ver" href="?relogio=emerald-signature" data-abrir>Ver de perto</a>
+                <a class="acao acao--pedir purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Emerald%20Signature.%0AQuero%20fazer%20o%20pedido%20e%20confirmar%20a%20disponibilidade.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Demerald-signature" target="_blank" rel="noopener" data-product-id="emerald-signature" data-product-name="Emerald Signature" data-pedido="1" aria-label="Pedir o Emerald Signature pelo WhatsApp">Pedir</a>
+              </div>
+            </div>
+          </li>
+          <li class="relogio" data-id="silver-prestige" data-estilos="classico" data-nome="Silver Prestige" data-estilo="Clássico" data-descricao="Uma leitura monocromática com presença discreta e refinada." data-preco="R$ 289,90" data-alt="Imagem de apresentação do relógio Silver Prestige" data-fx="0.495" data-fy="0.564">
+            <a class="relogio__foto" href="?relogio=silver-prestige" data-abrir tabindex="-1" aria-hidden="true">
+              <img src="../../landing/assets/catalog/silver-prestige.webp" alt="" width="1122" height="1402" loading="lazy" decoding="async">
+            </a>
+            <div class="relogio__info">
+              <h3><a href="?relogio=silver-prestige" data-abrir>Silver Prestige</a></h3>
+              <p class="relogio__estilo">Clássico</p>
+              <p class="relogio__preco">R$ 289,90</p>
+              <div class="relogio__acoes">
+                <a class="acao acao--ver" href="?relogio=silver-prestige" data-abrir>Ver de perto</a>
+                <a class="acao acao--pedir purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Silver%20Prestige.%0AQuero%20fazer%20o%20pedido%20e%20confirmar%20a%20disponibilidade.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dsilver-prestige" target="_blank" rel="noopener" data-product-id="silver-prestige" data-product-name="Silver Prestige" data-pedido="1" aria-label="Pedir o Silver Prestige pelo WhatsApp">Pedir</a>
+              </div>
+            </div>
+          </li>
+          <li class="relogio" data-id="polar-blue" data-estilos="esportivo" data-nome="Polar Blue" data-estilo="Esportivo, versátil" data-descricao="Azul polar e mostrador claro em uma composição de contraste leve." data-preco="R$ 289,90" data-alt="Imagem de apresentação do relógio Polar Blue" data-fx="0.492" data-fy="0.539">
+            <a class="relogio__foto" href="?relogio=polar-blue" data-abrir tabindex="-1" aria-hidden="true">
+              <img src="../../landing/assets/catalog/polar-blue.webp" alt="" width="1122" height="1402" loading="lazy" decoding="async">
+            </a>
+            <div class="relogio__info">
+              <h3><a href="?relogio=polar-blue" data-abrir>Polar Blue</a></h3>
+              <p class="relogio__estilo">Esportivo, versátil</p>
+              <p class="relogio__preco">R$ 289,90</p>
+              <div class="relogio__acoes">
+                <a class="acao acao--ver" href="?relogio=polar-blue" data-abrir>Ver de perto</a>
+                <a class="acao acao--pedir purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Polar%20Blue.%0AQuero%20fazer%20o%20pedido%20e%20confirmar%20a%20disponibilidade.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dpolar-blue" target="_blank" rel="noopener" data-product-id="polar-blue" data-product-name="Polar Blue" data-pedido="1" aria-label="Pedir o Polar Blue pelo WhatsApp">Pedir</a>
+              </div>
+            </div>
+          </li>
+          <li class="relogio" data-id="bronze-heritage" data-estilos="classico marcante" data-nome="Bronze Heritage" data-estilo="Clássico, marcante" data-descricao="Tons quentes e acabamento metálico em uma composição de presença." data-preco="R$ 289,90" data-alt="Imagem de apresentação do relógio Bronze Heritage" data-fx="0.497" data-fy="0.546">
+            <a class="relogio__foto" href="?relogio=bronze-heritage" data-abrir tabindex="-1" aria-hidden="true">
+              <img src="../../landing/assets/catalog/bronze-heritage.webp" alt="" width="1122" height="1402" loading="lazy" decoding="async">
+            </a>
+            <div class="relogio__info">
+              <h3><a href="?relogio=bronze-heritage" data-abrir>Bronze Heritage</a></h3>
+              <p class="relogio__estilo">Clássico, marcante</p>
+              <p class="relogio__preco">R$ 289,90</p>
+              <div class="relogio__acoes">
+                <a class="acao acao--ver" href="?relogio=bronze-heritage" data-abrir>Ver de perto</a>
+                <a class="acao acao--pedir purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Bronze%20Heritage.%0AQuero%20fazer%20o%20pedido%20e%20confirmar%20a%20disponibilidade.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dbronze-heritage" target="_blank" rel="noopener" data-product-id="bronze-heritage" data-product-name="Bronze Heritage" data-pedido="1" aria-label="Pedir o Bronze Heritage pelo WhatsApp">Pedir</a>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="capitulo joias" id="joias" aria-labelledby="joias-titulo">
+      <div class="shell">
+        <div class="capitulo__topo">
+          <h2 id="joias-titulo">Joias</h2>
+          <p class="joias__intro">Colares, pulseiras e tornozeleiras da coleção Veratus Feminino, em tom dourado e tom prateado. Disponibilidade e valor de cada peça são confirmados na conversa.</p>
+        </div>
+        <section class="joias__grupo joias__grupo--colares" aria-labelledby="grupo-colares">
+          <div class="joias__grupo-topo"><h3 id="grupo-colares">Colares</h3><span>5 peças</span></div>
+          <ul class="joias__lista" role="list">
+            <li class="joia joia--destaque">
+              <figure>
+                <img src="../../landing/assets/feminine/halo-verde-necklace.webp" alt="Colar em tom prateado com elemento oval verde e halo" width="1122" height="1402" loading="lazy" decoding="async">
+                <figcaption>
+                  <h4>Halo Verde</h4>
+                  <p class="joia__tipo">Colar, tom prateado</p>
+                  <p class="joia__texto">Um ponto verde emoldurado por uma linha luminosa.</p>
+                  <a class="acao acao--interesse purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Halo%20Verde.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dhalo-verde" target="_blank" rel="noopener" data-product-id="halo-verde" data-product-name="Halo Verde" aria-label="Tenho interesse em Halo Verde: abre o WhatsApp">Tenho interesse</a>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="joia">
+              <figure>
+                <img src="../../landing/assets/feminine/verde-aura-necklace.webp" alt="Colar em tom dourado com elemento oval verde-limão" width="1122" height="1402" loading="lazy" decoding="async">
+                <figcaption>
+                  <h4>Verde Aura</h4>
+                  <p class="joia__tipo">Colar, tom dourado</p>
+                  <p class="joia__texto">Um verde vibrante em uma composição essencial.</p>
+                  <a class="acao acao--interesse purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Verde%20Aura.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dverde-aura" target="_blank" rel="noopener" data-product-id="verde-aura" data-product-name="Verde Aura" aria-label="Tenho interesse em Verde Aura: abre o WhatsApp">Tenho interesse</a>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="joia">
+              <figure>
+                <img src="../../landing/assets/feminine/rosa-aurea-necklace.webp" alt="Colar em tom dourado com pingente floral vazado" width="1122" height="1402" loading="lazy" decoding="async">
+                <figcaption>
+                  <h4>Rosa Áurea</h4>
+                  <p class="joia__tipo">Colar, tom dourado</p>
+                  <p class="joia__texto">Geometria floral com um ponto luminoso central.</p>
+                  <a class="acao acao--interesse purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Rosa%20%C3%81urea.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Drosa-aurea" target="_blank" rel="noopener" data-product-id="rosa-aurea" data-product-name="Rosa Áurea" aria-label="Tenho interesse em Rosa Áurea: abre o WhatsApp">Tenho interesse</a>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="joia">
+              <figure>
+                <img src="../../landing/assets/feminine/eclat-duo-necklace.webp" alt="Colar em tom prateado em duas camadas com elementos transparentes" width="1122" height="1402" loading="lazy" decoding="async">
+                <figcaption>
+                  <h4>Éclat Duo</h4>
+                  <p class="joia__tipo">Colar, tom prateado</p>
+                  <p class="joia__texto">Duas linhas delicadas, dois pontos de luz.</p>
+                  <a class="acao acao--interesse purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20%C3%89clat%20Duo.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Declat-duo" target="_blank" rel="noopener" data-product-id="eclat-duo" data-product-name="Éclat Duo" aria-label="Tenho interesse em Éclat Duo: abre o WhatsApp">Tenho interesse</a>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="joia">
+              <figure>
+                <img src="../../landing/assets/feminine/noir-clover-necklace.webp" alt="Colar em tom dourado com elemento preto em formato de trevo" width="1122" height="1402" loading="lazy" decoding="async">
+                <figcaption>
+                  <h4>Noir Clover</h4>
+                  <p class="joia__tipo">Colar, tom dourado</p>
+                  <p class="joia__texto">Contraste entre preto e tom dourado em uma forma emblemática.</p>
+                  <a class="acao acao--interesse purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Noir%20Clover.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dnoir-clover" target="_blank" rel="noopener" data-product-id="noir-clover" data-product-name="Noir Clover" aria-label="Tenho interesse em Noir Clover: abre o WhatsApp">Tenho interesse</a>
+                </figcaption>
+              </figure>
+            </li>
+          </ul>
+        </section>
+        <section class="joias__grupo joias__grupo--pulseiras" aria-labelledby="grupo-pulseiras">
+          <div class="joias__grupo-topo"><h3 id="grupo-pulseiras">Pulseiras</h3><span>2 peças</span></div>
+          <ul class="joias__lista" role="list">
+            <li class="joia">
+              <figure>
+                <img src="../../landing/assets/feminine/lumiere-bracelet.webp" alt="Pulseira fina em tom dourado com elemento circular transparente" width="1122" height="1402" loading="lazy" decoding="async">
+                <figcaption>
+                  <h4>Lumière</h4>
+                  <p class="joia__tipo">Pulseira, tom dourado</p>
+                  <p class="joia__texto">Uma linha fina e um único ponto de destaque.</p>
+                  <a class="acao acao--interesse purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Lumi%C3%A8re.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dlumiere" target="_blank" rel="noopener" data-product-id="lumiere" data-product-name="Lumière" aria-label="Tenho interesse em Lumière: abre o WhatsApp">Tenho interesse</a>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="joia">
+              <figure>
+                <img src="../../landing/assets/feminine/celeste-link-bracelet.webp" alt="Pulseira em tom dourado com elementos azuis e elos retangulares" width="1122" height="1402" loading="lazy" decoding="async">
+                <figcaption>
+                  <h4>Celeste Link</h4>
+                  <p class="joia__tipo">Pulseira, tom dourado</p>
+                  <p class="joia__texto">Azul intenso entre elos de presença gráfica.</p>
+                  <a class="acao acao--interesse purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Celeste%20Link.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dceleste-link" target="_blank" rel="noopener" data-product-id="celeste-link" data-product-name="Celeste Link" aria-label="Tenho interesse em Celeste Link: abre o WhatsApp">Tenho interesse</a>
+                </figcaption>
+              </figure>
+            </li>
+          </ul>
+        </section>
+        <section class="joias__grupo joias__grupo--tornozeleiras" aria-labelledby="grupo-tornozeleiras">
+          <div class="joias__grupo-topo"><h3 id="grupo-tornozeleiras">Tornozeleiras</h3><span>2 peças</span></div>
+          <ul class="joias__lista" role="list">
+            <li class="joia">
+              <figure>
+                <img src="../../landing/assets/feminine/celeste-anklet.webp" alt="Tornozeleira em tom prateado com elementos azuis no tornozelo" width="1122" height="1402" loading="lazy" decoding="async">
+                <figcaption>
+                  <h4>Celeste Anklet</h4>
+                  <p class="joia__tipo">Tornozeleira, tom prateado</p>
+                  <p class="joia__texto">Elementos azuis e elos circulares em uma composição leve.</p>
+                  <a class="acao acao--interesse purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Celeste%20Anklet.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dceleste-anklet" target="_blank" rel="noopener" data-product-id="celeste-anklet" data-product-name="Celeste Anklet" aria-label="Tenho interesse em Celeste Anklet: abre o WhatsApp">Tenho interesse</a>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="joia">
+              <figure>
+                <img src="../../landing/assets/feminine/essenza-anklet.webp" alt="Tornozeleira em tom prateado com pequenos pingentes" width="1122" height="1402" loading="lazy" decoding="async">
+                <figcaption>
+                  <h4>Essenza</h4>
+                  <p class="joia__tipo">Tornozeleira, tom prateado</p>
+                  <p class="joia__texto">Pequenos pingentes acompanham cada movimento.</p>
+                  <a class="acao acao--interesse purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20tenho%20interesse%20em%20Essenza.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2%20%7C%20produto%3Dessenza-anklet" target="_blank" rel="noopener" data-product-id="essenza-anklet" data-product-name="Essenza" aria-label="Tenho interesse em Essenza: abre o WhatsApp">Tenho interesse</a>
+                </figcaption>
+              </figure>
+            </li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <section class="capitulo compra" id="como-comprar" aria-labelledby="compra-titulo">
+      <div class="shell">
+        <h2 id="compra-titulo">Como comprar</h2>
+        <ol class="compra__passos">
+          <li><h3>Escolha</h3><p>Abra o relógio ou a joia que chamou sua atenção.</p></li>
+          <li><h3>Converse</h3><p>O WhatsApp abre com a peça escolhida e a referência da sua visita.</p></li>
+          <li><h3>Confirme</h3><p>A equipe confirma disponibilidade, valor e forma de pagamento antes do pedido.</p></li>
+          <li><h3>Receba</h3><p>Frete grátis e entrega em até 7 dias, sem taxas adicionais.</p></li>
+        </ol>
+        <p class="compra__nota">Você pode desistir em até 7 dias após o recebimento. <a href="../../landing/condicoes-de-compra.html">Condições de compra</a></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="rodape">
+    <div class="shell">
+      <div class="rodape__chamada">
+        <p>Você faz parte do tempo.</p>
+        <a class="botao botao--ouro purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20quero%20conhecer%20as%20cole%C3%A7%C3%B5es.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2" target="_blank" rel="noopener">Conversar com a Veratus</a>
+      </div>
+      <div class="rodape__base">
+        <a class="marca" href="#hero"><img src="../../landing/assets/veratus-v-wheat-160.webp" alt="" width="180" height="180"><span>VERATUS</span></a>
+        <address class="rodape__vendedor" aria-label="Identificação do vendedor"><b>Veratus</b><span>São Paulo/SP</span><a href="mailto:veratus.ltda@gmail.com">veratus.ltda@gmail.com</a><a class="purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20quero%20conhecer%20as%20cole%C3%A7%C3%B5es.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2" target="_blank" rel="noopener">(11) 95832-3612</a><!--seller-document--></address>
+        <nav aria-label="Links do rodapé"><a href="https://www.instagram.com/veratus_oficial/" target="_blank" rel="noopener">Instagram</a><a href="../../landing/privacy.html">Privacidade</a><a href="../../landing/condicoes-de-compra.html">Condições de compra</a></nav>
+        <small>© <span data-ano>2026</span> Veratus</small>
+      </div>
+    </div>
+  </footer>
+
+  <div class="barra-movel" data-barra-movel>
+    <p>Relógios a <b>R$ 289,90</b></p>
+    <a class="botao botao--ouro purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20quero%20conhecer%20as%20cole%C3%A7%C3%B5es.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2" target="_blank" rel="noopener">Conversar</a>
+  </div>
+
+  <dialog class="vista" id="vista" aria-labelledby="vista-nome">
+    <div class="vista__topo">
+      <button class="vista__voltar" type="button" data-fechar>Voltar à coleção</button>
+      <p class="vista__posicao" data-posicao></p>
+    </div>
+    <figure class="palco" data-palco>
+      <div class="palco__ambiente" aria-hidden="true"></div>
+      <div class="palco__cena">
+        <div class="palco__chao" aria-hidden="true">
+          <svg class="palco__mostrador" viewBox="0 0 200 200"><circle cx="100" cy="100" r="97"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(0 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(6 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(12 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(18 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(24 100 100)" class="curta"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(30 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(36 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(42 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(48 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(54 100 100)" class="curta"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(60 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(66 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(72 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(78 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(84 100 100)" class="curta"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(90 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(96 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(102 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(108 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(114 100 100)" class="curta"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(120 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(126 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(132 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(138 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(144 100 100)" class="curta"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(150 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(156 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(162 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(168 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(174 100 100)" class="curta"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(180 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(186 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(192 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(198 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(204 100 100)" class="curta"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(210 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(216 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(222 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(228 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(234 100 100)" class="curta"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(240 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(246 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(252 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(258 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(264 100 100)" class="curta"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(270 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(276 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(282 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(288 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(294 100 100)" class="curta"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(300 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(306 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(312 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(318 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(324 100 100)" class="curta"/><line x1="100" y1="4" x2="100" y2="14" transform="rotate(330 100 100)" class="longa"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(336 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(342 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(348 100 100)" class="curta"/><line x1="100" y1="6" x2="100" y2="10" transform="rotate(354 100 100)" class="curta"/><circle class="pip" cx="100" cy="23" r="3.2"/></svg>
+        </div>
+        <div class="palco__entrada">
+          <div class="palco__giro">
+            <span class="palco__borda palco__borda--esquerda" aria-hidden="true"></span>
+            <span class="palco__borda palco__borda--direita" aria-hidden="true"></span>
+            <div class="palco__painel">
+              <img class="palco__foto" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="" width="1122" height="1402">
+              <span class="palco__reflexo" aria-hidden="true"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="palco__dica" aria-hidden="true">Role para girar</p>
+      <figcaption class="palco__legenda">Imagem de apresentação do modelo</figcaption>
+    </figure>
+    <div class="vista__texto">
+      <section class="vista__bloco vista__bloco--abertura">
+        <p class="vista__estilo" data-estilo></p>
+        <h2 id="vista-nome" data-nome tabindex="-1" autofocus>Relógio</h2>
+        <p class="vista__descricao" data-descricao></p>
+        <p class="vista__preco"><b data-preco></b><span>Frete grátis e entrega em até 7 dias, sem taxas adicionais.</span></p>
+        <a class="botao botao--ouro purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20quero%20conhecer%20as%20cole%C3%A7%C3%B5es.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2" target="_blank" rel="noopener" data-pedir>Pedir pelo WhatsApp</a>
+      </section>
+      <section class="vista__bloco" aria-labelledby="vista-passos">
+        <h3 id="vista-passos">Como o pedido funciona</h3>
+        <ol class="vista__passos">
+          <li>O WhatsApp abre com o modelo e a referência da sua visita.</li>
+          <li>A equipe confirma disponibilidade, valor e forma de pagamento antes do pedido.</li>
+          <li>Você recebe em até 7 dias, com frete grátis.</li>
+        </ol>
+        <p class="vista__nota">Você pode desistir em até 7 dias após o recebimento. <a href="../../landing/condicoes-de-compra.html">Condições de compra</a></p>
+      </section>
+      <section class="vista__bloco" aria-labelledby="vista-outros">
+        <h3 id="vista-outros">Outros modelos</h3>
+        <ul class="vista__outros" role="list" data-outros></ul>
+      </section>
+    </div>
+    <div class="vista__barra">
+      <p><b data-preco></b><span>Frete grátis</span></p>
+      <a class="botao botao--ouro purchase-link" href="https://wa.me/5511958323612?text=Ol%C3%A1!%20Vim%20pelo%20site%20da%20Veratus%20e%20quero%20conhecer%20as%20cole%C3%A7%C3%B5es.%0AGostaria%20de%20confirmar%20disponibilidade%20e%20valor.%0ARefer%C3%AAncia%20da%20visita%3A%20VT-RJ5MO2" target="_blank" rel="noopener" data-pedir>Pedir pelo WhatsApp</a>
+    </div>
+  </dialog>
+
+  <script src="vitrine.js"></script>
+</body>
+</html>
