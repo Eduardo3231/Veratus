@@ -1,7 +1,23 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 14/10/2026, Claude Code (prévia da reestruturação do site em `design/reestruturacao-2026-10/`, aguardando o fundador).
+**Última atualização:** 14/10/2026, Claude Code (founder-skill instalada e primeira reunião do conselho; prévia da reestruturação do site aguardando o fundador).
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
+
+## Founder skill e o conselho (14/10)
+
+- **Instalação.** O fundador pediu `/plugin install founder-skill`, mas o `/plugin` não existe na nuvem. As 11 skills de https://github.com/Jakeschincariol/founder-skill (commit `fd9385b`, MIT) foram copiadas sem alteração para `.claude/skills/`; a origem está em `founder-skill-ORIGEM.md`.
+  - Os comandos ficam `/founder-board`, `/founder-competitors`, `/founder-consumer`, `/founder-pricing`, `/founder-offer`, `/founder-cfo`, `/founder-marketing`, `/founder-brand`, `/founder-ops`, `/founder-launch` e `/founder-plan`.
+  - O `ruff.toml` exclui `.claude/` do lint para a cópia não mudar.
+  - O `.gitignore` deixa de fora os arquivos do pack que levam custo, margem ou fornecedor (`founder/numbers.json`, `cfo*`, `ops.md`, plano, resumo, one-pager e `panel/`): o repositório é público.
+- **Primeira reunião do conselho** (`/founder-board`):
+  - Arquivos: `founder/idea.md`, `founder/board/` (resumo e três memos) e `founder/board.md`.
+  - Voto: **3 INVESTE SE, nota média 3,7.**
+  - Risco unânime: a vitrine mostra marca de terceiros que o relógio real não tem, além dos Alpes e do "aço" sem confirmação. Também unânimes: cliente indefinido e distribuição travada sem foto real.
+  - Condições: foto real, ficha e garantia por escrito, cliente numa frase, teste de 14 dias com metas antes e joias em espera.
+  - Para a lente Produto, o palco 3D da prévia também espera.
+  - O conselho recomenda tirar os criativos do site, o que contraria a decisão do fundador de 27/09. A decisão é dele.
+- **Pergunta aberta ao fundador:** quem é o cliente, numa frase, e o orçamento do teste. Sem isso, `/founder-consumer` e `/founder-cfo` não rodam bem.
+- **Próximo passo do pack:** `/founder-competitors` (pesquisa pública) ou `/founder-consumer --quick` (20 compradores simulados).
 
 ## Reestruturação do site: prévia aguardando o fundador (14/10)
 
