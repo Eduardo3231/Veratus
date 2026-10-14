@@ -13,3 +13,12 @@ social/publishing-state.json
 .agent-lock.json
 # Fotos originais (com EXIF) antes do tratamento.
 incoming/
+# Founder skill: custo, margem e fornecedor nunca vão para o Git (repositório público).
+founder/numbers.json
+founder/cfo.md
+founder/cfo-sources.md
+founder/ops.md
+founder/summary.md
+founder/business-plan.md
+founder/one-pager.md
+founder/panel/
