@@ -308,13 +308,6 @@ def plan_item(
     return item, "PENDING_APPROVAL", None
 
 
-def initial_status(
-    item: dict[str, Any], catalog: dict[str, dict[str, Any]]
-) -> tuple[str, str | None]:
-    _, status, reason = plan_item(item, catalog)
-    return status, reason
-
-
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS scheduled_posts (
     id TEXT PRIMARY KEY,
@@ -719,10 +712,6 @@ def refresh_pending(
         )
         result["ready"].append(item["id"])
     return result
-
-
-# Nome antigo, mantido para scripts existentes.
-refresh_blocks = refresh_pending
 
 
 def request_weekly_approvals(
@@ -1207,7 +1196,6 @@ def main(argv: list[str] | None = None) -> int:
     approval.add_argument("--week")
     sub.add_parser("run-due", help="publica os aprovados vencidos (ou mostra a prévia)")
     sub.add_parser("refresh", help="relógios que ganharam foto real")
-    sub.add_parser("refresh-blocks", help="nome antigo de refresh")
     sub.add_parser("insights", help="lê métricas em +24 h e +7 dias")
     report = sub.add_parser("report", help="relatório semanal")
     report.add_argument("--week", required=True)
@@ -1220,7 +1208,7 @@ def main(argv: list[str] | None = None) -> int:
             output: Any = import_calendar(store, args.path)
         elif args.command == "list":
             output = store.items(status=args.status)
-        elif args.command in ("refresh", "refresh-blocks"):
+        elif args.command == "refresh":
             output = refresh_pending(store)
         elif args.command == "report":
             output = weekly_report(store, args.week)

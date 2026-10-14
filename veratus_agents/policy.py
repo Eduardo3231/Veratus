@@ -107,10 +107,13 @@ _BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         "marca de terceiros",
     ),
     (
-        # A palavra seguinte entra no trecho: com o movimento confirmado na
-        # ficha, "movimento quartzo" passa e "movimento automático" não.
+        # "movimento" já conta com a palavra seguinte: com o movimento confirmado
+        # na ficha, "movimento quartzo" passa e "movimento automático" não.
+        # "mecanismo" só é movimento com o tipo ("mecanismo de pagamento" passa).
         re.compile(
-            r"\b(?:movimento|mecanismo)\b(?:\s+(?:[eé]\s+)?\w+)?|"
+            r"\bmovimento\b(?:\s+(?:[eé]\s+)?\w+)?|"
+            r"\bmecanismo\s+(?:[eé]\s+)?(?:autom[aá]tic|japon[eê]s|su[ií][çc]|quartz|"
+            r"mec[aâ]nic)\w*|"
             r"\bm[áa]quina\s+(?:autom[áa]tica|qu[áa]rtzo?)\b|"
             r"\bquartzo\b|\bautom[áa]tico\s+de\s+corda\b",
             re.IGNORECASE,
@@ -216,9 +219,10 @@ _MARKETPLACE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 
 
 # Bloqueios que um fato CONFIRMADO (ficha dos relógios ou fatos.yaml com
-# ``gate_issue``) libera, só no texto desse fato: "41 mm" passa se a ficha diz
-# 41 mm; "40 mm" continua bloqueado. Marca de terceiros, origem, fornecedor,
-# urgência, desconto, estoque e contato externo nunca são liberados assim.
+# ``gate_issue``) libera, só na frase desse fato: "41 mm" passa se a ficha diz
+# 41 mm; "40 mm" continua bloqueado, e "tem garantia vitalícia" também, porque
+# "vitalícia" não está no fato. Marca de terceiros, origem, fornecedor, urgência,
+# desconto, estoque e contato externo nunca são liberados assim.
 EXEMPTABLE_ISSUES = frozenset(
     {
         "especificação técnica não validada",
@@ -266,10 +270,21 @@ def _tokens(text: str) -> set[str]:
     return set(re.findall(r"\d+(?:,\d+)?|[a-z]+", normalized))
 
 
-def _fact_allows(fragment: str, issue: str, collection: str | None) -> bool:
+# Fim de frase: ! ? ; ou quebra de linha, ou ponto seguido de espaço ("12.5" não quebra).
+_SENTENCE_BREAK = re.compile(r"[!?;\n]|\.(?=\s|$)")
+
+
+def _sentence_around(text: str, position: int) -> str:
+    """A frase que contém ``position``; a exceção de fato vale para a frase inteira."""
+    starts = [m.end() for m in _SENTENCE_BREAK.finditer(text, 0, position)]
+    ends = [m.start() for m in _SENTENCE_BREAK.finditer(text, position)]
+    return text[starts[-1] if starts else 0 : ends[0] if ends else len(text)]
+
+
+def _fact_allows(sentence: str, issue: str, collection: str | None) -> bool:
     if issue not in EXEMPTABLE_ISSUES:
         return False
-    wanted = _tokens(fragment) - _STOPWORDS
+    wanted = _tokens(sentence) - _STOPWORDS
     for fact in CONFIRMED_SALES_FACTS.values():
         if fact.get("gate_issue") != issue:
             continue
@@ -313,7 +328,7 @@ def hard_review_customer_reply(
     for pattern, issue in patterns:
         for match in pattern.finditer(text or ""):
             if not _confirmed(match, issue, product_collection) and not _fact_allows(
-                match.group(0), issue, product_collection
+                _sentence_around(text or "", match.start()), issue, product_collection
             ):
                 issues.append(issue)
                 break

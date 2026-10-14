@@ -1,6 +1,6 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 13/10/2026, Claude Code (canais, atendimento autônomo e redes sociais).
+**Última atualização:** 14/10/2026, Claude Code (revisão do gate da ficha dos relógios; correção do que o rascunho de marketplace faz de fato).
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
 
 ## Rodada de 13/10 — canais, atendimento autônomo e redes sociais
@@ -17,6 +17,7 @@ O fundador decidiu que **os relógios sobem**: entram nos posts, nos anúncios e
   - Cada campo tem `valor` e `status`. Para usar, preencha o valor e troque `PENDENTE` por `CONFIRMADO`.
   - Os valores que já estão lá (aço inoxidável, 41 mm, 350 g…) são **sugestões** e não são usados enquanto estiverem `PENDENTE`.
   - Nada de custo, fornecedor ou endereço de origem na ficha: o repositório é público.
+  - **Depois de preencher, faça deploy (ou reinicie o serviço).** Origem, checklist e economia leem a ficha na hora; os fatos que o atendimento e o gate afirmam são carregados na inicialização.
 - **O que falta:** `python -m veratus_agents.watch_sheet status`, que mostra o checklist por modelo e por canal (também em `GET /os/watches/readiness`). `python -m veratus_agents.watch_sheet check` só valida a ficha e aponta o campo com erro.
 - **O que cada campo libera:**
 
@@ -27,11 +28,11 @@ O fundador decidiu que **os relógios sobem**: entram nos posts, nos anúncios e
 | Mercado Livre, Shopee, TikTok Shop | foto real + `envio_do_brasil: true` + cidade, prazo de postagem, materiais, movimento, diâmetro, embalagem; por modelo: cores e estoque |
 | Amazon | o mesmo + código de barras (`gtin`, ou `ISENTO`) |
 
-- **Marketplace:** o rascunho do relógio é criado já (`DRAFT`), com `pending_info` listando o que falta e os campos confirmados em `payload.ficha`. Publicar continua barrado pelo `ExternalWriteGuard` enquanto houver pendência (`WATCH_INFO_PENDING:*`), além das flags e da aprovação de sempre.
+- **Marketplace (verificado em 14/10, ainda não liga):** `prepare_listing` já sabe guardar o rascunho com `pending_info` (o que falta) e os campos confirmados em `payload.ficha`, e o `ExternalWriteGuard` barra a publicação enquanto houver pendência (`WATCH_INFO_PENDING:*`). Mas o rascunho é recusado antes: no comando de distribuição, o relógio sem `REAL_PHOTO` não fica pronto (`readiness: images`), e o `build_distribution_draft` exige status `APPROVED` e o QA do Product Master (fornecedor, disponibilidade, evidência de custo e de material). A ficha não alimenta esse QA. Ver a decisão 8 abaixo.
 - **Origem:** `envio_do_brasil: true` + `CONFIRMADO` substitui a pergunta `delivery-vs-registered-origin`. Libera os marketplaces e tira o `BLOCKED_BY_ORIGIN` da economia por canal.
 - **Atendimento e gate:**
   - material, movimento, resistência à água, medidas, garantia, envio e cores confirmados viram fatos (`relogios-*`) que o agente afirma, em vez de "a equipe confirma";
-  - o gate libera exatamente o texto do fato: "41 mm" passa se a ficha diz 41 mm, e "40 mm" continua bloqueado;
+  - o gate libera exatamente o texto do fato, na frase inteira: "41 mm" passa se a ficha diz 41 mm, e "40 mm" continua bloqueado; "tem garantia vitalícia" continua bloqueado se a ficha só confirma 90 dias. "Mecanismo" só conta como movimento com o tipo (quartzo, automático…): "mecanismo de pagamento" passa;
   - marca de terceiros, origem, fornecedor, urgência, desconto e estoque nunca são liberados assim.
 - **Calendário:** os posts de relógio entram `NEEDS_INFO` (esperando a foto real), não mais `BLOCKED`. Quando a foto chega:
   - o importador gera também o JPEG 1080 × 1350 em `landing/social/posts/watches/<id>.jpg`;
@@ -169,7 +170,8 @@ O fundador decidiu que **os relógios sobem**: entram nos posts, nos anúncios e
 
 ### Verificação desta rodada (13/10)
 
-- `pytest -q`: 404 passed, 4 skipped (depois da ficha dos relógios). Os pulados são os casos dourados e o calendário real, que esperam o pacote, além do teste de navegador já existente. Rodado em Python 3.13 e 3.11 (o do CI).
+- `pytest -q`: 408 passed, 4 skipped (depois da revisão do gate, em 14/10). Os pulados são os casos dourados e o calendário real, que esperam o pacote, além do teste de navegador já existente. Rodado em Python 3.13 e 3.11 (o do CI).
+- Revisão do gate (14/10): os três casos foram reproduzidos antes da correção ("tem garantia vitalícia" e "água a 100 metros" passavam depois de confirmados; "mecanismo de pagamento" era bloqueado) e agora têm teste que falharia sem a correção.
 - `ruff check .` e `ruff format --check .`: limpos.
 - `python -m veratus_agents.knowledge lint`: 0 problemas. `python -m veratus_agents.knowledge eval`: 10/10 com o modelo simulado.
 - Com todas as chaves desligadas, nenhum POST externo (teste com `requests` falhando em qualquer POST, pelas rotas). `run-due` desligado devolve só a prévia, sem item bloqueado.
@@ -218,6 +220,12 @@ Sempre na ordem: chave → teste em `SHADOW` → readiness → aprovação → s
 5. Nível inicial de cada canal fora do WhatsApp: todos em `SHADOW`.
 6. **Ficha dos relógios:** preencher `catalog/ficha-relogios.yaml` e importar as fotos reais (o fundador vai preencher). `python -m veratus_agents.watch_sheet status` mostra o que falta.
 7. **Fase 7 (iPhones) não foi feita:** pelo prompt, só depois do primeiro teste de 14 dias. Itens de iPhone no calendário e posts ficam `BLOCKED` (`LINHA_IPHONE_DEPOIS_DO_TESTE`).
+8. **Rascunho de marketplace do relógio antes da foto e do QA (decisão do fundador).** Opções:
+   - (a) manter: o rascunho sai só quando o Product Master estiver completo e com foto;
+   - (b) o QA aceita material e disponibilidade vindos da ficha, e o rascunho sai com a lista do que falta. Recomendo (b): a foto continua obrigatória para publicar;
+   - (c) relaxar também a foto no rascunho.
+9. **`estoque` por modelo na ficha.** O produto é sob encomenda (`INVENTORY_MODE = ON_DEMAND`) e tem teto por canal (`CHANNEL_STOCK_CAP_FALLBACK = 20`). Proposta: trocar o campo por "teto de estoque por canal". Como o repositório é público, quantidade real deve ficar no Product Master (banco), não na ficha.
+10. **Limpeza pendente (não feita, fora do pedido):** `FOUNDER_OPEN_QUESTIONS`, `STOREFRONT_BLOCKERS` e `WATCH_ECONOMICS_SNAPSHOT` em `commercial_config.py` ainda descrevem a regra antiga do relógio. Os testes os citam, então ficaram. `veratus_agents/watch_sheet.py` tem cerca de 520 linhas e pode ser reduzido pela metade (o relatório de economia e o texto de status são o que mais pesa).
 
 ## Conexões de marketplace (28/09)
 

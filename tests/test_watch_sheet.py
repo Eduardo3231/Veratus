@@ -189,10 +189,20 @@ def test_gate_accepts_the_confirmed_statement(watch_facts, text):
         "Pode mergulhar com ele.",
         "A caixa tem 5 mm de espessura.",
         "É réplica do Submariner.",
+        # A exceção vale para a frase do fato, não só para o trecho casado:
+        # "tem garantia" é confirmado, "tem garantia vitalícia" não é.
+        "Tem garantia vitalícia.",
+        "Resistência à água de 100 metros.",
+        "Tem garantia de 90 dias e troca em 30 dias.",
     ],
 )
 def test_gate_still_blocks_what_differs(watch_facts, text):
     assert hard_review_customer_reply(text, product_collection="watches")
+
+
+def test_mechanism_word_outside_watch_specs_is_not_blocked():
+    # "mecanismo" só é movimento quando vem com o tipo (quartzo, automático...).
+    assert hard_review_customer_reply("O mecanismo de pagamento é o Pix.") == []
 
 
 def test_watch_facts_do_not_cover_jewelry(watch_facts):
