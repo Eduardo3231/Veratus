@@ -29,6 +29,7 @@ O fundador aprovou a prévia ("pode aplicar tudo no site"). A reestruturação e
   - Acabamento de joia desconhecido não quebra a montagem.
   - Histórico ao Avançar e fechar a vista.
   - Gerador duplicado do protótipo removido.
+  - Imagem provisória da vista do relógio: o GIF de 1×1 estava incompleto (imagem quebrada, invisível porque o script a troca antes de abrir); agora é um GIF transparente válido.
   - Ficaram como estão, de propósito: `ON_HOLD` no site (decisão pendente do fundador) e a fórmula independente do link no teste, que pega divergência do gerador.
 - **Verificação:**
   - `pytest -q`: 423 passed, 3 skipped. Inclui os 14 testes de navegador, reescritos para o DOM novo e rodados com Playwright 1.56 no Chromium: computador e celular, com e sem animação, sem JS, JS atrasado, Pixel e atribuição site → agente.
