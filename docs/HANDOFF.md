@@ -1,7 +1,55 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 14/10/2026, Claude Code (founder-skill instalada e primeira reunião do conselho; prévia da reestruturação do site aguardando o fundador).
+**Última atualização:** 16/10/2026, Claude Code (reestruturação aplicada em `landing/` na branch, sem deploy; lote de 52 arquivos de relógios bloqueado).
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
+
+## Site reestruturado em `landing/` (16/10): pronto na branch, sem deploy
+
+O fundador aprovou a prévia ("pode aplicar tudo no site"). A reestruturação está em `landing/` na branch `ccr-c2f98235-0leyud`. **Não houve merge na main nem deploy**: a branch também leva todo o Veratus OS desde setembro, e publicar pede confirmação na hora.
+
+- **Como a página nasce:**
+  - `scripts/build_landing.py` monta `landing/index.html` a partir de `landing/catalog.json`.
+  - `scripts/export_public_catalog.py` monta a página antes de gravar os dois arquivos; o importador de fotos reais passa por ele.
+  - `test_page_is_built_from_the_public_catalog` falha se página e catálogo divergirem.
+  - Todo produto, preço e link do WhatsApp aparece sem JavaScript.
+  - `site.js` só acrescenta a referência da visita com UTM, a vista do relógio e os eventos do Pixel.
+- **Separação:**
+  - Relógios em três grupos de três: Clássicos, Esportivos e Marcantes. O Bronze Heritage, clássico e marcante, fica em Marcantes (`PRIMARY_STYLE`).
+  - No celular, cada grupo é uma faixa que desliza.
+  - Joias por tipo, em grade de quatro: colares, depois pulseiras e tornozeleiras lado a lado.
+  - **Noir Clover fora do site** (`ON_HOLD`) enquanto o alerta de semelhança com marca de terceiros estiver aberto; ela segue no catálogo público e na API.
+- **Igual ao ar:**
+  - primeiro slide;
+  - head de SEO e Open Graph, e o código do Pixel com os mesmos eventos;
+  - mensagem e referência `VT-` do WhatsApp; identificação do vendedor, com o `<!--seller-document-->`.
+- **Revisão:** a skill `code-review` apontou 10 itens; 6 foram corrigidos.
+  - Exportação atômica.
+  - "A partir de" quando os preços variarem.
+  - Separador de milhar.
+  - Acabamento de joia desconhecido não quebra a montagem.
+  - Histórico ao Avançar e fechar a vista.
+  - Gerador duplicado do protótipo removido.
+  - Ficaram como estão, de propósito: `ON_HOLD` no site (decisão pendente do fundador) e a fórmula independente do link no teste, que pega divergência do gerador.
+- **Verificação:**
+  - `pytest -q`: 423 passed, 3 skipped. Inclui os 14 testes de navegador, reescritos para o DOM novo e rodados com Playwright 1.56 no Chromium: computador e celular, com e sem animação, sem JS, JS atrasado, Pixel e atribuição site → agente.
+  - `ruff check .` e `ruff format --check .` limpos.
+  - Capturas 1440 e 390.
+  - O CI não instala Playwright: os testes de navegador rodam só localmente ou com `VERATUS_LANDING_URL`.
+- **Para publicar:** confirmação explícita do fundador para levar a branch à main (deploy no Render). Depois, conferir `/`, `?relogio=ocean-blue`, WhatsApp e Pixel no ar.
+
+## Lote de fotos e vídeos de relógios (16/10): bloqueado
+
+- **O lote:** o fundador mandou 52 arquivos `.crdownload` para ampliar o catálogo. São ZIPs de download interrompido; nenhum abre por inteiro. Os cabeçalhos dos primeiros 20 mostram pastas com nomes de marcas de terceiros (Rolex, TUDOR, Tag Heuer, OMEGA, Hublot, Breitling, U-BOAT, NIXON, Puma, Armani), além de "Super clone", "Rolex top" e "Pp".
+- **Respostas do fundador:**
+  - as pastas são "diferenciação de qualidade e preço";
+  - autenticidade: "confirmaremos tudo depois";
+  - origem: "revendedor autorizado";
+  - público: homens de 23 a 45 anos.
+- **Decisão:** nada desse lote entra no site, nos anúncios ou nos marketplaces. Não se edita foto para tirar marca.
+  - Caminho (a), marca própria: relógios desenhados pela Veratus, sem marca de terceiros nem imitação de modelo conhecido.
+  - Caminho (b), originais de marca: só com nota fiscal e autorização do fabricante, com a marca verdadeira na página.
+  - O fundador ainda não escolheu entre (a) e (b).
+- **Pendente:** confirmar por documento a origem dos nove relógios já no site, cujos criativos mostram marca de terceiros no mostrador (o mesmo risco que o conselho apontou).
 
 ## Founder skill e o conselho (14/10)
 
@@ -19,9 +67,9 @@
 - **Pergunta aberta ao fundador:** quem é o cliente, numa frase, e o orçamento do teste. Sem isso, `/founder-consumer` e `/founder-cfo` não rodam bem.
 - **Próximo passo do pack:** `/founder-competitors` (pesquisa pública) ou `/founder-consumer --quick` (20 compradores simulados).
 
-## Reestruturação do site: prévia aguardando o fundador (14/10)
+## Reestruturação do site: a prévia de 14/10 (registro)
 
-**Nada foi publicado.** `landing/` não foi tocado: o site no ar segue igual. A prévia mora em `design/reestruturacao-2026-10/`, e `design/` não entra no Docker do Render.
+Aplicada em `landing/` em 16/10 (seção acima). `design/reestruturacao-2026-10/` fica como registro da prévia; o gerador dela saiu, e o site sai de `scripts/build_landing.py`.
 
 - **Pedido do fundador:**
   - um modelo novo com as imagens originais dos relógios (`landing/assets/catalog/`);
@@ -29,7 +77,7 @@
   - 3D como combinado em 26/09: o relógio gira com a rolagem, na visualização do produto;
   - ver antes de confirmar.
 - **Arquivos:**
-  - `index.html` é gerado por `gerar.py` a partir de `landing/catalog.json`;
+  - `index.html` (congelado; era gerado pelo `gerar.py`, removido em 16/10);
   - `estilo.css` e `vitrine.js`;
   - `projeto.html` é o documento do projeto, com as capturas em `capturas/`;
   - `empacotar.py` gera um HTML único para ver no app.

@@ -43,10 +43,8 @@ VISIBLE_JS = """(selector) => {
   return {ok: box.width > 0 && box.height > 0 && opacity > 0.99, opacity,
           width: box.width, height: box.height};
 }"""
-INTRO_GONE_JS = """() => {
-  const gate = document.querySelector('#intro-gate');
-  return Boolean(gate) && getComputedStyle(gate).visibility === 'hidden';
-}"""
+# site.js ran: it sets the mobile bar inert while the hero is on screen.
+SCRIPT_RAN_JS = "() => document.querySelector('[data-mobile-bar]').inert === true"
 EXTERNAL_URL = os.getenv("VERATUS_LANDING_URL", "").strip()
 
 
@@ -134,18 +132,17 @@ def test_content_and_whatsapp_links_are_visible(
     page.on("pageerror", lambda error: errors.append(str(error)))
     try:
         page.goto(landing_url, wait_until="domcontentloaded")
-        page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
-        page.wait_for_function(INTRO_GONE_JS, timeout=6_000)
+        page.wait_for_function(SCRIPT_RAN_JS, timeout=15_000)
         for selector in (
             "#hero-title",
-            "#manifesto-title",
-            "#catalog-title",
-            "#catalog-rail .product-card",
-            "#trust-title",
+            "#relogios-titulo",
+            ".relogio",
+            "#joias-titulo",
+            "#compra-titulo",
             "#contato .purchase-link",
         ):
             _assert_visible(page, selector)
-        assert page.locator("#catalog-rail .product-card").count() >= 8
+        assert page.locator(".relogio").count() == 9
 
         hrefs = page.eval_on_selector_all(
             'a[href*="wa.me"]', "links => links.map(a => a.href)"
@@ -153,12 +150,13 @@ def test_content_and_whatsapp_links_are_visible(
         assert hrefs and all(href.startswith(WHATSAPP) for href in hrefs)
         assert all(VISIT_REFERENCE in href for href in hrefs)
 
-        first = page.locator("#catalog-rail .product-card").first
+        first = page.locator(".relogio").first
         product_id = first.get_attribute("data-product-id")
-        first.locator(".product-open").click()
-        cta = page.get_attribute("#dialog-cta", "href")
+        first.locator(".acao--ver").click()
+        cta = page.locator("[data-view-order]").first.get_attribute("href")
         assert cta.startswith(WHATSAPP)
         assert f"produto%3D{product_id}" in cta and "VT-" in cta
+        assert f"relogio={product_id}" in page.url
         assert errors == []
     finally:
         context.close()
@@ -180,16 +178,19 @@ def test_hidden_whatsapp_links_leave_the_tab_order(browser, landing_url: str) ->
     context, page = _open(browser, landing_url, "mobile")
     try:
         page.goto(landing_url, wait_until="domcontentloaded")
-        page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
-        page.wait_for_function(INTRO_GONE_JS, timeout=6_000)
+        page.wait_for_function(SCRIPT_RAN_JS, timeout=15_000)
         links = page.evaluate(HIDDEN_LINKS_JS)
-        # The closed menu and the not-yet-shown sticky CTA are invisible links.
         invisible = [item for item in links if item["rendered"] and item["hidden"]]
-        assert len(invisible) >= 2
         assert all(item["inert"] for item in invisible), invisible
-
-        page.click(".menu-toggle")
-        assert page.evaluate("document.querySelector('.main-nav').inert") is False
+        # The bottom bar waits below the screen, out of the tab order, until the
+        # hero has scrolled away.
+        assert page.evaluate("document.querySelector('[data-mobile-bar]').inert")
+        page.evaluate(
+            "window.scrollTo(0, document.querySelector('#relogios').offsetTop)"
+        )
+        page.wait_for_function(
+            "() => !document.querySelector('[data-mobile-bar]').inert", timeout=5_000
+        )
     finally:
         context.close()
 
@@ -211,11 +212,10 @@ def test_page_loads_all_watch_catalog_creatives(
     page.on("request", lambda request: requested.append(request.url))
     try:
         page.goto(landing_url, wait_until="networkidle")
-        page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
         page.mouse.wheel(0, 20_000)
         page.wait_for_timeout(800)
-        cards = page.locator("#catalog-rail .product-card")
-        images = cards.locator(".product-visual img")
+        cards = page.locator(".relogio")
+        images = cards.locator(".relogio__foto img")
 
         assert page.locator("video").count() == 0
         assert cards.count() == 9
@@ -237,30 +237,29 @@ def test_watch_cards_show_price_and_order_on_whatsapp(
     context, page = _open(browser, landing_url, viewport)
     try:
         page.goto(landing_url, wait_until="networkidle")
-        page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
-        page.wait_for_function(INTRO_GONE_JS, timeout=6_000)
-        cards = page.locator("#catalog-rail .product-card")
+        page.wait_for_function(SCRIPT_RAN_JS, timeout=15_000)
+        cards = page.locator(".relogio")
         ids = cards.evaluate_all("cards => cards.map(card => card.dataset.productId)")
-        black = page.locator('#catalog-rail .product-card[data-product-id="black-gmt"]')
+        black = page.locator('.relogio[data-product-id="black-gmt"]')
 
         assert len(ids) == 9 and "black-gmt" in ids
-        prices = page.locator("#catalog-rail .product-price b").all_text_contents()
+        prices = page.locator(".relogio__preco").all_text_contents()
         assert prices == ["R$\xa0289,90"] * 9
         black.scroll_into_view_if_needed()
-        _assert_visible(page, '[data-product-id="black-gmt"] .product-order')
-        order = black.locator(".product-order").get_attribute("href")
+        _assert_visible(page, '.relogio[data-product-id="black-gmt"] .acao--pedir')
+        order = black.locator(".acao--pedir").get_attribute("href")
         assert order.startswith(WHATSAPP) and VISIT_REFERENCE in order
         assert "produto%3Dblack-gmt" in order and "pedido" in order
 
-        black.locator(".product-open").click()
-        assert page.locator("#dialog-price b").text_content() == "R$\xa0289,90"
-        assert page.locator("#dialog-image").is_visible()
+        black.locator(".acao--ver").click()
+        assert page.locator("[data-view-price]").first.text_content() == "R$\xa0289,90"
+        assert page.locator("[data-view-image]").is_visible()
         assert (
-            page.locator("#dialog-image").get_attribute("src")
+            page.locator("[data-view-image]").get_attribute("src")
             == "assets/catalog/black-gmt.webp"
         )
-        assert page.locator("#dialog-art svg.watch-art").count() == 0
-        assert page.locator("#dialog-cta").text_content() == "Pedir pelo WhatsApp"
+        cta = page.locator("[data-view-order]").first.text_content()
+        assert cta == "Pedir o Black GMT pelo WhatsApp"
     finally:
         context.close()
 
@@ -284,13 +283,12 @@ def test_meta_pixel_tracks_product_views_and_whatsapp_contacts(
     try:
         page.add_init_script(PIXEL_STUB_JS)
         page.goto(landing_url, wait_until="networkidle")
-        page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
-        page.wait_for_function(INTRO_GONE_JS, timeout=6_000)
-        black = page.locator('#catalog-rail .product-card[data-product-id="black-gmt"]')
+        page.wait_for_function(SCRIPT_RAN_JS, timeout=15_000)
+        black = page.locator('.relogio[data-product-id="black-gmt"]')
         black.scroll_into_view_if_needed()
-        black.locator(".product-order").click()
-        black.locator(".product-open").click()
-        page.locator("#dialog-cta").click()
+        black.locator(".acao--pedir").click()
+        black.locator(".acao--ver").click()
+        page.locator("[data-view-order]").first.click()
         calls = page.evaluate("window.__pixel")
 
         watch = {
@@ -319,16 +317,15 @@ def test_content_survives_blocked_javascript(
     try:
         page.route("**/site.js", lambda route: route.abort())
         page.goto(landing_url, wait_until="domcontentloaded")
-        page.wait_for_function(INTRO_GONE_JS, timeout=6_000)
         for selector in (
             "#hero-title",
-            "#manifesto-title",
-            "#catalog-title",
-            "#catalog-rail .purchase-link",
+            "#relogios-titulo",
+            ".relogio .purchase-link",
+            "#joias .purchase-link",
             "#contato .purchase-link",
         ):
             _assert_visible(page, selector)
-        fallback = page.get_attribute("#catalog-rail .purchase-link", "href")
+        fallback = page.get_attribute(".relogio .purchase-link", "href")
         assert fallback.startswith(WHATSAPP) and VISIT_REFERENCE in fallback
         static_hrefs = page.eval_on_selector_all(
             'a[href*="wa.me"]', "links => links.map(a => a.href)"
@@ -344,16 +341,18 @@ def test_content_is_visible_while_javascript_is_delayed(
     context, page = _open(browser, delayed_landing_url, "desktop")
     try:
         page.goto(delayed_landing_url, wait_until="commit")
-        page.wait_for_function(INTRO_GONE_JS, timeout=5_500)
-        assert page.locator("#catalog-rail .product-card").count() == 0
+        page.wait_for_selector(
+            "#contato .purchase-link", state="attached", timeout=5_500
+        )
+        assert not page.evaluate(SCRIPT_RAN_JS)
         for selector in (
             "#hero-title",
-            "#manifesto-title",
-            "#catalog-rail .purchase-link",
+            "#relogios-titulo",
+            ".relogio .purchase-link",
             "#contato .purchase-link",
         ):
             _assert_visible(page, selector)
-        page.wait_for_selector("#catalog-rail .product-card", timeout=15_000)
+        page.wait_for_function(SCRIPT_RAN_JS, timeout=15_000)
     finally:
         context.close()
 
@@ -375,7 +374,7 @@ def test_site_message_reaches_the_whatsapp_agent_attributed(
     try:
         page.goto(landing_url + campaign, wait_until="domcontentloaded")
         href = page.get_attribute(
-            '#feminino a.purchase-link[data-product-id="halo-verde"]', "href"
+            '#joias a.purchase-link[data-product-id="halo-verde"]', "href"
         )
     finally:
         context.close()
