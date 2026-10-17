@@ -68,11 +68,14 @@ class MarketplaceValidationError(DistributionDraftError):
         super().__init__(f"{channel.value}:{sku}: missing {', '.join(missing_fields)}")
 
 
-def build_canonical_listing(product: dict[str, Any]) -> dict[str, Any]:
+def build_canonical_listing(
+    product: dict[str, Any], channel: Marketplace | None = None
+) -> dict[str, Any]:
+    title, description = _copy(product, channel)
     return {
         "sku": product["sku"],
-        "title": product["name"],
-        "description": _description(product),
+        "title": title,
+        "description": description,
         "category": product.get("category"),
         "subcategory": product.get("subcategory"),
         "price": product.get("price_brl"),
@@ -121,11 +124,31 @@ def _description(product: dict[str, Any]) -> str:
     )
 
 
-def _base_payload(product: dict[str, Any]) -> dict[str, Any]:
+def _copy(product: dict[str, Any], channel: Marketplace | None) -> tuple[str, str]:
+    """Título e descrição de listing_content para o marketplace.
+
+    Vale para produto do catálogo nos quatro marketplaces e só com texto limpo
+    no gate; a Meta e o produto fora do catálogo seguem com o texto antigo.
+    """
+    fallback = product["name"], _description(product)
+    if channel is None or channel is Marketplace.META:
+        return fallback
+    from .listing_content import find_catalog_entry, listing_copy
+
+    entry = find_catalog_entry(product)
+    if entry is None:
+        return fallback
+    copy = listing_copy(entry, channel)
+    if copy["issues"] or not copy["title"]:
+        return fallback
+    return copy["title"], copy["description"]
+
+
+def _base_payload(product: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]:
     return {
         "sku": product["sku"],
-        "title": product["name"],
-        "description": _description(product),
+        "title": canonical["title"],
+        "description": canonical["description"],
         "price_brl": product["price_brl"],
         "availability": product["availability"],
         "images": product["images"],
@@ -146,9 +169,9 @@ def build_distribution_draft(
     if issues:
         raise DistributionDraftError("produto reprovado no QA: " + " ".join(issues))
 
-    canonical = build_canonical_listing(product)
+    canonical = build_canonical_listing(product, channel)
     validate_listing(channel, canonical)
-    base = _base_payload(product)
+    base = _base_payload(product, canonical)
     base["canonical"] = canonical
     base["attribute_mapping"] = CHANNEL_ATTRIBUTE_MAPPINGS[channel]
     if channel is Marketplace.MERCADO_LIVRE:
