@@ -105,6 +105,7 @@ TASK_REASONS = (
     "SINAL_DE_FRAUDE",
     "RECLAMACAO",
     "FATO_NAO_CONFIRMADO",
+    "ENVIAR_RASTREIO",
 )
 # O que o fundador faz com cada tarefa ({topic}: o assunto do fato pendente).
 _TASK_SUGGESTIONS = {
@@ -114,6 +115,7 @@ _TASK_SUGGESTIONS = {
     "SINAL_DE_FRAUDE": "Troca de endereço depois do pagamento: confira antes.",
     "RECLAMACAO": "Cliente insatisfeito: leia a conversa e acompanhe.",
     "FATO_NAO_CONFIRMADO": "Confirmar {topic} e responder.",
+    "ENVIAR_RASTREIO": "Envie ao cliente o código de rastreio do pedido despachado.",
 }
 # Mensagens transacionais usam sempre o texto determinístico: o link de
 # pagamento e o status do pedido não dependem do modelo.
@@ -637,17 +639,20 @@ def _claims(*refs: str) -> list[dict[str, str]]:
 
 # No marketplace, preço, frete, prazo, pagamento e devolução são os do anúncio:
 # as condições da venda direta (frete grátis, 7 dias, Pix) não valem lá.
+# (sujeito, "de", "em"): "o Mercado Livre calcula", "regras da Shopee", "na Amazon".
 _MARKETPLACE_NAMES = {
-    "mercado_livre": "Mercado Livre",
-    "shopee": "Shopee",
-    "tiktok_shop": "TikTok Shop",
-    "amazon": "Amazon",
+    "mercado_livre": ("o Mercado Livre", "do Mercado Livre", "no Mercado Livre"),
+    "shopee": ("a Shopee", "da Shopee", "na Shopee"),
+    "tiktok_shop": ("o TikTok Shop", "do TikTok Shop", "no TikTok Shop"),
+    "amazon": ("a Amazon", "da Amazon", "na Amazon"),
 }
 
 
 def _marketplace_reply(request: DraftRequest, name: str | None) -> str | None:
     """Texto fixo do marketplace para as intenções que mudam lá; None = o geral."""
-    channel = _MARKETPLACE_NAMES.get(request.channel, "marketplace")
+    channel, of_channel, in_channel = _MARKETPLACE_NAMES.get(
+        request.channel, ("o marketplace", "do marketplace", "no marketplace")
+    )
     intent = request.intent
     if intent == "desconto_insistente" or (
         intent == "preco" and request.discount_request
@@ -659,21 +664,21 @@ def _marketplace_reply(request: DraftRequest, name: str | None) -> str | None:
     if intent == "preco":
         subject = f"do {name}" if name else "da peça"
         return (
-            f"O valor {subject} é o que aparece no anúncio, e o frete e o prazo o "
+            f"O valor {subject} é o que aparece no anúncio, e o frete e o prazo "
             f"{channel} calcula para o seu CEP antes da compra."
         )
     if intent in ("frete", "prazo", "politica_prazo"):
         return (
-            f"O frete e o prazo de entrega o {channel} calcula para o seu CEP e "
+            f"O frete e o prazo de entrega {channel} calcula para o seu CEP e "
             "mostra no anúncio antes da compra."
         )
     if intent == "politica_troca":
-        return f"A troca e a devolução seguem as regras do {channel} para esta compra."
+        return f"A troca e a devolução seguem as regras {of_channel} para esta compra."
     if intent in ("dados_pedido", "link_pagamento"):
         return "O pagamento é feito no próprio anúncio, na hora da compra."
     if intent in ("status_pedido", "rastreio"):
         return (
-            f"O rastreio aparece na sua compra, no {channel}, assim que o pedido "
+            f"O rastreio aparece na sua compra, {in_channel}, assim que o pedido "
             "for despachado."
         )
     if intent == "fato_pendente" and not request.topic_facts:
@@ -692,6 +697,10 @@ def _marketplace_reply(request: DraftRequest, name: str | None) -> str | None:
             "pelo próprio anúncio."
         )
     return None
+
+
+def _shipped(order: dict[str, Any] | None) -> bool:
+    return bool(order) and order.get("status") in ("SHIPPED", "DELIVERED")
 
 
 class TemplateSalesModel:
@@ -808,6 +817,11 @@ class TemplateSalesModel:
             }
             status = labels.get(request.order.get("status", ""), "está em análise")
             reply = f"Seu pedido {status}. Posso ajudar em algo mais?"
+        elif intent == "rastreio" and _shipped(request.order):
+            reply = (
+                "Seu pedido já foi despachado. O código de rastreio a equipe envia "
+                "por aqui."
+            )
         elif intent in ("status_pedido", "rastreio"):
             reply = (
                 "O código de rastreio a equipe envia por aqui assim que o pedido for "
@@ -1600,6 +1614,13 @@ class ConversationEngine:
             if not public_price(product):
                 # "A equipe confirma o preço" vira tarefa, não promessa solta.
                 task, topic = "FATO_NAO_CONFIRMADO", f"o preço do {product['name']}"
+        if (
+            intent == "rastreio"
+            and channel not in MARKETPLACES
+            and _shipped(self._order(conversation))
+        ):
+            # O ledger não guarda o código: a tarefa lembra quem despachou de enviar.
+            task = "ENVIAR_RASTREIO"
         changes: dict[str, Any] = {}
         if classification.discount_request:
             changes["discount_requests"] = int(conversation["discount_requests"]) + 1

@@ -361,3 +361,54 @@ def test_marketplace_replies_never_promise_direct_sale_terms():
                         product_collection=(product or {}).get("collection"),
                         channel=channel,
                     ), (channel, intent, reply)
+
+
+def test_tracking_question_after_shipping_becomes_a_task(tmp_path):
+    adapter = _Adapter()
+    store = ConversationStore(tmp_path / "cv.sqlite3", encryption_key=KEY)
+    engine = ConversationEngine(
+        store,
+        adapters={"whatsapp": adapter},
+        model=TemplateSalesModel(),
+        alert_sender=lambda alert: "TEST",
+        mode_resolver=lambda _channel: "AUTO",
+        knowledge_context=dict,
+        order_lookup=lambda order_id: {"order_id": order_id, "status": "SHIPPED"},
+    )
+    conversation = store.conversation("whatsapp", "c1")
+    store.update(conversation["conv_key"], order_id="ord-1")
+    result = engine.handle(
+        InboundText("whatsapp", "c1", "m1", "qual o código de rastreio?")
+    )
+    assert result["action"] == "SEND"
+    assert result["task"] == "ENVIAR_RASTREIO"
+    assert adapter.sent == [
+        "Seu pedido já foi despachado. O código de rastreio a equipe envia por aqui."
+    ]
+    tasks = [a for a in store.alerts() if a["delivery"] == "PAINEL"]
+    assert [t["reason"] for t in tasks] == ["ENVIAR_RASTREIO"]
+
+
+def test_marketplace_names_take_the_right_article():
+    from veratus_agents.conversations import DraftRequest
+
+    model = TemplateSalesModel()
+    replies = {
+        channel: model.draft(
+            DraftRequest(
+                channel=channel,
+                conversation_id="q-1",
+                message="qual o prazo?",
+                intent="prazo",
+                topic=None,
+                product=None,
+                context={},
+                order=None,
+            )
+        )["customer_reply"]
+        for channel in ("mercado_livre", "shopee", "amazon", "tiktok_shop")
+    }
+    assert "o Mercado Livre calcula" in replies["mercado_livre"]
+    assert "a Shopee calcula" in replies["shopee"]
+    assert "a Amazon calcula" in replies["amazon"]
+    assert "o TikTok Shop calcula" in replies["tiktok_shop"]
