@@ -33,6 +33,11 @@ if [ ! -f "$MARKER" ]; then
   install_agents || echo "session-start: agentes da The Agency não instalados" >&2
 fi
 
+# Voz da Veratus para as skills ig-* (leem ~/.claude/instagram/voice.md).
+IG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/instagram"
+mkdir -p "$IG_DIR"
+[ -e "$IG_DIR/voice.md" ] || ln -s "$PROJECT_DIR/social/instagram/voice.md" "$IG_DIR/voice.md"
+
 if [ ! -x "$VENV/bin/python" ]; then
   python3 -m venv "$VENV"
 fi

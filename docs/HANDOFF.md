@@ -3,6 +3,12 @@
 **Última atualização:** 17/10/2026 (fim da noite), Claude Code: Facebook como canal principal (Messenger da Página e catálogo da Meta), correções da revisão independente (dados pessoais, chamadas ao fundador, marketplace, concorrência, pagamento) e painel ao vivo refeito. Nada foi ligado, publicado ou mandado para a `main`.
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
 
+## Gestor do Instagram: skills `ig-*` (17/10)
+
+- 13 skills de https://github.com/Jakeschincariol/instagram-agent-skill (commit `d03c56b`, MIT) em `.claude/skills/ig-*`; origem em `.claude/skills/instagram-agent-skill-ORIGEM.md`.
+- Só rascunho: publicar continua pelo agendador social (`SOCIAL_PUBLISH_ENABLED=false`) e com confirmação do fundador.
+- `ig-dm` ganhou no topo a regra "sem DM fria". A voz da Veratus para as skills fica em `social/instagram/voice.md`, que o hook de sessão liga em `~/.claude/instagram/voice.md`.
+
 ## Rodada de 17/10 (fim da noite): Facebook como canal principal e correções da revisão
 
 Pedido do fundador: "Conclua o projeto e revise para concerto de qualquer erro na estrutura de agentes ou design do site. Quero que foque no Facebook como principal marketplace." Tudo na branch, com as flags novas desligadas e o canal em `SHADOW`.
