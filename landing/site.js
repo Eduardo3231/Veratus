@@ -87,6 +87,18 @@ window.addEventListener('scroll', updateScrollEffects, { passive: true });
 updateScrollEffects();
 document.querySelector('[data-year]').textContent = String(new Date().getFullYear());
 
+// Phone strips: with mandatory snap, Tab moved focus to the next card while the
+// strip snapped back to the previous one, leaving the focused link half off-screen.
+document.querySelectorAll('.relogios__lista').forEach((list) => {
+  list.addEventListener('focusin', (event) => {
+    const card = event.target.closest('.relogio');
+    if (!card || list.scrollWidth <= list.clientWidth) return;
+    const inset = parseFloat(getComputedStyle(list).scrollPaddingLeft) || 0;
+    const left = list.scrollLeft + card.getBoundingClientRect().left - list.getBoundingClientRect().left - inset;
+    list.scrollTo({ left, behavior: reducedMotion ? 'auto' : 'smooth' });
+  });
+});
+
 // Watch view. Scrolling the view turns the watch; the pointer tilts it.
 const watches = [...document.querySelectorAll('.relogio')].map((card) => ({
   card,

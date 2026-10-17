@@ -76,7 +76,8 @@ ul[role="list"], ol { margin: 0; padding: 0; list-style: none; }
 @keyframes brand-orbit-middle { to { transform: translate(-50%, -50%) rotate(418deg); } }
 @keyframes brand-orbit-inner { to { transform: translate(-50%, -50%) rotate(380deg); } }
 @keyframes brand-float { 50% { transform: translateY(-13px); } }
-.hero-footer { position: absolute; bottom: 21px; left: 50%; display: flex; justify-content: space-between; transform: translateX(-50%); color: #77726b; font-size: .52rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+/* Cinza da paleta: o #77726b de setembro ficava em 3,7–4,1:1 sobre o hero (abaixo do AA). */
+.hero-footer { position: absolute; bottom: 21px; left: 50%; display: flex; justify-content: space-between; transform: translateX(-50%); color: var(--cinza); font-size: .52rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .hero-footer a { display: flex; gap: 15px; align-items: center; }
 .hero-footer i { color: var(--accent); font-style: normal; }
 
@@ -157,12 +158,12 @@ ul[role="list"], ol { margin: 0; padding: 0; list-style: none; }
 .acao--interesse { min-height: 36px; margin-top: auto; padding: 12px 0 2px; border: 0; border-bottom: 1px solid var(--ouro); justify-content: flex-start; }
 .acao--interesse:hover { border-color: var(--obsidiana); }
 
-/* Como comprar: os quatro passos são uma sequência real. */
+/* Como comprar: os quatro passos são uma sequência real; o número vem no HTML, não de um counter. */
 .compra { border-top: 1px solid var(--linha); }
 .compra h2 { margin-bottom: clamp(44px, 6vw, 80px); }
-.compra__passos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; counter-reset: passo; }
-.compra__passos li { padding-top: 22px; border-top: 1px solid var(--linha); counter-increment: passo; }
-.compra__passos li::before { display: block; margin-bottom: 20px; color: var(--ouro); content: counter(passo); font: 500 3.2rem/1 var(--serif); }
+.compra__passos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; }
+.compra__passos li { padding-top: 22px; border-top: 1px solid var(--linha); }
+.compra__numero { display: block; margin-bottom: 20px; color: var(--ouro); font: 500 3.2rem/1 var(--serif); }
 .compra__passos h3 { margin-bottom: 8px; font: 500 1.65rem/1.1 var(--serif); }
 .compra__passos p { max-width: 30ch; color: var(--texto-suave); }
 .compra__nota { margin-top: clamp(40px, 5vw, 64px); color: var(--texto-suave); }
@@ -181,10 +182,19 @@ ul[role="list"], ol { margin: 0; padding: 0; list-style: none; }
 
 .barra-movel { display: none; }
 
+/* Páginas legais (privacy.html, condicoes-de-compra.html) usam esta folha; o reset de margens
+   da reestruturação de 16/10 tinha colado os parágrafos e o texto no topo. */
+.legal-page { max-width: 760px; padding-top: 48px; padding-bottom: 72px; }
+.legal-page h1 { margin: .67em 0; }
+.legal-page h2 { margin: .83em 0; }
+.legal-page p { margin: 1em 0; }
+.legal-seller { display: grid; gap: 4px; margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--linha); font-style: normal; }
+
 /* ------------------------------------------------------------------
    Vista do relógio: o palco gira o relógio conforme a rolagem.
    ------------------------------------------------------------------ */
-.vista { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; overflow-y: auto; overscroll-behavior: contain; border: 0; background: var(--obsidiana); color: var(--marfim); }
+/* scroll-padding: o anel de foco das miniaturas não some na borda de baixo. */
+.vista { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 24px; border: 0; background: var(--obsidiana); color: var(--marfim); }
 .vista::backdrop { background: var(--obsidiana); }
 .vista[open] { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
 .vista__topo { position: fixed; z-index: 5; top: 0; right: 0; left: 0; display: flex; align-items: center; justify-content: space-between; padding: 20px max(24px, 3vw); pointer-events: none; }
@@ -232,9 +242,9 @@ ul[role="list"], ol { margin: 0; padding: 0; list-style: none; }
 .vista__preco span { display: block; margin-top: 10px; color: var(--texto-suave); font-size: .9375rem; }
 .vista__bloco .botao { align-self: flex-start; }
 .vista h3 { margin-bottom: 26px; font: 500 2rem/1.1 var(--serif); }
-.vista__passos { display: grid; gap: 18px; counter-reset: etapa; }
-.vista__passos li { display: grid; grid-template-columns: 34px minmax(0, 1fr); color: var(--texto-suave); counter-increment: etapa; }
-.vista__passos li::before { color: var(--ouro); content: counter(etapa); font: 500 1.45rem/1.15 var(--serif); }
+.vista__passos { display: grid; gap: 18px; }
+.vista__passos li { display: grid; grid-template-columns: 34px minmax(0, 1fr); color: var(--texto-suave); }
+.vista__numero { color: var(--ouro); font: 500 1.45rem/1.15 var(--serif); }
 .vista__nota { margin-top: 30px; color: var(--cinza); font-size: .9375rem; }
 .vista__outros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px 12px; }
 .vista__outros button { display: grid; width: 100%; justify-items: center; gap: 8px; padding: 0; border: 0; background: none; color: var(--texto-suave); cursor: pointer; font-size: .8125rem; line-height: 1.3; text-align: center; }
@@ -257,6 +267,8 @@ ul[role="list"], ol { margin: 0; padding: 0; list-style: none; }
 
 @media (max-width: 900px) {
   .vista[open] { display: block; }
+  /* O foco do teclado para entre o palco fixo no alto e a barra do pedido embaixo. */
+  .vista { scroll-padding: calc(56svh + 12px) 0 calc(84px + env(safe-area-inset-bottom)); }
   .palco { z-index: 2; height: 56svh; padding-top: 44px; }
   .palco__cena { height: 34svh; margin-bottom: 8svh; }
   .palco__dica { bottom: 12px; left: 16px; font-size: .8125rem; transform: none; }
@@ -287,22 +299,29 @@ ul[role="list"], ol { margin: 0; padding: 0; list-style: none; }
   .brand-universe__caption { bottom: 0; font-size: .45rem; letter-spacing: .13em; }
   .hero-footer { width: calc(100% - 32px); }
   .hero-footer > span { display: none; }
-  .hero-footer a { margin-left: auto; }
+  /* Alvo de 44 px sem mexer no desenho do slide; menos folga embaixo para o anel caber no hero. */
+  .hero-footer a { margin-left: auto; padding: 22px 0 10px; margin-block: -22px -10px; }
   .hero-still { background-image: url("assets/hero/veratus-hero-alpes-720.webp"); background-position: 60% center; }
 
   .topo { height: 64px; gap: 18px; padding: 0 16px; }
   .topo.is-rolado { height: 60px; }
   .marca img { width: 34px; height: 44px; }
   .topo .marca span, .topo__extra { display: none; }
+  /* Alvos de toque de 44 px no celular: logo, menu e Conversar. */
+  .topo .marca { min-width: 44px; }
   .topo__nav { gap: 18px; }
-  .topo__conversar { min-height: 40px; padding: 0 14px; }
+  .topo__nav a { padding: 10px 8px; margin-inline: -8px; }
+  .topo__conversar { min-height: 44px; padding: 0 14px; }
 
   .capitulo { padding: 88px 0; }
   .capitulo h2 { font-size: clamp(3.6rem, 19vw, 5rem); }
   .capitulo__indice { gap: 4px 24px; margin-bottom: 40px; }
+  .capitulo__indice a { padding-block: 10px; margin-block: -4px; }
   .grupo + .grupo { margin-top: 64px; }
   .grupo__topo { margin-bottom: 20px; }
-  .relogios__lista { display: flex; gap: 12px; margin-right: -16px; padding-right: 16px; overflow-x: auto; overscroll-behavior-x: contain; scroll-padding-left: 0; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  /* "ul." vence o reset de ul[role="list"], que zerava margem e padding (a sangria de 16 px nunca valeu).
+     Folga de 8 px nos lados e embaixo, devolvida pela margem: a faixa não corta o anel de foco. */
+  ul.relogios__lista { display: flex; gap: 12px; margin: 0 -8px -8px; padding: 0 8px 8px; overflow-x: auto; overscroll-behavior-x: contain; scroll-padding-left: 8px; scroll-snap-type: x mandatory; scrollbar-width: none; }
   .relogios__lista::-webkit-scrollbar { display: none; }
   .relogio { flex: 0 0 76%; scroll-snap-align: start; }
   .relogio__info { padding-top: 14px; }
@@ -313,11 +332,17 @@ ul[role="list"], ol { margin: 0; padding: 0; list-style: none; }
   .joia figure { gap: 12px; }
   .joia h4 { font-size: 1.3rem; }
   .joia__texto { display: none; }
+  .acao--interesse { min-height: 44px; }
   .compra__passos { grid-template-columns: 1fr; gap: 0; }
   .compra__passos li { display: grid; grid-template-columns: 52px minmax(0, 1fr); padding: 20px 0; }
-  .compra__passos li::before { grid-row: span 2; margin: 0; font-size: 2.4rem; }
+  .compra__numero { grid-row: span 2; margin: 0; font-size: 2.4rem; }
   .rodape { padding-bottom: 110px; }
-  .rodape__base { grid-template-columns: 1fr; }
+  /* Links de 44 px no rodapé; o row-gap menor mantém o respiro de antes entre os blocos. */
+  .rodape__base { grid-template-columns: 1fr; row-gap: 18px; }
+  .rodape__vendedor, .rodape__base nav { align-items: center; row-gap: 0; }
+  .rodape__vendedor a, .rodape__base nav a { display: inline-flex; min-height: 44px; align-items: center; }
+  /* A barra fixa de baixo não cobre o item que recebe o foco do teclado. */
+  html { scroll-padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   .barra-movel { position: fixed; z-index: 90; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--linha); background: rgba(13, 13, 13, .94); transform: translateY(110%); transition: transform .35s; backdrop-filter: blur(14px); }
   .barra-movel.is-visivel { transform: none; }
   .barra-movel p { color: var(--texto-suave); font-size: .9375rem; }
