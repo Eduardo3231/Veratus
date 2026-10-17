@@ -17,6 +17,7 @@ from veratus_agents.conversations import (
     TemplateSalesModel,
     classify,
 )
+from veratus_agents.harvey import introduce
 
 KEY = Fernet.generate_key().decode("ascii")
 
@@ -384,7 +385,9 @@ def test_tracking_question_after_shipping_becomes_a_task(tmp_path):
     assert result["action"] == "SEND"
     assert result["task"] == "ENVIAR_RASTREIO"
     assert adapter.sent == [
-        "Seu pedido já foi despachado. O código de rastreio a equipe envia por aqui."
+        introduce(
+            "Seu pedido já foi despachado. O código de rastreio a equipe envia por aqui."
+        )
     ]
     tasks = [a for a in store.alerts() if a["delivery"] == "PAINEL"]
     assert [t["reason"] for t in tasks] == ["ENVIAR_RASTREIO"]

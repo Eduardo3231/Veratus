@@ -1,5 +1,8 @@
 """Mapa do fluxo de vendas: de onde vem o lead e qual papel age em cada etapa.
 
+Os canais do kit de perfil (``branding/profile-kit.md``) vêm primeiro, com a
+função e o próximo passo de cada um; são o foco do Harvey (``harvey.py``).
+
 Dados puros, sem rede. Só entram ids que já existem em operations.AGENT_REGISTRY
 (papel novo precisa da confirmação do fundador). ``flow_report`` junta o mapa com
 o estado atual: nível efetivo do canal, chaves de envio e métricas.
@@ -20,13 +23,119 @@ STAGE_LABELS = {
     "pos_venda": "Pós-venda",
 }
 
+
+def _profile(channel: str) -> dict[str, str]:
+    from .harvey import PROFILE_CHANNELS
+
+    item = next(entry for entry in PROFILE_CHANNELS if entry["canal"] == channel)
+    return {"funcao": item["funcao"], "proximo_passo": item["proximo_passo"]}
+
+
+# Canais do kit de perfil (branding/profile-kit.md) primeiro: são o foco do Harvey.
+# Depois, os marketplaces, com o Facebook (loja do catálogo da Meta) como principal.
 SALES_FLOW: tuple[dict[str, Any], ...] = (
     {
-        # Canal principal. A Meta não tem API pública de anúncio no Marketplace
-        # para empresas no Brasil: a vitrine é a loja do catálogo da Meta, e a
-        # conversa chega no Messenger da Página.
+        "channel": "instagram",
+        "label": "Instagram Direct",
+        "grupo": "perfil",
+        "perfil": _profile("instagram"),
+        "conversation_channel": "instagram",
+        "send_flag": "INSTAGRAM_MESSAGING_ENABLED",
+        "lead_sources": (
+            "mensagem no Direct",
+            "resposta privada a um comentário",
+        ),
+        "stages": {
+            "captacao": ("social-media-worker", "paid-acquisition-worker"),
+            "negociacao": ("sales-agent",),
+        },
+        "how": (
+            "O Harvey conversa no Direct; quando a pessoa pede valor, "
+            "disponibilidade ou pedido, responde e leva ao WhatsApp com o produto "
+            "e a origem no link."
+        ),
+    },
+    {
+        "channel": "instagram_stories",
+        "label": "Stories do Instagram",
+        "grupo": "perfil",
+        "perfil": _profile("instagram_stories"),
+        "conversation_channel": "instagram",
+        "send_flag": "INSTAGRAM_MESSAGING_ENABLED",
+        "lead_sources": ("resposta a um Story", "enquete ou caixa de perguntas"),
+        "stages": {
+            "captacao": ("social-media-worker",),
+            "negociacao": ("sales-agent",),
+        },
+        "how": (
+            "Quem responde um Story cai no Direct: o Harvey responde e leva ao "
+            "WhatsApp, e o link marca que a conversa veio dos Stories."
+        ),
+    },
+    {
+        "channel": "instagram_comments",
+        "label": "Comentários do Instagram",
+        "grupo": "perfil",
+        "perfil": None,
+        "conversation_channel": None,
+        "send_flag": "INSTAGRAM_DM_ENABLED",
+        "lead_sources": ("comentário com palavra-chave num post",),
+        "stages": {"captacao": ("social-media-worker",)},
+        "how": (
+            "Uma resposta privada por comentário, em até 7 dias, com o link do "
+            "site; a conversa segue no Direct."
+        ),
+    },
+    {
+        "channel": "whatsapp",
+        "label": "WhatsApp",
+        "grupo": "perfil",
+        "perfil": _profile("whatsapp"),
+        "conversation_channel": "whatsapp",
+        "send_flag": "WHATSAPP_SEND_ENABLED",
+        "lead_sources": (
+            "botão do site com a referência VT da visita",
+            "link do Harvey no Instagram e nos Stories",
+            "anúncio click-to-WhatsApp",
+        ),
+        "stages": {
+            "captacao": ("paid-acquisition-worker", "social-media-worker"),
+            "negociacao": ("sales-agent",),
+            "fechamento": ("sales-agent",),
+            "pagamento": ("sales-agent",),
+            "pos_venda": ("aftersales-agent",),
+        },
+        "how": (
+            "Fechamento acompanhado: o Harvey fecha (dados depois do sim, link do "
+            "Mercado Pago) e acompanha o pagamento confirmado pelo provedor e o envio."
+        ),
+    },
+    {
+        "channel": "tiktok",
+        "label": "TikTok",
+        "grupo": "perfil",
+        "perfil": _profile("tiktok"),
+        "conversation_channel": None,
+        "send_flag": None,
+        "lead_sources": (
+            "vídeo vertical reaproveitado do Reels",
+            "comentário no vídeo",
+        ),
+        "stages": {"captacao": ("social-media-worker", "paid-acquisition-worker")},
+        "how": (
+            "Descoberta e alcance: o vídeo leva ao perfil e ao site. Sem conversa "
+            "automática; comentário se responde à mão, com rascunho das skills ig-*."
+        ),
+    },
+    {
+        # Marketplace principal. A Meta não tem API pública de anúncio no
+        # Marketplace para empresas no Brasil: a vitrine é a loja do catálogo da
+        # Meta, e a conversa chega no Messenger da Página.
         "channel": "facebook",
         "label": "Facebook",
+        "grupo": "marketplace",
+        "principal": True,
+        "perfil": None,
         "conversation_channel": "facebook",
         "send_flag": "FACEBOOK_MESSAGING_ENABLED",
         "lead_sources": (
@@ -46,67 +155,17 @@ SALES_FLOW: tuple[dict[str, Any], ...] = (
             "pos_venda": ("aftersales-agent",),
         },
         "how": (
-            "A IA responde no Messenger, na janela de 24 h, e fecha com o link do "
+            "O Harvey responde no Messenger, na janela de 24 h, e fecha com o link do "
             "Mercado Pago; a venda só conta com o pagamento confirmado pelo "
             "provedor. O catálogo da Meta sai do mesmo cadastro dos anúncios, só "
             "com peças prontas."
         ),
     },
     {
-        "channel": "whatsapp",
-        "label": "WhatsApp",
-        "conversation_channel": "whatsapp",
-        "send_flag": "WHATSAPP_SEND_ENABLED",
-        "lead_sources": (
-            "botão do site com a referência VT da visita",
-            "anúncio click-to-WhatsApp",
-            "link da bio e do Direct",
-        ),
-        "stages": {
-            "captacao": ("paid-acquisition-worker", "social-media-worker"),
-            "negociacao": ("sales-agent",),
-            "fechamento": ("sales-agent",),
-            "pagamento": ("sales-agent",),
-            "pos_venda": ("aftersales-agent",),
-        },
-        "how": (
-            "A IA conversa e fecha; o link é do Mercado Pago e a venda só conta "
-            "com o pagamento confirmado pelo provedor."
-        ),
-    },
-    {
-        "channel": "instagram",
-        "label": "Instagram Direct",
-        "conversation_channel": "instagram",
-        "send_flag": "INSTAGRAM_MESSAGING_ENABLED",
-        "lead_sources": (
-            "mensagem no Direct",
-            "resposta privada a um comentário",
-        ),
-        "stages": {
-            "captacao": ("social-media-worker", "paid-acquisition-worker"),
-            "negociacao": ("sales-agent",),
-            "fechamento": ("sales-agent",),
-            "pagamento": ("sales-agent",),
-            "pos_venda": ("aftersales-agent",),
-        },
-        "how": "Mesmo motor do WhatsApp, com a janela de 24 h do Direct.",
-    },
-    {
-        "channel": "instagram_comments",
-        "label": "Comentários do Instagram",
-        "conversation_channel": None,
-        "send_flag": "INSTAGRAM_DM_ENABLED",
-        "lead_sources": ("comentário com palavra-chave num post",),
-        "stages": {"captacao": ("social-media-worker",)},
-        "how": (
-            "Uma resposta privada por comentário, em até 7 dias, com o link do "
-            "site; a conversa segue no Direct."
-        ),
-    },
-    {
         "channel": "mercado_livre",
         "label": "Mercado Livre",
+        "grupo": "marketplace",
+        "perfil": None,
         "conversation_channel": "mercado_livre",
         "send_flag": "MERCADO_LIVRE_ANSWERS_ENABLED",
         "lead_sources": ("pergunta no anúncio", "mensagem pós-venda"),
@@ -125,6 +184,8 @@ SALES_FLOW: tuple[dict[str, Any], ...] = (
     {
         "channel": "shopee",
         "label": "Shopee",
+        "grupo": "marketplace",
+        "perfil": None,
         "conversation_channel": "shopee",
         "send_flag": None,
         "lead_sources": ("pergunta no anúncio",),
@@ -139,6 +200,8 @@ SALES_FLOW: tuple[dict[str, Any], ...] = (
     {
         "channel": "tiktok_shop",
         "label": "TikTok Shop",
+        "grupo": "marketplace",
+        "perfil": None,
         "conversation_channel": "tiktok_shop",
         "send_flag": None,
         "lead_sources": ("pergunta no anúncio",),
@@ -153,6 +216,8 @@ SALES_FLOW: tuple[dict[str, Any], ...] = (
     {
         "channel": "amazon",
         "label": "Amazon",
+        "grupo": "marketplace",
+        "perfil": None,
         "conversation_channel": "amazon",
         "send_flag": None,
         "lead_sources": ("mensagem do comprador",),
@@ -214,6 +279,9 @@ def flow_report(
                     if stage in item["stages"]
                 },
                 "how": item["how"],
+                "grupo": item["grupo"],
+                "principal": bool(item.get("principal")),
+                "perfil": dict(item["perfil"]) if item["perfil"] else None,
                 "mode": mode,
                 "send_enabled": _flag(env, item["send_flag"]),
                 "metrics": metrics.get(conversation_channel),

@@ -2492,6 +2492,7 @@ def instagram_webhook():
                 item["message_id"],
                 item["text"],
                 item["sent_at"],
+                origin=item.get("origin"),
             )
             stored += inserted
         counts = {**counts, "direct_messages": stored}
@@ -2557,6 +2558,20 @@ def meta_catalog_feed():
             "Cache-Control": "public, max-age=900",
         },
     )
+
+
+@app.route("/os/harvey", methods=["GET"])
+def os_harvey():
+    """O que o Harvey aprendeu: canais do perfil, Instagram → WhatsApp e objeções."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.harvey import report
+
+    return jsonify(report(engine)), 200
 
 
 @app.route("/os/meta-catalog", methods=["GET"])

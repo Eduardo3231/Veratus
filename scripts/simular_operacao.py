@@ -41,6 +41,8 @@ if str(ROOT) not in sys.path:
 import requests
 from cryptography.fernet import Fernet
 
+from veratus_agents.harvey import report as harvey_report
+
 DEFAULT_OUTPUT = ROOT / "runtime" / "simulacao" / "operacao.json"
 DEFAULT_DATE = "2026-10-20"
 ADMIN = "simulacao-admin"
@@ -130,6 +132,9 @@ class Cliente:
     conversas: set[str] = field(default_factory=set)
     pedido: str | None = None
     desfecho: str = "em conversa"
+    # Canal da etapa atual (o cliente dos Stories termina no WhatsApp).
+    ultimo_canal: str | None = None
+    link_aberto: bool = False
 
 
 def clientes() -> dict[str, Cliente]:
@@ -228,6 +233,16 @@ def clientes() -> dict[str, Cliente]:
             "mensagem direta à Página",
             "platinum-classic",
             psid="fb-cliente-12",
+        ),
+        # Kit de perfil: Stories → WhatsApp → fechamento acompanhado pelo Harvey.
+        Cliente(
+            "c13",
+            "Cliente 13 · Stories",
+            "instagram",
+            "resposta a um Story",
+            "royal-blue",
+            numero="5511900000113",
+            ig_id="ig-cliente-13",
         ),
     ]
     return {item.key: item for item in lista}
@@ -377,6 +392,26 @@ ROTEIRO: list[tuple[str, str, str, dict[str, Any]]] = [
     ("15:02", "c1", "wa", {"texto": "Oi! Qual o código de rastreio?"}),
     ("16:10", "c8", "colado", {"texto": "Qual o prazo de entrega? Tem frete grátis?"}),
     ("17:15", "c5", "envio", {}),
+    # Kit de perfil: resposta ao Story, link do Harvey e fechamento no WhatsApp.
+    (
+        "15:20",
+        "c13",
+        "story",
+        {"texto": "Que lindo! Quanto custa esse Royal Blue?"},
+    ),
+    ("15:23", "c13", "abre_link", {}),
+    (
+        "15:26",
+        "c13",
+        "wa",
+        {
+            "texto": "Cliente Treze, 70040-010, Eixo Monumental, 13",
+            "dados": True,
+            "depois_do_link": True,
+        },
+    ),
+    ("15:40", "c13", "pago", {}),
+    ("17:30", "c13", "envio", {}),
     ("17:16", "c7", "envio", {}),
     ("20:30", "c9", "wa", {"texto": _site_message("Polar Blue", "polar-blue")}),
     (
@@ -701,8 +736,12 @@ class Dia:
         )
         self._admin_post("/integrations/instagram/replies/process", {})
 
-    def direct(self, cliente: Cliente, texto: str) -> None:
+    def direct(self, cliente: Cliente, texto: str, story: bool = False) -> None:
         self._wa_counter += 1
+        message = {"mid": f"mid.cliente.{self._wa_counter}", "text": texto}
+        if story:
+            # Resposta a um Story: a Meta manda o reply_to com o Story.
+            message["reply_to"] = {"story": {"id": "story-simulado-1"}}
         # Evento de entrada: a conta da Veratus é quem recebe a mensagem do cliente.
         own_account = {"id": IG_OWN}
         payload = {
@@ -714,10 +753,7 @@ class Dia:
                             "sender": {"id": cliente.ig_id},
                             "recipient": own_account,
                             "timestamp": int(time.time() * 1000),
-                            "message": {
-                                "mid": f"mid.cliente.{self._wa_counter}",
-                                "text": texto,
-                            },
+                            "message": message,
                         }
                     ]
                 }
@@ -730,6 +766,28 @@ class Dia:
             headers=_meta_headers(IG_SECRET, body),
         )
         self._process("instagram")
+
+    def abre_link(self, cliente: Cliente) -> str | None:
+        """O cliente toca no link do Harvey: a conversa continua no WhatsApp."""
+        from urllib.parse import parse_qs, urlsplit
+
+        link = next(
+            (
+                word
+                for item in reversed(self.router.outbox)
+                if item.get("canal") == "instagram"
+                and item.get("para") == cliente.ig_id
+                for word in (item.get("texto") or "").split()
+                if word.startswith("https://wa.me/")
+            ),
+            None,
+        )
+        if link is None:
+            return None  # em SHADOW nada saiu: não há link para tocar
+        texto = parse_qs(urlsplit(link).query)["text"][0]
+        cliente.link_aberto = True
+        self.wa(cliente, texto)
+        return texto.splitlines()[0]
 
     def pergunta(self, cliente: Cliente, question_id: int, texto: str) -> None:
         self.router.questions[question_id] = {"texto": texto, "item": "MLB-SIMULADO-1"}
@@ -815,7 +873,7 @@ class Dia:
     ) -> None:
         item = {
             "t": t,
-            "canal": cliente.canal,
+            "canal": cliente.ultimo_canal or cliente.canal,
             "conversa": cliente.key,
             "cliente": cliente.rotulo,
             "ator": ator,
@@ -865,6 +923,8 @@ class Dia:
         events = [e for e in store.events() if e["event_id"] not in self._events_seen]
         self._events_seen.update(e["event_id"] for e in events)
         for event in events:
+            if event["channel"]:
+                cliente.ultimo_canal = event["channel"]
             if event["conv_key"]:
                 self._conversa_cliente.setdefault(event["conv_key"], cliente.key)
                 cliente.conversas.add(event["conv_key"])
@@ -1044,6 +1104,17 @@ class Dia:
     def rodar(self) -> None:
         for t, key, tipo, dados in sorted(ROTEIRO, key=lambda step: step[0]):
             cliente = self.clientes[key]
+            if dados.get("depois_do_link") and not cliente.link_aberto:
+                continue
+            cliente.ultimo_canal = {
+                "wa": "whatsapp",
+                "fb": "facebook",
+                "direct": "instagram",
+                "story": "instagram",
+                "comentario": "instagram",
+                "pergunta": "mercado_livre",
+                "colado": "shopee",
+            }.get(tipo, cliente.ultimo_canal)
             if tipo in ("wa", "fb"):
                 texto = (
                     "Envia nome, CEP e endereço"
@@ -1072,9 +1143,34 @@ class Dia:
                     origem=cliente.origem,
                 )
                 self.comentario(cliente, dados["texto"], dados["media"])
-            elif tipo == "direct":
-                self._add(t, cliente, "cliente", "mensagem_recebida", dados["texto"])
-                self.direct(cliente, dados["texto"])
+            elif tipo in ("direct", "story"):
+                self._add(
+                    t,
+                    cliente,
+                    "cliente",
+                    "mensagem_recebida",
+                    dados["texto"],
+                    origem=cliente.origem if tipo == "story" else None,
+                    via="respondeu um Story" if tipo == "story" else None,
+                )
+                self.direct(cliente, dados["texto"], story=tipo == "story")
+            elif tipo == "abre_link":
+                primeira = self.abre_link(cliente)
+                if primeira is None:
+                    continue
+                cliente.ultimo_canal = "whatsapp"
+                self.timeline.append(
+                    {
+                        "t": t,
+                        "canal": "whatsapp",
+                        "conversa": cliente.key,
+                        "cliente": cliente.rotulo,
+                        "ator": "cliente",
+                        "tipo": "mensagem_recebida",
+                        "texto": primeira,
+                        "via": "tocou no link do Harvey",
+                    }
+                )
             elif tipo == "pergunta":
                 self._add(
                     t,
@@ -1126,6 +1222,11 @@ class Dia:
                 "produto": c.produto,
                 "pedido": self.pedidos.get(c.pedido) if c.pedido else None,
                 "desfecho": c.desfecho,
+                "canais": list(
+                    dict.fromkeys(
+                        item["canal"] for item in timeline if item["conversa"] == c.key
+                    )
+                ),
                 "mensagens": sum(1 for item in timeline if item["conversa"] == c.key),
             }
             for c in self.clientes.values()
@@ -1151,6 +1252,7 @@ class Dia:
             chamadas_http[label] = chamadas_http.get(label, 0) + 1
         return {
             "modo": "AUTO" if self.nome == "alvo" else "SHADOW",
+            "harvey": harvey_report(engine),
             "linha_do_tempo": timeline,
             "conversas": conversas,
             "funil": {

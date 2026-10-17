@@ -30,7 +30,7 @@ def resultado():
 def test_the_day_goes_from_lead_to_paid_and_shipped_orders(resultado):
     alvo = resultado[0]["rodadas"]["alvo"]
     funil = alvo["funil"]
-    assert funil["leads"] == 12
+    assert funil["leads"] == 13
     assert funil["pedidos"] >= 3
     assert funil["pagos"] >= 3
     assert funil["enviados"] >= 3
@@ -48,8 +48,11 @@ def test_the_founder_is_called_only_when_the_client_asks_or_on_a_legal_threat(
         assert rodada["funil"]["chamadas_ao_fundador"] == 2
 
 
-def test_facebook_is_the_main_channel_and_closes_sales(resultado):
-    assert resultado[0]["fluxo"]["channels"][0]["channel"] == "facebook"
+def test_facebook_is_the_main_marketplace_and_closes_sales(resultado):
+    channels = resultado[0]["fluxo"]["channels"]
+    # Canais do kit de perfil primeiro; o Facebook é o marketplace principal.
+    assert channels[0]["grupo"] == "perfil"
+    assert [c["channel"] for c in channels if c["principal"]] == ["facebook"]
     alvo = resultado[0]["rodadas"]["alvo"]
     facebook = [c for c in alvo["conversas"] if c["canal"] == "facebook"]
     assert len(facebook) == 3
@@ -62,6 +65,25 @@ def test_facebook_is_the_main_channel_and_closes_sales(resultado):
     ]
     # "Ainda está disponível?" não recebe promessa de estoque.
     assert replies and "disponível" not in replies[0].lower()
+
+
+def test_stories_lead_closes_on_whatsapp_as_the_profile_kit_says(resultado):
+    alvo, hoje = (resultado[0]["rodadas"][name] for name in ("alvo", "hoje"))
+    [cliente] = [c for c in alvo["conversas"] if c["conversa"] == "c13"]
+    assert (cliente["desfecho"], cliente["canais"]) == (
+        "enviado",
+        ["instagram", "whatsapp"],
+    )
+    assert alvo["harvey"]["instagram_para_whatsapp"] == {
+        "levados": 1,
+        "levados_dos_stories": 1,
+        "chegaram": 1,
+        "chegaram_dos_stories": 1,
+        "pedidos": 1,
+        "pagos": 1,
+    }
+    # Em SHADOW o link fica em rascunho: ninguém chega ao WhatsApp.
+    assert hoje["harvey"]["instagram_para_whatsapp"]["chegaram"] == 0
 
 
 def test_today_nothing_leaves_the_machine(resultado):
@@ -95,9 +117,12 @@ def test_output_has_no_personal_data(resultado):
     assert simular_operacao.FOUNDER not in dump
     assert "01001-000" not in dump and "Praça da Sé" not in dump
     assert "80010-010" not in dump and "Rua XV de Novembro" not in dump
+    assert "70040-010" not in dump and "Eixo Monumental" not in dump
     for cliente in simular_operacao.clientes().values():
         if cliente.psid:
             assert cliente.psid not in dump
+        if cliente.ig_id:
+            assert cliente.ig_id not in dump
     assert not re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", dump)
 
 

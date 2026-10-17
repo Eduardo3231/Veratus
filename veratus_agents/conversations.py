@@ -618,6 +618,19 @@ class Classification:
     task: str | None = None  # TAREFA no painel, sem ping
 
 
+# Linhas que o botão do site e o link do Harvey acrescentam para a atribuição
+# ("Referência da visita", "Origem da visita", produto=): não são a pergunta.
+# Sem isso, "Origem da visita: utm_source=..." virava "a origem do envio".
+_ATTRIBUTION = re.compile(
+    r"^\s*(?:refer[eê]ncia|origem) da visita:.*$|\bproduto=[a-z0-9-]+",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _question(text: str) -> str:
+    return _ATTRIBUTION.sub(" ", text or "")
+
+
 def _clean(text: str) -> str:
     normalized = normalize_text(text or "")
     normalized = re.sub(r"[^\w\s@.,'/-]", " ", normalized)
@@ -650,16 +663,16 @@ def _person_request(normalized: str) -> bool:
 
 def asks_for_person(text: str) -> bool:
     """O cliente pede uma pessoa; o WhatsApp usa a mesma regra na entrada."""
-    return _person_request(_clean(text))
+    return _person_request(_clean(_question(text)))
 
 
 def legal_threat(text: str) -> bool:
-    return _has(_clean(text), _LEGAL_THREAT)
+    return _has(_clean(_question(text)), _LEGAL_THREAT)
 
 
 def classify(text: str, conversation: dict[str, Any]) -> Classification:
     """Intenção, CHAMADA ou TAREFA; determinístico e auditável."""
-    normalized = _clean(text)
+    normalized = _clean(_question(text))
     # Ameaça primeiro: com ela, mesmo um pedido de pessoa rebaixa o canal.
     if _has(normalized, _LEGAL_THREAT):
         return Classification("outro", "RECLAMACAO")
@@ -784,6 +797,8 @@ class DraftRequest:
     payment_url: str | None = None
     discount_request: bool = False
     topic_facts: list[tuple[str, str]] = field(default_factory=list)
+    # Origem da conversa (resposta a Story, UTM do site): vai no link do Harvey.
+    origin: dict[str, Any] = field(default_factory=dict)
 
 
 class DraftModel(Protocol):
@@ -889,6 +904,55 @@ def _marketplace_reply(request: DraftRequest, name: str | None) -> str | None:
     return None
 
 
+def _profile_reply(
+    request: DraftRequest, name: str | None, is_watch: bool
+) -> tuple[str, list[dict[str, str]]] | None:
+    """Kit de perfil: no Instagram, valor, disponibilidade e pedido levam ao WhatsApp.
+
+    O Harvey responde o que foi perguntado e manda o link com o produto e a origem;
+    o fechamento acompanhado acontece no WhatsApp. None = o texto geral.
+    """
+    from .catalog import public_price
+    from .harvey import whatsapp_link
+
+    product, intent = request.product, request.intent
+    link = whatsapp_link(product, (request.origin or {}).get("medium") or "direct")
+    follow = (
+        "Para fazer o pedido, te atendo no WhatsApp, onde acompanho o pagamento e o "
+        f"envio: {link}"
+    )
+    if intent == "preco" and not request.discount_request:
+        if product and not public_price(product):
+            return None  # sem preço confirmado, a equipe confirma (texto geral)
+        subject = f"O {name}" if is_watch else "Todos os relógios Veratus"
+        verb = "sai" if is_watch else "saem"
+        reply = (
+            f"{subject} {verb} por R$ 289,90, com frete grátis e entrega em até 7 "
+            f"dias. {follow}"
+        )
+        return reply, _claims("preco-relogios", "frete-gratis", "entrega-7-dias")
+    if intent == "disponibilidade":
+        return (
+            f"A disponibilidade a equipe confirma junto com o seu pedido. {follow}",
+            [],
+        )
+    if intent == "fechamento" and product:
+        reply = (
+            f"Ótima escolha! O pedido do {name} eu fecho com você no WhatsApp, onde "
+            f"acompanho o pagamento e o envio: {link}"
+        )
+        return reply, []
+    if intent == "como_pedir":
+        reply = (
+            "É simples: você escolhe o modelo e eu fecho o pedido com você no "
+            f"WhatsApp, com Pix ou cartão pelo link do Mercado Pago: {link}"
+        )
+        return reply, _claims("formas-pagamento")
+    if intent in ("link_pagamento", "dados_pedido"):
+        return f"O pedido e o pagamento eu acompanho com você no WhatsApp: {link}", []
+    return None
+
+
 def _shipped(order: dict[str, Any] | None) -> bool:
     return bool(order) and order.get("status") in ("SHIPPED", "DELIVERED")
 
@@ -912,9 +976,18 @@ class TemplateSalesModel:
         marketplace = request.channel in MARKETPLACES
         intent = request.intent
         claims: list[dict[str, str]] = []
+        from .harvey import CLOSE_ON_WHATSAPP
+
         special = _marketplace_reply(request, name) if marketplace else None
+        profile = (
+            _profile_reply(request, name, is_watch)
+            if request.channel in CLOSE_ON_WHATSAPP
+            else None
+        )
         if special is not None:
             reply = special
+        elif profile is not None:
+            reply, claims = profile
         elif intent == "saudacao":
             reply = (
                 "Olá! Que bom ter você por aqui. Você procura um relógio ou uma joia?"
@@ -1087,8 +1160,8 @@ class TemplateSalesModel:
         elif intent == "pergunta_ia":
             # Nunca se passa por pessoa (harvey-limites.md).
             reply = (
-                "Sou o assistente virtual da Veratus e respondo com as informações "
-                f"confirmadas da loja. {OFFER_SENTENCE}"
+                "Sou o Harvey, assistente virtual da Veratus, e respondo com as "
+                f"informações confirmadas da loja. {OFFER_SENTENCE}"
             )
         elif intent == "contato_marketplace":
             reply = (
@@ -1968,7 +2041,13 @@ class ConversationEngine:
         if trigger:
             return self._handoff(key, channel, mode, trigger, inbound, intent)
 
+        from .harvey import CLOSE_ON_WHATSAPP, WHATSAPP_NEXT_STEP_INTENTS, introduce
+
         risk = INTENT_RISK.get(intent, 9)
+        try:
+            stored_origin = json.loads(conversation["origin_json"] or "{}")
+        except ValueError:
+            stored_origin = {}
         request = DraftRequest(
             channel=channel,
             conversation_id=inbound.conversation_id,
@@ -1980,10 +2059,23 @@ class ConversationEngine:
             order=self._order(conversation),
             discount_request=classification.discount_request,
             topic_facts=facts_for_topic,
+            origin=dict(inbound.origin or stored_origin or {}),
         )
-        if intent == "fechamento" and product and channel not in MARKETPLACES:
+        closes_on_whatsapp = channel in CLOSE_ON_WHATSAPP
+        if (
+            intent == "fechamento"
+            and product
+            and channel not in MARKETPLACES
+            and not closes_on_whatsapp
+        ):
             self.store.update(key, awaiting_data=1)
-        if intent == "dados_pedido":
+        if intent == "dados_pedido" and closes_on_whatsapp:
+            # O pedido fecha no WhatsApp: o endereço não fica na caixa do Direct.
+            self.store.update(key, awaiting_data=0)
+            adapter = self.adapters.get(channel)
+            if hasattr(adapter, "redact"):
+                adapter.redact(inbound.message_id)
+        elif intent == "dados_pedido":
             outcome = self._order_and_link(key, channel, mode, conversation, inbound)
             if outcome.get("task"):
                 task, topic = outcome["task"], "o preço do pedido"
@@ -1992,10 +2084,12 @@ class ConversationEngine:
                 risk = 9  # sem link criado, o fundador decide o que dizer
         # No marketplace, tudo é texto fixo: preço, frete, prazo e pagamento são os
         # do anúncio, e o modelo livre traria as condições da venda direta.
+        # No Instagram, o próximo passo do kit de perfil (WhatsApp) também é fixo.
         deterministic = (
             intent in TRANSACTIONAL_INTENTS
             or intent in POLICY_INTENTS
             or channel in MARKETPLACES
+            or (closes_on_whatsapp and intent in WHATSAPP_NEXT_STEP_INTENTS)
         )
         model = TemplateSalesModel() if deterministic else self.model
         try:
@@ -2031,12 +2125,20 @@ class ConversationEngine:
             elif review and review.get("approved_for_human_review") is False:
                 risk = 9  # o revisor não aprovou: nunca sai sozinho
 
+        if (
+            channel not in MARKETPLACES
+            and conversation["last_intent"] is None
+            and intent != "pergunta_ia"
+        ):
+            # Primeira resposta (ou a volta depois do fundador): o Harvey diz quem é.
+            reply = introduce(reply)
+
         extra: dict[str, Any] = {}
         if task:
             suggestion = _TASK_SUGGESTIONS[task].format(topic=topic or "o fato")
             self._task(channel, key, task, task_summary(task, topic), suggestion)
             extra["task"] = task
-        return self._respond(
+        result = self._respond(
             key,
             channel,
             mode,
@@ -2048,6 +2150,19 @@ class ConversationEngine:
             reply=reply,
             **extra,
         )
+        if closes_on_whatsapp and "wa.me/" in reply:
+            # Para o relatório do Harvey: quantos o Instagram levou ao WhatsApp.
+            self.store.event(
+                channel,
+                key,
+                "WHATSAPP_NEXT_STEP",
+                intent=intent,
+                mode=mode,
+                action="NEXT_STEP",
+                result=result["action"],
+                reason=request.origin.get("medium") or "direct",
+            )
+        return result
 
     def message_failed(self, inbound: InboundText, exc: Exception) -> None:
         """Erro inesperado numa mensagem: tarefa no painel, sem o texto do cliente."""

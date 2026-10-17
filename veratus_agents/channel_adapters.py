@@ -190,6 +190,11 @@ CREATE TABLE IF NOT EXISTS dm_messages (
     send_key TEXT UNIQUE,
     actor TEXT
 );
+CREATE TABLE IF NOT EXISTS dm_origins (
+    conv_key TEXT PRIMARY KEY,
+    origin TEXT NOT NULL,
+    at TEXT NOT NULL
+);
 """
 
 
@@ -225,6 +230,7 @@ class DirectInbox(SqlStore):
         message_id: str,
         text: str | None,
         sent_at: datetime,
+        origin: str | None = None,
     ) -> tuple[str, bool]:
         conversation_id = self.conversation_id(channel, contact)
         key = f"{channel}:{conversation_id}"
@@ -254,6 +260,16 @@ class DirectInbox(SqlStore):
                 ),
                 [message_id, key, text, sent_at.isoformat()],
             ).rowcount
+            if origin:
+                # A primeira origem vale (a conversa que começou num Story).
+                db.execute(
+                    self._sql(
+                        "INSERT INTO dm_origins (conv_key, origin, at) "
+                        "VALUES (?, ?, ?) ON CONFLICT (conv_key) DO NOTHING",
+                        mark,
+                    ),
+                    [key, origin[:40], now],
+                )
             if inserted:
                 db.execute(
                     self._sql(
@@ -265,6 +281,14 @@ class DirectInbox(SqlStore):
                     [sent_at.isoformat(), key, sent_at.isoformat()],
                 )
         return conversation_id, bool(inserted)
+
+    def origin(self, channel: str, conversation_id: str) -> str | None:
+        with self._connect() as (db, mark):
+            row = db.execute(
+                self._sql("SELECT origin FROM dm_origins WHERE conv_key = ?", mark),
+                [f"{channel}:{conversation_id}"],
+            ).fetchone()
+        return row["origin"] if row else None
 
     def contact(self, channel: str, conversation_id: str) -> dict[str, Any] | None:
         with self._connect() as (db, mark):
@@ -364,12 +388,15 @@ def parse_instagram_messages(
                 sent_at = datetime.fromtimestamp(int(timestamp) / 1000, timezone.utc)
             except (TypeError, ValueError):
                 sent_at = _now()
+            # Resposta a um Story: o kit de perfil leva essa conversa ao WhatsApp.
+            story = ((message.get("reply_to") or {}).get("story")) or None
             messages.append(
                 {
                     "message_id": str(message["mid"])[:200],
                     "contact": sender[:64],
                     "text": str(message.get("text") or "")[:2000] or None,
                     "sent_at": sent_at,
+                    "origin": "stories" if story else None,
                 }
             )
     return messages
@@ -441,6 +468,7 @@ class InstagramDirectAdapter:
                 item["message_id"],
                 item["text"],
                 item["sent_at"],
+                origin=item.get("origin"),
             )
             count += inserted
         return count
@@ -511,16 +539,22 @@ class InstagramDirectAdapter:
     def pending(self, limit: int = 20) -> list[Any]:
         from .conversations import InboundText
 
-        return [
-            InboundText(
-                channel=self.channel,
-                conversation_id=row["conv_key"].split(":", 1)[1],
-                message_id=row["message_id"],
-                text=row["body"] or "",
+        items = []
+        for row in self.inbox.pending(self.channel, limit):
+            if not row["body"]:
+                continue
+            conversation_id = row["conv_key"].split(":", 1)[1]
+            medium = self.inbox.origin(self.channel, conversation_id)
+            items.append(
+                InboundText(
+                    channel=self.channel,
+                    conversation_id=conversation_id,
+                    message_id=row["message_id"],
+                    text=row["body"],
+                    origin={"source": self.channel, "medium": medium} if medium else {},
+                )
             )
-            for row in self.inbox.pending(self.channel, limit)
-            if row["body"]
-        ]
+        return items
 
     def mark(self, message_id: str, status: str) -> None:
         self.inbox.mark(message_id, status)

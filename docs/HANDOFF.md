@@ -3,6 +3,26 @@
 **Última atualização:** 17/10/2026 (fim da noite), Claude Code: Facebook como canal principal (Messenger da Página e catálogo da Meta), correções da revisão independente (dados pessoais, chamadas ao fundador, marketplace, concorrência, pagamento) e painel ao vivo refeito. Nada foi ligado, publicado ou mandado para a `main`.
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
 
+## Harvey no modelo da Veratus: canais do kit de perfil (17/10)
+
+Pedido do fundador: "adapte ao nosso modelo para que possamos utilizá-lo, focando nos canais que instrui no perfil" (e "claro" ao nome Harvey). "Perfil" = `branding/profile-kit.md`, tabela "Papéis dos canais".
+
+- **`veratus_agents/harvey.py`**: nome, apresentação, papéis dos canais do kit (`PROFILE_CHANNELS`), link para o WhatsApp e o relatório (`report`, só contagens).
+- **Nome:** a primeira resposta de cada conversa em canal direto (WhatsApp, Instagram, Messenger) começa com "Olá! Aqui é o Harvey, assistente virtual da Veratus." Marketplace não leva (resposta pública no anúncio). Depois de o fundador devolver a conversa, ele se apresenta de novo. "Você é um robô?" responde "Sou o Harvey, assistente virtual da Veratus…".
+- **Instagram e Stories → WhatsApp** (kit: "Site ou WhatsApp" e "WhatsApp"; estratégia: "enviar ao WhatsApp apenas quando a conversa pedir valores, disponibilidade ou atendimento"):
+  - no Direct, valor, disponibilidade, pedido e "como compro" têm texto fixo que responde e manda `wa.me` com o produto e `utm_source=instagram`, `utm_medium=direct|stories` e `utm_campaign=harvey`;
+  - o Direct não pede mais endereço, e um endereço colado lá é apagado da caixa;
+  - o WhatsApp lê o link como lê o botão do site, e o Harvey continua no fechamento.
+- **Stories:** a resposta a um Story (`reply_to.story` do webhook) fica marcada como origem `stories` (tabela nova `dm_origins`, criada sozinha) e vai no link.
+- **Fluxo** (`sales_flow.py`, `GET /os/flow`): canais do perfil primeiro (Instagram Direct, Stories, comentários, WhatsApp, TikTok), cada um com função e próximo passo; depois os marketplaces, com o Facebook como principal. O TikTok entra como descoberta, sem conversa automática.
+- **Aprender:** `GET /os/harvey` (admin) mostra conversas por canal, quantos o Instagram levou ao WhatsApp e quantos chegaram e compraram, e as objeções com quantas viraram pedido e pagamento.
+- **Bug corrigido no caminho:** a linha "Origem da visita: utm_source=…" que o botão do site acrescenta em visita de campanha virava "a origem do envio". O cliente que pedia preço recebia "a equipe confirma" e o fundador ganhava uma tarefa à toa. O classificador agora ignora as linhas de atribuição.
+- **Skill** `knowledge/skills/harvey-canais.md` e passo 9 nas instruções do modelo. O kit de perfil ganhou a seção "Harvey nos canais".
+- **Simulação:** cliente 13 responde um Story, recebe o preço e o link, toca no link, fecha e paga no WhatsApp, e o pedido é despachado. Modo alvo: 13 leads, 7 pedidos, 6 pagos e enviados, 2 chamadas ao fundador. Hoje (SHADOW): o link fica no rascunho e ninguém chega ao WhatsApp.
+- **Pendente:**
+  1. O TikTok orgânico não tem integração: conteúdo e respostas a comentários seguem à mão, com as skills `ig-*`.
+  2. A ligação do Instagram e do WhatsApp segue a ordem de "Para ligar cada canal".
+
 ## Método Harvey no agente de vendas (17/10)
 
 - **Origem:** https://github.com/ethanplusai/harvey (commit `e114e95`, MIT; aviso em `knowledge/skills/HARVEY-LICENSE`). O Harvey é um agente de prospecção B2B (e-mail frio, LinkedIn, busca de contatos). Isso **não** foi usado: a Veratus não faz contato frio. Das 9 skills, valeram as de conversa: `sales_methodology`, `objection_handling` (LAARC), `offer_strategy` e as regras éticas.

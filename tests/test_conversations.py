@@ -38,6 +38,7 @@ from veratus_agents.conversations import (
     classify,
     decide,
 )
+from veratus_agents.harvey import introduce
 from veratus_agents.orders import OrderLedger, OrderStatus
 from veratus_agents.payments import (
     MercadoPagoClient,
@@ -762,7 +763,8 @@ def test_other_intent_guides_the_customer_and_follows_the_reviewer(tmp_path):
     approved = say(engine, "hmm")
 
     assert (approved["action"], approved["risk"]) == ("SEND", 1)
-    assert adapter.sent[-1] == (
+    # Primeira resposta da conversa: o Harvey se apresenta.
+    assert adapter.sent[-1] == introduce(
         "Posso te ajudar a escolher um relógio ou uma joia da Veratus. "
         "Quer ver os modelos?"
     )
@@ -805,7 +807,7 @@ def test_two_gate_failures_offer_the_founder_and_trip_the_breaker(tmp_path):
     result = say(engine, "oi")
 
     assert (result["action"], result["intent"]) == ("SEND", OFFER_MARK)
-    assert adapter.sent == [OFFER_TEXT]  # nunca o rascunho reprovado
+    assert adapter.sent == [introduce(OFFER_TEXT)]  # nunca o rascunho reprovado
     assert engine.mode("whatsapp") == "AUTO_SAFE"
     # O disjuntor fica no painel: o fundador só é chamado se o cliente pedir.
     assert alerts == []

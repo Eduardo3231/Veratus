@@ -68,6 +68,19 @@ Fixar somente depois de publicados:
 | Stories | Frequência e resposta | Enquetes, comparações e disponibilidade confirmada | WhatsApp |
 | WhatsApp | Atendimento e conversão | Respostas objetivas, fotos e condições verificadas | Fechamento acompanhado |
 
+## Harvey nos canais
+
+O atendimento por IA se apresenta como **Harvey, assistente virtual da Veratus** na primeira mensagem de cada conversa e diz que é virtual sempre que perguntarem. Responde só a quem escreveu, comentou ou respondeu um Story.
+
+| Canal | O que o Harvey faz | Próximo passo |
+|---|---|---|
+| Instagram (Direct) | Responde com fatos confirmados; quando a pessoa pede valor, disponibilidade ou pedido, manda o link do WhatsApp com o produto | WhatsApp |
+| Stories | Responde quem respondeu o Story e leva ao WhatsApp | WhatsApp |
+| WhatsApp | Fecha: dados depois do sim, link do Mercado Pago, aviso do pagamento confirmado e rastreio | Fechamento acompanhado |
+| TikTok | Não conversa sozinho; o vídeo leva ao perfil e ao site | Perfil e site |
+
+O link do Harvey leva `utm_source=instagram`, `utm_medium=direct` ou `stories` e `utm_campaign=harvey`. Assim, a conversa que chega ao WhatsApp entra na medição, e `GET /os/harvey` conta quantos foram levados, quantos chegaram e quantos compraram.
+
 ## Respostas rápidas
 
 **BOAS_VINDAS**

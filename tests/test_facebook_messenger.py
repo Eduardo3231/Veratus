@@ -73,14 +73,16 @@ class _Session:
         return _Response()
 
 
-def test_facebook_is_the_first_channel_and_sells_directly():
+def test_facebook_is_the_main_marketplace_and_sells_directly():
     assert CHANNELS[0] == "facebook"
-    assert SALES_FLOW[0]["channel"] == "facebook"
+    [entry] = [item for item in SALES_FLOW if item.get("principal")]
+    assert (entry["channel"], entry["grupo"]) == ("facebook", "marketplace")
     # Venda direta (link do Mercado Pago), não marketplace sem contato.
     assert "facebook" not in MARKETPLACES
     report = flow_report(env={})
-    assert report["channels"][0]["label"] == "Facebook"
-    assert report["channels"][0]["send_enabled"] is False
+    [facebook] = [c for c in report["channels"] if c["channel"] == "facebook"]
+    assert facebook["label"] == "Facebook" and facebook["principal"] is True
+    assert facebook["send_enabled"] is False
 
 
 def test_messenger_parser_keeps_only_text_from_people():
