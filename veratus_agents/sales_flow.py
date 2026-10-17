@@ -22,6 +22,37 @@ STAGE_LABELS = {
 
 SALES_FLOW: tuple[dict[str, Any], ...] = (
     {
+        # Canal principal. A Meta não tem API pública de anúncio no Marketplace
+        # para empresas no Brasil: a vitrine é a loja do catálogo da Meta, e a
+        # conversa chega no Messenger da Página.
+        "channel": "facebook",
+        "label": "Facebook",
+        "conversation_channel": "facebook",
+        "send_flag": "FACEBOOK_MESSAGING_ENABLED",
+        "lead_sources": (
+            "loja do Facebook (catálogo da Meta) com o botão de mensagem",
+            "anúncio que abre conversa no Messenger",
+            "mensagem direta à Página",
+        ),
+        "stages": {
+            "captacao": (
+                "meta-agent",
+                "paid-acquisition-worker",
+                "social-media-worker",
+            ),
+            "negociacao": ("sales-agent",),
+            "fechamento": ("sales-agent",),
+            "pagamento": ("sales-agent",),
+            "pos_venda": ("aftersales-agent",),
+        },
+        "how": (
+            "A IA responde no Messenger, na janela de 24 h, e fecha com o link do "
+            "Mercado Pago; a venda só conta com o pagamento confirmado pelo "
+            "provedor. O catálogo da Meta sai do mesmo cadastro dos anúncios, só "
+            "com peças prontas."
+        ),
+    },
+    {
         "channel": "whatsapp",
         "label": "WhatsApp",
         "conversation_channel": "whatsapp",

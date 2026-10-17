@@ -525,7 +525,9 @@ def panel_tasks(engine):
         (["posso falar com o responsável?"], "PEDIDO_DE_ATENDENTE"),
         (["me liga agora, por favor"], "PEDIDO_DE_ATENDENTE"),
         (["dá pra fazer uma videochamada?"], "PEDIDO_DE_ATENDENTE"),
-        (["vou reclamar no Reclame Aqui"], "RECLAMACAO"),
+        (["se não resolver, vou no Procon"], "RECLAMACAO"),
+        # Ameaça e pedido de pessoa juntos: a ameaça vale e rebaixa o canal.
+        (["quero falar com o responsável agora, senão vou no Procon"], "RECLAMACAO"),
         (["vou chamar meu advogado"], "RECLAMACAO"),
         # Oferta do agente aceita com um "sim" curto.
         (["hmm", "e aquilo", "sei la", "sim"], "PEDIDO_DE_ATENDENTE"),
@@ -581,6 +583,13 @@ def test_call_hands_over_and_alerts_the_founder(tmp_path, messages, reason):
         ),
         (
             "isso é um absurdo, péssimo atendimento",
+            "insatisfacao",
+            "RECLAMACAO",
+            "Se preferir falar com o responsável da Veratus, é só me dizer.",
+        ),
+        # Reclame Aqui é insatisfação, não ação judicial: tarefa, sem ping.
+        (
+            "vou postar no Reclame Aqui se não chegar",
             "insatisfacao",
             "RECLAMACAO",
             "Se preferir falar com o responsável da Veratus, é só me dizer.",
@@ -798,7 +807,9 @@ def test_two_gate_failures_offer_the_founder_and_trip_the_breaker(tmp_path):
     assert (result["action"], result["intent"]) == ("SEND", OFFER_MARK)
     assert adapter.sent == [OFFER_TEXT]  # nunca o rascunho reprovado
     assert engine.mode("whatsapp") == "AUTO_SAFE"
-    assert [alert["reason"] for alert in alerts] == ["DISJUNTOR"]
+    # O disjuntor fica no painel: o fundador só é chamado se o cliente pedir.
+    assert alerts == []
+    assert [task["reason"] for task in panel_tasks(engine)] == ["DISJUNTOR"]
     assert engine.store.get("whatsapp", "c1")["state"] == "BOT"
     accepted = say(engine, "sim, por favor")
     assert (accepted["action"], accepted["reason"]) == (

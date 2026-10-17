@@ -146,6 +146,10 @@ services:
         sync: false
       - key: INSTAGRAM_VERIFY_TOKEN
         sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: FACEBOOK_VERIFY_TOKEN
+        sync: false
       - key: PAID_MEDIA_WORKER_ENABLED
         value: "true"
       - key: PAID_MEDIA_AUTONOMY_MODE
@@ -204,6 +208,8 @@ services:
         value: "config/channel_fees_2026-10.json"
       - key: PAID_MEDIA_ECONOMICS_CHANNEL
         value: "direct_card"
+      - key: CONVERSATION_MODE_FACEBOOK
+        value: "SHADOW"
       - key: CONVERSATION_MODE_WHATSAPP
         value: "SHADOW"
       - key: CONVERSATION_MODE_INSTAGRAM
@@ -245,6 +251,10 @@ services:
       - key: PUBLIC_BASE_URL
         value: "https://veratus.onrender.com"
       - key: INSTAGRAM_MESSAGING_ENABLED
+        value: "false"
+      - key: FACEBOOK_MESSAGING_ENABLED
+        value: "false"
+      - key: META_CATALOG_FEED_ENABLED
         value: "false"
       - key: MERCADO_LIVRE_ANSWERS_ENABLED
         value: "false"

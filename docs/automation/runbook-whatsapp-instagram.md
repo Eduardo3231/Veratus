@@ -56,7 +56,7 @@ Secrets vão **só** no painel do Render (serviço `veratus-leads` → Environme
 
 - Só sai resposta aprovada por você (`run_id` aprovado **desta** conversa) ou texto escrito por uma pessoa (com `idempotency_key`).
 - Nada sai fora da janela de 24 h desde a última mensagem do cliente. Fora dela, a Meta só aceita template aprovado, e templates ainda não estão implementados.
-- "Atendente", "humano" ou "pessoa real" passam a conversa para `HUMAN` e o agente para. Para devolver: `POST .../conversations/<id>/state` com `{"state":"BOT","actor":"fundador"}`.
+- Um pedido de pessoa ("quero falar com um atendente", "me liga", "pessoa real"; não a palavra solta nem "não quero falar com atendente") passa a conversa para `HUMAN` no canal e no motor, e o agente para. Para devolver: `POST .../conversations/<id>/state` com `{"state":"BOT","actor":"fundador"}`; essa rota (e `POST /os/conversations/whatsapp/<id>/state`) devolve os dois juntos.
 - O número do cliente fica cifrado. Listagens mostram só `***` + 4 dígitos.
 
 **Registrar a venda que veio da conversa:** no `POST /os/orders`, inclua `"conversation_ref": "<conversation_id>"` e o `visit_ref` da conversa.

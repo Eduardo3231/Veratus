@@ -5,6 +5,9 @@
   marketing só com opt-in registrado.
 - Instagram Direct: campo ``messages`` do webhook já existente, janela de 24 h;
   a tag ``HUMAN_AGENT`` só em mensagem escrita por pessoa.
+- Facebook Messenger (canal principal de venda no Facebook): mensagens à Página,
+  vindas do anúncio, da loja ou do botão "Enviar mensagem"; mesma caixa cifrada,
+  mesma janela de 24 h e a mesma regra da tag ``HUMAN_AGENT``.
 - Mercado Livre: perguntas pré-venda e mensagens pós-venda.
 - Shopee, TikTok Shop e Amazon: ``API_CONTRACT_UNVERIFIED``; o rascunho vai
   para a fila e o fundador cola no painel do canal.
@@ -209,9 +212,11 @@ class DirectInbox(SqlStore):
         self._cipher = Fernet(encryption_key.encode("ascii"))
         super().__init__(sqlite_path, database_url)
 
+    _PREFIXES: ClassVar[dict[str, str]] = {"facebook": "fb_"}
+
     def conversation_id(self, channel: str, contact: str) -> str:
         digest = hmac.new(self._salt, f"{channel}:{contact}".encode(), hashlib.sha256)
-        return "ig_" + digest.hexdigest()[:32]
+        return self._PREFIXES.get(channel, "ig_") + digest.hexdigest()[:32]
 
     def receive(
         self,
@@ -370,9 +375,20 @@ def parse_instagram_messages(
     return messages
 
 
+def parse_messenger_messages(
+    payload: dict[str, Any], page_id: str = ""
+) -> list[dict[str, Any]]:
+    """Mensagens de texto à Página (``object: page``); ecos da Página ficam fora."""
+    if payload.get("object") != "page":
+        return []
+    return parse_instagram_messages({**payload, "object": "instagram"}, page_id)
+
+
 class InstagramDirectAdapter:
     channel = "instagram"
     api_status = "VERIFIED_GRAPH_API"
+    send_flag = "INSTAGRAM_MESSAGING_ENABLED"
+    reason_prefix = "INSTAGRAM"
     limits: ClassVar[dict[str, Any]] = {
         "max_text": 1000,
         "window_hours": 24,
@@ -396,9 +412,29 @@ class InstagramDirectAdapter:
         self.enabled = enabled
         self.timeout = timeout
 
+    @staticmethod
+    def _parse(payload: dict[str, Any], own_account_id: str) -> list[dict[str, Any]]:
+        return parse_instagram_messages(payload, own_account_id)
+
+    def _endpoint(self) -> str:
+        return (
+            f"https://graph.instagram.com/{graph_api_version()}/"
+            f"{self.ig_user_id}/messages"
+        )
+
+    @staticmethod
+    def _body(contact: str, text: str, human_tag: bool) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "recipient": {"id": contact},
+            "message": {"text": text},
+        }
+        if human_tag:
+            body.update(messaging_type="MESSAGE_TAG", tag="HUMAN_AGENT")
+        return body
+
     def receive(self, payload: dict[str, Any], own_account_id: str = "") -> int:
         count = 0
-        for item in parse_instagram_messages(payload, own_account_id):
+        for item in self._parse(payload, own_account_id):
             _, inserted = self.inbox.receive(
                 self.channel,
                 item["contact"],
@@ -430,18 +466,14 @@ class InstagramDirectAdapter:
         send_key = f"{self.channel}:{idempotency_key}"
         if previous := self.inbox.sent_before(send_key):
             return {"status": "duplicate", "message_id": previous}
-        enabled = (
-            env_flag("INSTAGRAM_MESSAGING_ENABLED")
-            if self.enabled is None
-            else self.enabled
-        )
+        enabled = env_flag(self.send_flag) if self.enabled is None else self.enabled
         now = _now()
         last = self._last_inbound(conversation_id)
         reasons = []
         if not enabled:
-            reasons.append("INSTAGRAM_MESSAGING_DISABLED")
+            reasons.append(f"{self.reason_prefix}_MESSAGING_DISABLED")
         if not self.access_token or not self.ig_user_id:
-            reasons.append("INSTAGRAM_CREDENTIALS_MISSING")
+            reasons.append(f"{self.reason_prefix}_CREDENTIALS_MISSING")
         in_window = bool(last and now - last <= SERVICE_WINDOW)
         # A tag HUMAN_AGENT estende a janela para 7 dias, só para texto de pessoa.
         human_window = bool(human_written and last and now - last <= HUMAN_AGENT_WINDOW)
@@ -452,16 +484,10 @@ class InstagramDirectAdapter:
         if reasons:
             return {"status": "BLOCKED", "reasons": reasons}
         contact = self.inbox.contact(self.channel, conversation_id)
-        body: dict[str, Any] = {
-            "recipient": {"id": contact["contact"]},
-            "message": {"text": text},
-        }
-        if not in_window and human_window:
-            body.update(messaging_type="MESSAGE_TAG", tag="HUMAN_AGENT")
         response = self.session.post(
-            f"https://graph.instagram.com/{graph_api_version()}/{self.ig_user_id}/messages",
+            self._endpoint(),
             headers={"Authorization": f"Bearer {self.access_token}"},
-            json=body,
+            json=self._body(contact["contact"], text, not in_window and human_window),
             timeout=self.timeout,
         )
         if not response.ok:
@@ -469,7 +495,9 @@ class InstagramDirectAdapter:
                 "status": "FAILED",
                 "error": f"META_ERROR_{_api_error_code(response)}",
             }
-        message_id = str(response.json().get("message_id") or f"ig-{uuid4().hex}")
+        message_id = str(
+            response.json().get("message_id") or f"{self.channel}-{uuid4().hex}"
+        )
         self.inbox.record_out(
             self.channel,
             conversation_id,
@@ -499,6 +527,58 @@ class InstagramDirectAdapter:
 
     def redact(self, message_id: str) -> None:
         self.inbox.redact(message_id)
+
+
+class FacebookMessengerAdapter(InstagramDirectAdapter):
+    """Messenger da Página: responde só a quem escreveu, na janela de 24 h.
+
+    Venda direta, como no Instagram: link do Mercado Pago e condições do site. A
+    Página é ``META_PAGE_ID`` e o token é ``META_PAGE_ACCESS_TOKEN``.
+    """
+
+    channel = "facebook"
+    send_flag = "FACEBOOK_MESSAGING_ENABLED"
+    reason_prefix = "FACEBOOK"
+    limits: ClassVar[dict[str, Any]] = {
+        "max_text": 2000,
+        "window_hours": 24,
+        "human_agent_days": 7,
+    }
+
+    def __init__(
+        self,
+        inbox: DirectInbox,
+        *,
+        access_token: str | None,
+        page_id: str | None,
+        session: Any = None,
+        enabled: bool | None = None,
+        timeout: int = 20,
+    ) -> None:
+        super().__init__(
+            inbox,
+            access_token=access_token,
+            ig_user_id=page_id,
+            session=session,
+            enabled=enabled,
+            timeout=timeout,
+        )
+
+    @staticmethod
+    def _parse(payload: dict[str, Any], own_account_id: str) -> list[dict[str, Any]]:
+        return parse_messenger_messages(payload, own_account_id)
+
+    def _endpoint(self) -> str:
+        return (
+            f"https://graph.facebook.com/{graph_api_version()}/"
+            f"{self.ig_user_id}/messages"
+        )
+
+    @staticmethod
+    def _body(contact: str, text: str, human_tag: bool) -> dict[str, Any]:
+        body = InstagramDirectAdapter._body(contact, text, human_tag)
+        body.setdefault("messaging_type", "RESPONSE")
+        return body
 
 
 # -- Mercado Livre -----------------------------------------------------------------

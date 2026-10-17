@@ -449,3 +449,50 @@ def test_person_request_on_the_webhook_is_exactly_one_call(tmp_path):
     assert [item["state"] for item in channel_side] == ["HUMAN"]
     # Nada fica para o motor responder enquanto o fundador atende.
     assert processed.json["results"] == []
+
+
+def test_founder_returns_the_whatsapp_conversation_to_the_bot_on_both_sides(tmp_path):
+    rate_store.clear()
+    environment = {
+        "VERATUS_ADMIN_TOKEN": "admin-test-key",
+        "VERATUS_AGENT_RUNTIME_DIR": str(tmp_path),
+        "VERATUS_SESSION_SALT": "salt",
+        "VERATUS_TOKEN_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+        "WHATSAPP_APP_SECRET": "app-secret",
+        "WHATSAPP_SEND_ENABLED": "false",
+        "CONVERSATION_MODEL": "template",
+        "OPENAI_API_KEY": "",
+        "DATABASE_URL": "",
+    }
+    admin = {"X-Veratus-Admin-Token": "admin-test-key"}
+    body = json.dumps(
+        notification(text_message("wamid.B1", "Quero falar com um atendente"))
+    ).encode()
+    signature = "sha256=" + hmac.new(b"app-secret", body, hashlib.sha256).hexdigest()
+    with (
+        patch.dict("os.environ", environment),
+        patch("requests.Session.post", _boom),
+        patch("requests.post", _boom),
+    ):
+        client = app.test_client()
+        client.post(
+            "/integrations/whatsapp/webhook",
+            data=body,
+            content_type="application/json",
+            headers={"X-Hub-Signature-256": signature},
+        )
+        [conversation] = client.get(
+            "/integrations/whatsapp/conversations", headers=admin
+        ).json["conversations"]
+        returned = client.post(
+            f"/integrations/whatsapp/conversations/{conversation['conversation_id']}"
+            "/state",
+            headers=admin,
+            json={"state": "BOT", "actor": "fundador"},
+        )
+        engine_side = client.get(
+            "/os/conversations?channel=whatsapp", headers=admin
+        ).json["conversations"]
+
+    assert returned.status_code == 200
+    assert [item["state"] for item in engine_side] == ["BOT"]

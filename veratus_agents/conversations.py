@@ -49,7 +49,10 @@ from cryptography.fernet import Fernet
 from .meta_webhooks import normalize_text
 from .sqlstore import SqlStore
 
+# Facebook (Messenger da Página) é o canal principal: venda direta, como o
+# WhatsApp e o Instagram, com a loja do catálogo da Meta trazendo o lead.
 CHANNELS = (
+    "facebook",
     "whatsapp",
     "instagram",
     "mercado_livre",
@@ -89,6 +92,8 @@ INTENT_RISK = {
     "endereco_pago": 1,
     "insatisfacao": 1,
     "contato_marketplace": 0,
+    # "Isso ainda está disponível?": sem estoque confirmado, texto fixo sem prometer.
+    "disponibilidade": 0,
     # Aviso de pagamento confirmado pelo provedor (payment_confirmed).
     "pagamento_confirmado": 0,
     # Assunto que o modelo não reconhece: risco 1 com o revisor aprovando, 9 sem.
@@ -117,6 +122,29 @@ _TASK_SUGGESTIONS = {
     "FATO_NAO_CONFIRMADO": "Confirmar {topic} e responder.",
     "ENVIAR_RASTREIO": "Envie ao cliente o código de rastreio do pedido despachado.",
 }
+# Resumo do alerta e da tarefa: só o motivo, nunca o texto do cliente (CPF, nome e
+# endereço não saem por WhatsApp, e-mail nem painel). A conversa fica no motor.
+_HANDOFF_SUMMARIES = {
+    "PEDIDO_DE_ATENDENTE": "O cliente pediu para falar com uma pessoa.",
+    "RECLAMACAO": "O cliente citou Procon, processo, advogado ou justiça.",
+}
+_TASK_SUMMARIES = {
+    "PROBLEMA_PAGAMENTO": "O cliente relatou um problema no pagamento.",
+    "SO_PESSOA": "O cliente pediu algo que só a equipe confirma.",
+    "FORA_DE_VENDAS": "Mensagem sobre assunto fora de vendas.",
+    "SINAL_DE_FRAUDE": "Pedido de troca de endereço depois do pagamento.",
+    "RECLAMACAO": "Cliente insatisfeito; o agente segue na conversa.",
+    "FATO_NAO_CONFIRMADO": "O cliente perguntou sobre {topic}.",
+    "ENVIAR_RASTREIO": "O cliente pediu o rastreio de um pedido despachado.",
+    "ERRO_INTERNO": "Uma mensagem não foi processada por erro interno.",
+}
+
+
+def task_summary(reason: str, topic: str | None = None) -> str:
+    template = _TASK_SUMMARIES.get(reason, "Conversa precisa de atenção.")
+    return template.format(topic=topic or "um fato não confirmado")
+
+
 # Mensagens transacionais usam sempre o texto determinístico: o link de
 # pagamento e o status do pedido não dependem do modelo.
 TRANSACTIONAL_INTENTS = frozenset(
@@ -145,6 +173,7 @@ POLICY_INTENTS = frozenset(
         "endereco_pago",
         "insatisfacao",
         "contato_marketplace",
+        "disponibilidade",
     }
 )
 # Marca da oferta de chamar o responsável, guardada em ``last_intent``: um "sim"
@@ -161,34 +190,46 @@ PAID_TEMPLATE = "pedido_confirmado"
 STALL_LIMIT = 3
 GATE_FAILURES_TO_TRIP = 2
 BREAKER_WINDOW = timedelta(hours=1)
+# Reserva da conversa enquanto uma mensagem passa pelo pipeline (o modelo pode
+# levar segundos); reserva de mensagem sem desfecho depois disso é worker caído.
+LEASE_TTL = timedelta(minutes=3)
+STALE_CLAIM = timedelta(minutes=10)
 
 
 def _phrases(*items: str) -> tuple[str, ...]:
     return tuple(normalize_text(item) for item in items)
 
 
-_PERSON_REQUEST = _phrases(
-    "atendente",
-    "humano",
-    "humana",
-    "pessoa real",
-    "falar com alguém",
-    "falar com uma pessoa",
-    "falar com o dono",
-    "falar com o responsável",
-    "gerente",
-    "me liga",
-    "ligação",
-    "ligacao",
-    "chamada de vídeo",
-    "videochamada",
+# Pedido de pessoa: só a frase de pedido, nunca a palavra solta ("o atendente da
+# loja me indicou", "presente pro meu gerente", "ligação com a marca"). Texto já
+# passado por _clean (minúsculo, sem acento).
+_PERSON_WHO = (
+    r"(?:um |uma |o |a |algum |alguma )?(?:atendente|humano|humana|pessoa real|"
+    r"pessoa|alguem|responsavel|dono|dona|gerente|vendedor|vendedora)\b"
 )
-# Ameaça jurídica ou pública é a exceção de segurança: vai direto ao fundador e
-# rebaixa o canal, porque é risco à marca que a IA não negocia.
-# "processo" sozinho pegava "qual o processo de compra?": só a ação judicial conta.
+_PERSON_REQUEST = re.compile(
+    rf"\bfalar com {_PERSON_WHO}"
+    rf"|\b(?:quero|preciso de|prefiro|gostaria de|me passa|me passe|passa|"
+    rf"transfere|transferir|chama|chame|chamar) (?:pra |para |com )?{_PERSON_WHO}"
+    r"|\b(?:tem|existe|ha) (?:algum|alguma|um|uma) (?:atendente|humano|humana|"
+    r"pessoa real)\b"
+    r"|\batendimento humano\b|\bpessoa real\b"
+    r"|\bme (?:liga|ligue|ligar)\b|\b(?:fazer|marcar) uma ligacao\b"
+    r"|\bchamada de video\b|\bvideo ?chamada\b"
+)
+# Mensagem só com "atendente", "humano"... e palavras de cortesia também é pedido.
+_PERSON_ALONE = frozenset({"atendente", "humano", "humana"})
+_PERSON_FILLER = frozenset(
+    {"um", "uma", "o", "a", "por", "favor", "pf", "pfv", "oi", "ola", "quero"}
+)
+# "não quero falar com atendente": negação nas duas palavras antes do pedido.
+_NEGATIONS = frozenset({"nao", "nem", "sem", "nunca"})
+# Ameaça jurídica é a exceção de segurança: vai direto ao fundador e rebaixa o
+# canal, porque é risco à marca que a IA não negocia. "processo" sozinho pegava
+# "qual o processo de compra?": só a ação judicial conta. Reclame Aqui e
+# denúncia são insatisfação (tarefa), não ação judicial.
 _LEGAL_THREAT = _phrases(
     "procon",
-    "reclame aqui",
     "vou processar",
     "abrir um processo",
     "entrar com um processo",
@@ -197,11 +238,12 @@ _LEGAL_THREAT = _phrases(
     "na justica",
     "pequenas causas",
     "advogado",
-    "denunciar",
 )
 _DISSATISFIED = _phrases(
     "reclamação",
     "reclamar",
+    "reclame aqui",
+    "denunciar",
     "golpe",
     "absurdo",
     "péssimo",
@@ -421,6 +463,21 @@ _INTENTS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
+        # A mensagem pronta do Facebook ("Olá, isso ainda está disponível?").
+        "disponibilidade",
+        _phrases(
+            "ainda está disponível",
+            "ainda esta disponivel",
+            "está disponível",
+            "esta disponivel",
+            "tem disponível",
+            "tem disponivel",
+            "disponibilidade",
+            "tem em estoque",
+            "ainda tem",
+        ),
+    ),
+    (
         "preco",
         _phrases(
             "quanto custa",
@@ -496,21 +553,41 @@ def _short_yes(normalized: str) -> bool:
     )
 
 
+def _person_request(normalized: str) -> bool:
+    words = re.findall(r"[a-z]+", normalized)
+    if (
+        words
+        and set(words) <= _PERSON_ALONE | _PERSON_FILLER
+        and (set(words) & _PERSON_ALONE)
+    ):
+        return True
+    for match in _PERSON_REQUEST.finditer(normalized):
+        before = re.findall(r"[a-z]+", normalized[: match.start()])[-2:]
+        if not set(before) & _NEGATIONS:
+            return True
+    return False
+
+
 def asks_for_person(text: str) -> bool:
-    """O cliente pede uma pessoa; o WhatsApp usa a mesma lista na entrada."""
-    return _has(_clean(text), _PERSON_REQUEST)
+    """O cliente pede uma pessoa; o WhatsApp usa a mesma regra na entrada."""
+    return _person_request(_clean(text))
+
+
+def legal_threat(text: str) -> bool:
+    return _has(_clean(text), _LEGAL_THREAT)
 
 
 def classify(text: str, conversation: dict[str, Any]) -> Classification:
     """Intenção, CHAMADA ou TAREFA; determinístico e auditável."""
     normalized = _clean(text)
+    # Ameaça primeiro: com ela, mesmo um pedido de pessoa rebaixa o canal.
+    if _has(normalized, _LEGAL_THREAT):
+        return Classification("outro", "RECLAMACAO")
     # Antes de _INTENTS: "sim, quero" e "pode ser" também são fechamento.
     if conversation.get("last_intent") == OFFER_MARK and _short_yes(normalized):
         return Classification("outro", "PEDIDO_DE_ATENDENTE")
-    if _has(normalized, _PERSON_REQUEST):
+    if _person_request(normalized):
         return Classification("outro", "PEDIDO_DE_ATENDENTE")
-    if _has(normalized, _LEGAL_THREAT):
-        return Classification("outro", "RECLAMACAO")
     if _has(normalized, _PAYMENT_PROBLEM):
         return Classification("pagamento_conferencia", task="PROBLEMA_PAGAMENTO")
     if _has(normalized, _ADDRESS_CHANGE) and conversation.get("paid"):
@@ -657,9 +734,9 @@ def _marketplace_reply(request: DraftRequest, name: str | None) -> str | None:
     if intent == "desconto_insistente" or (
         intent == "preco" and request.discount_request
     ):
+        # Marca a oferta (OFFER_INTENTS): o texto precisa oferecer o responsável.
         return (
-            "O valor é o do anúncio, e não trabalhamos com desconto. Posso ajudar "
-            "com mais alguma dúvida sobre a peça?"
+            f"O valor é o do anúncio, e não trabalhamos com desconto. {OFFER_SENTENCE}"
         )
     if intent == "preco":
         subject = f"do {name}" if name else "da peça"
@@ -674,6 +751,11 @@ def _marketplace_reply(request: DraftRequest, name: str | None) -> str | None:
         )
     if intent == "politica_troca":
         return f"A troca e a devolução seguem as regras {of_channel} para esta compra."
+    if intent == "disponibilidade":
+        return (
+            "A disponibilidade é a que aparece no próprio anúncio, e a compra é "
+            "feita por ele. Posso ajudar com alguma dúvida sobre a peça?"
+        )
     if intent in ("dados_pedido", "link_pagamento"):
         return "O pagamento é feito no próprio anúncio, na hora da compra."
     if intent in ("status_pedido", "rastreio"):
@@ -682,9 +764,11 @@ def _marketplace_reply(request: DraftRequest, name: str | None) -> str | None:
             "for despachado."
         )
     if intent == "fato_pendente" and not request.topic_facts:
+        # O assunto fica só na tarefa: "movimento" ou "resistência à água" no
+        # texto reprovam no gate e contam para o disjuntor.
         return (
-            f"Sobre {request.topic or 'isso'}, a equipe ainda vai confirmar; a "
-            "informação entra no anúncio assim que estiver confirmada."
+            "Essa informação a equipe ainda vai confirmar, e ela entra no anúncio "
+            "assim que estiver confirmada."
         )
     if intent == "so_pessoa":
         return (
@@ -788,8 +872,8 @@ class TemplateSalesModel:
             claims = _claims(*(ref for ref, _ in request.topic_facts))
         elif intent == "fato_pendente":
             reply = (
-                f"Sobre {request.topic or 'isso'}, a equipe confirma por aqui em "
-                "seguida. Posso ajudar com mais alguma coisa enquanto isso?"
+                "Essa informação a equipe confirma por aqui em seguida. Posso "
+                "ajudar com mais alguma coisa enquanto isso?"
             )
         elif intent == "fechamento" and marketplace:
             reply = "Ótima escolha! É só finalizar a compra pelo próprio anúncio."
@@ -855,6 +939,15 @@ class TemplateSalesModel:
                 if marketplace
                 else "A confirmação do pagamento chega automaticamente pelo Mercado "
                 "Pago, e eu aviso por aqui assim que ela chegar."
+            )
+        elif intent == "disponibilidade":
+            # Estoque não é fato confirmado: a disponibilidade sai com o pedido.
+            reply = (
+                f"Olá! {name} está no nosso catálogo, e a disponibilidade a equipe "
+                "confirma junto com o seu pedido. Quer saber o preço ou como comprar?"
+                if name
+                else "Olá! A disponibilidade a equipe confirma junto com o seu "
+                "pedido. Qual peça você viu?"
             )
         elif intent == "contato_marketplace":
             reply = (
@@ -1029,12 +1122,19 @@ class AlertSender(Protocol):
     def __call__(self, alert: dict[str, Any]) -> str | None: ...
 
 
+_CPF_CNPJ = re.compile(
+    r"(?<!\d)(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2})(?!\d)"
+)
+
+
 def summarize(text: str, limit: int = 3) -> str:
-    """Até 3 linhas, sem telefone nem e-mail."""
+    """Até 3 linhas, sem telefone, e-mail, CPF, CNPJ nem CEP."""
     from .workflow import _minimize_contact_data
 
     lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
-    clean = _minimize_contact_data(" ".join(lines))[:360]
+    clean = _CPF_CNPJ.sub("[documento omitido]", " ".join(lines))
+    clean = _CEP.sub("[CEP omitido]", clean)
+    clean = _minimize_contact_data(clean)[:360]
     words, rows, row = clean.split(), [], ""
     for word in words:
         if len(row) + len(word) + 1 > 120 and row:
@@ -1128,6 +1228,15 @@ CREATE TABLE IF NOT EXISTS cv_processed (
     message_key TEXT PRIMARY KEY,
     at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS cv_processed_done (
+    message_key TEXT PRIMARY KEY,
+    at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cv_leases (
+    conv_key TEXT PRIMARY KEY,
+    holder TEXT NOT NULL,
+    until TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS cv_readiness_requests (
     channel TEXT NOT NULL,
     target_mode TEXT NOT NULL,
@@ -1193,6 +1302,56 @@ class ConversationStore(SqlStore):
                     ),
                     [f"{channel}:{message_id}", _now().isoformat()],
                 ).rowcount
+            )
+
+    def finish_message(self, channel: str, message_id: str) -> None:
+        """Desfecho da mensagem reservada: resposta, fila, chamada ou tarefa."""
+        with self._connect() as (db, mark):
+            db.execute(
+                self._sql(
+                    "INSERT INTO cv_processed_done (message_key, at) VALUES (?, ?) "
+                    "ON CONFLICT (message_key) DO NOTHING",
+                    mark,
+                ),
+                [f"{channel}:{message_id}", _now().isoformat()],
+            )
+
+    def open_claim(self, channel: str, message_id: str) -> datetime | None:
+        """Quando a mensagem foi reservada, se ainda não tem desfecho."""
+        with self._connect() as (db, mark):
+            row = db.execute(
+                self._sql(
+                    "SELECT p.at FROM cv_processed p LEFT JOIN cv_processed_done d "
+                    "ON d.message_key = p.message_key "
+                    "WHERE p.message_key = ? AND d.message_key IS NULL",
+                    mark,
+                ),
+                [f"{channel}:{message_id}"],
+            ).fetchone()
+        return datetime.fromisoformat(row["at"]) if row else None
+
+    def lease(self, conv_key: str, ttl: timedelta = LEASE_TTL) -> str | None:
+        """Reserva a conversa; None se outra thread ou worker está com ela."""
+        holder, now = uuid4().hex, _now()
+        with self._connect() as (db, mark):
+            taken = db.execute(
+                self._sql(
+                    "INSERT INTO cv_leases (conv_key, holder, until) VALUES (?, ?, ?) "
+                    "ON CONFLICT (conv_key) DO UPDATE SET holder = excluded.holder, "
+                    "until = excluded.until WHERE cv_leases.until < ?",
+                    mark,
+                ),
+                [conv_key, holder, (now + ttl).isoformat(), now.isoformat()],
+            ).rowcount
+        return holder if taken else None
+
+    def release(self, conv_key: str, holder: str) -> None:
+        with self._connect() as (db, mark):
+            db.execute(
+                self._sql(
+                    "DELETE FROM cv_leases WHERE conv_key = ? AND holder = ?", mark
+                ),
+                [conv_key, holder],
             )
 
     def get(self, channel: str, conversation_id: str) -> dict[str, Any] | None:
@@ -1571,8 +1730,34 @@ class ConversationEngine:
         channel = inbound.channel
         if channel not in CHANNELS:
             raise ValueError("canal_desconhecido")
-        if not self.store.claim_message(channel, inbound.message_id):
-            return self._result("DUPLICATE", self.mode(channel))
+        # Uma mensagem por conversa de cada vez, entre threads e workers. Sem a
+        # reserva (BUSY), a mensagem continua pendente no canal.
+        key = self.store.key(channel, inbound.conversation_id)
+        holder = self.store.lease(key)
+        if holder is None:
+            return self._result("BUSY", self.mode(channel))
+        try:
+            if not self.store.claim_message(channel, inbound.message_id):
+                return self._duplicate(inbound)
+            result = self._handle(inbound)
+            self.store.finish_message(channel, inbound.message_id)
+            return result
+        finally:
+            self.store.release(key, holder)
+
+    def _duplicate(self, inbound: InboundText) -> dict[str, Any]:
+        mode = self.mode(inbound.channel)
+        claimed_at = self.store.open_claim(inbound.channel, inbound.message_id)
+        if claimed_at is None:
+            return self._result("DUPLICATE", mode)
+        if _now() - claimed_at < STALE_CLAIM:
+            return self._result("BUSY", mode)
+        # O worker caiu no meio (deploy, reciclagem): vira tarefa, sem reenviar.
+        self.message_failed(inbound, TimeoutError("reserva_sem_desfecho"))
+        return self._result("ERROR", mode, reason="STALE_CLAIM")
+
+    def _handle(self, inbound: InboundText) -> dict[str, Any]:
+        channel = inbound.channel
         conversation = self.store.conversation(channel, inbound.conversation_id)
         key = conversation["conv_key"]
         mode = self.mode(channel)
@@ -1660,11 +1845,17 @@ class ConversationEngine:
         if intent == "dados_pedido":
             outcome = self._order_and_link(key, channel, mode, conversation, inbound)
             if outcome.get("task"):
-                task, topic = outcome["task"], "o preço antes do link de pagamento"
+                task, topic = outcome["task"], "o preço do pedido"
             request.payment_url = outcome.get("url")
             if outcome.get("blocked"):
                 risk = 9  # sem link criado, o fundador decide o que dizer
-        deterministic = intent in TRANSACTIONAL_INTENTS or intent in POLICY_INTENTS
+        # No marketplace, tudo é texto fixo: preço, frete, prazo e pagamento são os
+        # do anúncio, e o modelo livre traria as condições da venda direta.
+        deterministic = (
+            intent in TRANSACTIONAL_INTENTS
+            or intent in POLICY_INTENTS
+            or channel in MARKETPLACES
+        )
         model = TemplateSalesModel() if deterministic else self.model
         try:
             draft = model.draft(request)
@@ -1692,13 +1883,17 @@ class ConversationEngine:
             review = draft.get("review") or {}
             if intent == "outro":
                 risk = 1 if review.get("approved_for_human_review") is True else 9
+                if not isinstance(model, TemplateSalesModel):
+                    # Só o texto fixo pergunta "Quer ver os modelos?": depois do
+                    # texto livre, um "sim" não vira catálogo.
+                    self.store.update(key, last_intent="outro_livre")
             elif review and review.get("approved_for_human_review") is False:
                 risk = 9  # o revisor não aprovou: nunca sai sozinho
 
         extra: dict[str, Any] = {}
         if task:
             suggestion = _TASK_SUGGESTIONS[task].format(topic=topic or "o fato")
-            self._task(channel, key, task, inbound.text, suggestion)
+            self._task(channel, key, task, task_summary(task, topic), suggestion)
             extra["task"] = task
         return self._respond(
             key,
@@ -1715,6 +1910,9 @@ class ConversationEngine:
 
     def message_failed(self, inbound: InboundText, exc: Exception) -> None:
         """Erro inesperado numa mensagem: tarefa no painel, sem o texto do cliente."""
+        # Reservada e com desfecho: a mesma mensagem não volta ao pipeline.
+        self.store.claim_message(inbound.channel, inbound.message_id)
+        self.store.finish_message(inbound.channel, inbound.message_id)
         key = self.store.key(inbound.channel, inbound.conversation_id)
         self.store.event(
             inbound.channel, key, "HANDLE_FAILED", result=type(exc).__name__
@@ -1723,7 +1921,7 @@ class ConversationEngine:
             inbound.channel,
             key,
             "ERRO_INTERNO",
-            "",
+            task_summary("ERRO_INTERNO"),
             "A mensagem não foi processada por erro interno: responda pelo canal.",
         )
 
@@ -1760,11 +1958,12 @@ class ConversationEngine:
             self.store.update(
                 key, first_inbound_at=(inbound.received_at or _now()).isoformat()
             )
+        self.store.finish_message(channel, inbound.message_id)
         if conversation["state"] != "BOT":
             return self._result("SKIPPED", mode, reason=conversation["state"])
-        return self._handoff(
-            key, channel, mode, "PEDIDO_DE_ATENDENTE", inbound, "outro"
-        )
+        # Com ameaça jurídica junto, a chamada rebaixa o canal.
+        reason = "RECLAMACAO" if legal_threat(inbound.text) else "PEDIDO_DE_ATENDENTE"
+        return self._handoff(key, channel, mode, reason, inbound, "outro")
 
     def _respond(
         self,
@@ -1782,7 +1981,12 @@ class ConversationEngine:
     ) -> dict[str, Any]:
         """Enviar ou pôr na fila uma resposta já aprovada pelo gate."""
         if decide(mode, risk) == "SEND":
-            sent = self._send(channel, conversation_id, reply, message_id or key)
+            # Relê o estado: o fundador pode ter assumido durante o rascunho.
+            state = (self.store.get(channel, conversation_id) or {}).get("state")
+            if state not in (None, "BOT"):
+                sent = {"status": "BLOCKED", "reasons": [f"STATE_{state}"]}
+            else:
+                sent = self._send(channel, conversation_id, reply, message_id or key)
             if sent["status"] == "SENT":
                 self._responded(key, conversation)
                 self.store.event(
@@ -1942,13 +2146,16 @@ class ConversationEngine:
             result=lowered,
             reason=reason,
         )
-        self._alert(
+        # Fica no painel, sem ping: o fundador só é chamado quando o cliente pede
+        # (ou na ameaça jurídica, que já tem o próprio alerta).
+        alert = self._alert_payload(
             channel,
             None,
             "DISJUNTOR",
             f"Canal {channel} rebaixado de {current} para {lowered}: {reason}.",
             "Revise as conversas recentes antes de subir o nível de novo.",
         )
+        self.store.record_alert(alert, delivery="PAINEL")
 
     def _handoff(
         self,
@@ -1979,7 +2186,7 @@ class ConversationEngine:
             channel,
             key,
             reason,
-            inbound.text,
+            _HANDOFF_SUMMARIES[reason],
             suggestions.get(reason, "Assuma a conversa."),
         )
         if reason == "RECLAMACAO":
@@ -1988,13 +2195,13 @@ class ConversationEngine:
 
     @staticmethod
     def _alert_payload(
-        channel: str, key: str | None, reason: str, text: str, suggestion: str
+        channel: str, key: str | None, reason: str, summary: str, suggestion: str
     ) -> dict[str, Any]:
         return {
             "channel": channel,
             "conv_key": key,
             "reason": reason,
-            "summary": summarize(text),
+            "summary": summarize(summary),
             "suggestion": suggestion,
         }
 
@@ -2003,10 +2210,10 @@ class ConversationEngine:
         channel: str,
         key: str | None,
         reason: str,
-        text: str,
+        summary: str,
         suggestion: str,
     ) -> None:
-        alert = self._alert_payload(channel, key, reason, text, suggestion)
+        alert = self._alert_payload(channel, key, reason, summary, suggestion)
         delivery = "QUEUED"
         if self.alert_sender is not None:
             try:
@@ -2016,10 +2223,10 @@ class ConversationEngine:
         self.store.record_alert(alert, delivery)
 
     def _task(
-        self, channel: str, key: str, reason: str, text: str, suggestion: str
+        self, channel: str, key: str, reason: str, summary: str, suggestion: str
     ) -> None:
         """TAREFA: fica no painel do fundador, sem ping; o agente segue."""
-        alert = self._alert_payload(channel, key, reason, text, suggestion)
+        alert = self._alert_payload(channel, key, reason, summary, suggestion)
         self.store.record_alert(alert, delivery="PAINEL")
         self.store.event(
             channel, key, "TASK", action="TASK", result="PAINEL", reason=reason
@@ -2195,7 +2402,10 @@ class ConversationEngine:
             raise KeyError(conversation_id)
         changes: dict[str, Any] = {"state": state}
         if state == "BOT":
-            changes.update(handoff_reason=None, repeat_count=0, gate_failures=0)
+            # Sem a oferta antiga: um "sim" depois da volta não chama de novo.
+            changes.update(
+                handoff_reason=None, repeat_count=0, gate_failures=0, last_intent=None
+            )
         self.store.update(conversation["conv_key"], **changes)
         self.store.event(
             channel,

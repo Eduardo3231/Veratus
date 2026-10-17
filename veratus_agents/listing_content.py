@@ -1,9 +1,10 @@
 """Texto de anúncio de marketplace a partir do catálogo, pronto para revisão.
 
-``listing_copy(produto, canal)`` monta, para Mercado Livre, Shopee, Amazon ou
-TikTok Shop: título, descrição (parágrafos curtos), destaques, atributos
-públicos, fotos, preço público e os bloqueios que ainda impedem o anúncio.
-Nada é publicado: é rascunho para o fundador revisar.
+``listing_copy(produto, canal)`` monta, para o catálogo da Meta (Facebook),
+Mercado Livre, Shopee, Amazon ou TikTok Shop: título, descrição (parágrafos
+curtos), destaques, atributos públicos, fotos, preço público e os bloqueios que
+ainda impedem o anúncio. Nada é publicado: é rascunho para o fundador revisar.
+O feed CSV do Commerce Manager sai de ``meta_catalog``.
 
 Regras:
 
@@ -11,17 +12,18 @@ Regras:
   valem no marketplace (especificação e garantia). Preço, frete, prazo,
   pagamento e devolução são do marketplace e ficam fora do texto;
 - relógio: material, movimento, resistência à água e medidas só com fato da
-  ficha (``catalog/ficha-relogios.yaml``), na frase exata do fato;
+  ficha (``catalog/ficha-relogios.yaml``), na frase exata do fato; cor do
+  mostrador e da pulseira também só da ficha, nunca da paleta do site;
 - joia: só "tom dourado" ou "tom prateado";
-- todo texto passa por ``policy.hard_review_customer_reply`` com o canal; frase
-  que não passa (no gate ou nas regras daqui) fica de fora.
+- todo texto passa por ``policy.hard_review_customer_reply`` com o canal (no
+  Facebook, sem canal: a venda é pelo site); frase que não passa (no gate ou
+  nas regras daqui) fica de fora.
 
 ``python scripts/exportar_anuncios.py --saida <arquivo.json>`` gera todos.
 """
 
 from __future__ import annotations
 
-import colorsys
 import re
 from typing import Any
 
@@ -30,20 +32,36 @@ from .catalog import load_catalog, public_catalog, public_price
 from .meta_webhooks import normalize_text
 from .policy import hard_review_customer_reply
 
-CHANNELS = ("mercado_livre", "shopee", "amazon", "tiktok_shop")
+# Facebook primeiro: é o marketplace principal. A Meta não tem API pública de
+# anúncio no Facebook Marketplace no Brasil; o caminho oficial é o catálogo do
+# Commerce Manager (Loja do Facebook e Instagram Shopping) por feed.
+CHANNELS = ("facebook", "mercado_livre", "shopee", "amazon", "tiktok_shop")
 CHANNEL_LABELS = {
+    "facebook": "Facebook (catálogo da Meta)",
     "mercado_livre": "Mercado Livre",
     "shopee": "Shopee",
     "amazon": "Amazon",
     "tiktok_shop": "TikTok Shop",
 }
 _CHANNEL_ALIASES = {"mercado-livre": "mercado_livre", "tiktok-shop": "tiktok_shop"}
+# Canal que o gate recebe. O catálogo da Meta leva ao site: não é marketplace
+# sem contato.
+_GATE_CHANNEL: dict[str, str | None] = {"facebook": None}
 
 # Limite de caracteres do título. SUPOSIÇÃO: valores usuais da documentação de
-# vendedor de cada canal, não conferidos na conta (mudam por categoria).
-# Conferir no painel antes de publicar.
-TITLE_LIMITS = {"mercado_livre": 60, "shopee": 120, "amazon": 200, "tiktok_shop": 255}
+# vendedor de cada canal (Facebook: especificação do feed da Meta), não
+# conferidos na conta (mudam por categoria). Conferir no painel antes de
+# publicar.
+TITLE_LIMITS = {
+    "facebook": 200,
+    "mercado_livre": 60,
+    "shopee": 120,
+    "amazon": 200,
+    "tiktok_shop": 255,
+}
 TITLE_LIMITS_STATUS = "ASSUMPTION"
+# Limite da descrição, onde o canal publica um (mesma SUPOSIÇÃO).
+DESCRIPTION_LIMITS = {"facebook": 9999}
 
 # Igual a ON_HOLD de scripts/build_landing.py (o teste confere): fora do site
 # enquanto o alerta de semelhança com marca de terceiros estiver aberto.
@@ -82,12 +100,6 @@ _SHEET_ATTRIBUTES = (
     "gtin",
 )
 
-# Cor do acabamento do relógio pela paleta pública (cor, não material).
-_METAL_TONE = {
-    "steel": "tom prateado",
-    "gold": "tom dourado",
-    "two-tone": "tom prateado e dourado",
-}
 # O mesmo de JEWELRY_TONE em scripts/build_landing.py.
 _JEWEL_TONE = {"silver_tone": "tom prateado", "gold_tone": "tom dourado"}
 # subcategoria → (tipo, gênero, frase de uso, destaque de uso)
@@ -143,7 +155,15 @@ _STYLE_LINES = {
     ),
 }
 _WATCH_GIFT = ("Também é uma boa opção de presente.", "Boa opção de presente")
-# Pergunta pelo próprio canal; a Amazon não aceita convite de contato no texto.
+# A descrição do site fala da arte de vitrine: frase dela com cor de mostrador
+# ou tom do relógio fica de fora (cor e tom só da ficha). Texto sem acento.
+_WATCH_COLOR = re.compile(
+    r"\bmostrador|\bacabamento|\btom\b|\bazul|\bpret[oa]|\bbranc[oa]|\bverde|"
+    r"\bmarrom|\bcinza|\bdourad|\bpratead|\bvermelh|\broxo|\bamarel|\bbronze|"
+    r"\bcobre\b|\bgrafite|\bchampanhe|\bbege\b|\bouro\b|\bprata\b"
+)
+# Pergunta pelo próprio canal; a Amazon não aceita convite de contato no texto
+# e o catálogo da Meta leva ao site, que tem o próprio contato.
 _QUESTION_LINE = {
     "mercado_livre": "Ficou com alguma dúvida? Faça sua pergunta aqui no anúncio.",
     "shopee": "Ficou com alguma dúvida? Fale com a gente pelo chat da loja.",
@@ -300,7 +320,7 @@ BLOCKER_TEXTS = {
 
 
 class UnknownChannelError(ValueError):
-    """Canal fora de Mercado Livre, Shopee, Amazon e TikTok Shop."""
+    """Canal fora de Facebook, Mercado Livre, Shopee, Amazon e TikTok Shop."""
 
 
 def normalize_channel(channel: str) -> str:
@@ -337,7 +357,9 @@ class _Writer:
 
     def gate(self, text: str) -> list[str]:
         return hard_review_customer_reply(
-            text, product_collection=self.collection, channel=self.channel
+            text,
+            product_collection=self.collection,
+            channel=_GATE_CHANNEL.get(self.channel, self.channel),
         )
 
     def rules(self, text: str) -> list[str]:
@@ -401,33 +423,6 @@ def _paragraphs(blocks: list[list[str | None]]) -> str:
     )
 
 
-def _dial_color(palette: dict[str, Any] | None) -> str | None:
-    """Cor do mostrador pela paleta pública (hex)."""
-    value = str((palette or {}).get("dial") or "").lstrip("#")
-    if not re.fullmatch(r"[0-9a-fA-F]{6}", value):
-        return None
-    red, green, blue = (int(value[i : i + 2], 16) / 255 for i in (0, 2, 4))
-    hue, light, saturation = colorsys.rgb_to_hls(red, green, blue)
-    hue *= 360
-    if light < 0.12:
-        return "preto"
-    if light >= 0.85:
-        return "branco"
-    if saturation < 0.2:
-        return "prateado" if light >= 0.55 else "cinza"
-    if hue < 15 or hue >= 330:
-        return "vermelho"
-    if hue < 50:
-        return "marrom" if light < 0.45 else "dourado"
-    if hue < 80:
-        return "amarelo"
-    if hue < 180:
-        return "verde"
-    if hue < 260:
-        return "azul"
-    return "roxo"
-
-
 def _confirmed_facts(collection: str) -> list[str]:
     """Textos dos fatos CONFIRMED que valem no marketplace para este produto."""
     facts = commercial_config.CONFIRMED_SALES_FACTS
@@ -457,6 +452,12 @@ def _sheet():
     return default_sheet()
 
 
+def _sheet_color(sheet: Any, field: str, model: str) -> str | None:
+    """Cor CONFIRMADA na ficha do modelo; a paleta do site é ilustração."""
+    value = sheet.confirmed(field, model) if sheet else None
+    return " ".join(str(value).split()).lower() if value else None
+
+
 def _watch_styles(item: dict[str, Any]) -> list[str]:
     eyebrow = [
         part.strip().lower()
@@ -472,29 +473,27 @@ def _watch_copy(item: dict[str, Any], writer: _Writer) -> dict[str, Any]:
     name, model, channel = item["name"], item["id"], writer.channel
     styles = _watch_styles(item)
     style_text = _join_words(styles)
-    tone = _METAL_TONE.get(str((item.get("palette") or {}).get("metal")))
+    # Cor do mostrador e tom da pulseira só da ficha (CONFIRMADO); sem ela, o
+    # texto não diz cor nem tom do relógio.
     sheet = _sheet()
-    sheet_dial = sheet.confirmed("cor_mostrador", model) if sheet else None
-    dial = next(
-        (
-            color.lower()
-            for color in (sheet_dial, _dial_color(item.get("palette")))
-            if color and writer.ok(f"Mostrador {color.lower()}.")
-        ),
-        None,
-    )
-    # Cores confirmadas na ficha valem mais que a paleta do site.
+    dial = _sheet_color(sheet, "cor_mostrador", model)
+    if dial and not writer.ok(f"Mostrador {dial}."):
+        dial = None
+    strap = _sheet_color(sheet, "cor_pulseira", model)
+    if strap and not writer.ok(f"Pulseira em tom {strap}."):
+        strap = None
+    tone = f"tom {strap}" if strap else None
     color_fact = writer.fact_ok(_color_fact(model))
     look = color_fact
-    if not look and tone and dial and tone == f"tom {dial}":
-        look = writer.ok(f"Mostrador e acabamento em {tone}.")
-    elif not look and (dial or tone):
+    if not look and (dial or tone):
         parts = [
             f"mostrador {dial}" if dial else "",
-            f"acabamento em {tone}" if tone else "",
+            f"pulseira em {tone}" if tone else "",
         ]
         look = writer.ok(_sentence(" e ".join(filter(None, parts)).capitalize()))
     story = writer.ok(_sentence(item.get("description") or ""))
+    if story and _WATCH_COLOR.search(normalize_text(story.replace(name, " "))):
+        story = None
     facts = [fact for fact in _confirmed_facts("watches") if writer.fact_ok(fact)]
     style_keys = [normalize_text(style) for style in styles]
     style_lines = [
@@ -521,7 +520,7 @@ def _watch_copy(item: dict[str, Any], writer: _Writer) -> dict[str, Any]:
 
     style_title = _title_case(style_text)
     dial_title = _title_case(f"mostrador {dial}") if dial else ""
-    tone_title = _title_case(f"acabamento em {tone}") if tone else ""
+    tone_title = _title_case(f"pulseira em {tone}") if tone else ""
     if channel == "amazon":
         parts = [
             (f"Veratus Relógio {name}", 0),
@@ -565,7 +564,7 @@ def _watch_copy(item: dict[str, Any], writer: _Writer) -> dict[str, Any]:
         "tipo": "relógio",
         "estilo": styles,
         "cor_do_mostrador": dial,
-        "tom": tone,
+        "cor_da_pulseira": strap,
         "condicao": "novo",
     }
     if sheet:
@@ -759,6 +758,7 @@ def listing_copy(product: dict[str, Any], channel: str) -> dict[str, Any]:
         "channel": channel,
         "channel_label": CHANNEL_LABELS[channel],
         "title_limit": TITLE_LIMITS[channel],
+        "description_limit": DESCRIPTION_LIMITS.get(channel),
         "external_write": False,
     }
     if not projection:
@@ -796,6 +796,9 @@ def listing_copy(product: dict[str, Any], channel: str) -> dict[str, Any]:
         issues += [f"{field}: {issue}" for issue in writer.rules(own)]
     if len(copy["title"]) > TITLE_LIMITS[channel]:
         issues.append("title: acima do limite do canal")
+    description_limit = DESCRIPTION_LIMITS.get(channel)
+    if description_limit and len(copy["description"]) > description_limit:
+        issues.append("description: acima do limite do canal")
     issues = list(dict.fromkeys(issues))
 
     photos, photo_codes = _photos(item, watch)
@@ -855,7 +858,7 @@ def readiness_summary(listings: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def export_listings(products: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Todos os produtos do catálogo × os quatro marketplaces, com o resumo."""
+    """Todos os produtos do catálogo × os canais (Facebook primeiro), com o resumo."""
     products = load_catalog() if products is None else products
     listings = [
         listing_copy(product, channel) for product in products for channel in CHANNELS
@@ -867,6 +870,7 @@ def export_listings(products: list[dict[str, Any]] | None = None) -> dict[str, A
         "source": "catalog/products.json (campos públicos) e fatos CONFIRMED",
         "title_limits": dict(TITLE_LIMITS),
         "title_limits_status": TITLE_LIMITS_STATUS,
+        "description_limits": dict(DESCRIPTION_LIMITS),
         "summary": readiness_summary(listings),
         "listings": listings,
     }

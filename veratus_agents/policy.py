@@ -217,14 +217,25 @@ _MARKETPLACE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
     (
         # Prazo em dias, preço do site, Pix e link do Mercado Pago são da venda
-        # direta: no marketplace valem o anúncio e o envio dele. Frete grátis
-        # continua permitido (fato confirmado para todos os canais).
+        # direta: no marketplace valem o anúncio e o envio dele, em qualquer
+        # forma ("7 dias", "289,90", "MercadoPago", "link para pagamento").
+        # "Frete grátis" não é barrado aqui: no Mercado Livre o anúncio pode ter
+        # frete grátis pelas regras do canal (decisão do fundador em aberto no
+        # HANDOFF); as respostas fixas do marketplace não o prometem.
         re.compile(
-            r"\bem\s+at[eé]\s+\d+\s+dias?\b|\bR\$\s*\d|\bpix\b|"
-            r"\bmercado\s+pago\b|\blink\s+de\s+pagamento\b",
+            r"\b\d+\s*dias?\b|\b\d{1,3}(?:\.\d{3})*,\d{2}\b|\bR\$\s*\d|\bpix\b|"
+            r"\bmercado\s*pago\b|\blink\s+(?:de|para|pra)\s+pagamento\b",
             re.IGNORECASE,
         ),
         "condição da venda direta em marketplace",
+    ),
+]
+
+# Joias: só "tom dourado" ou "tom prateado" (sem "tom" soa como metal).
+_JEWELRY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(r"(?<!\btom )\b(?:dourad|pratead)[oa]s?\b", re.IGNORECASE),
+        "joia: só tom dourado ou tom prateado",
     ),
 ]
 
@@ -336,6 +347,8 @@ def hard_review_customer_reply(
     patterns = list(_BLOCKED_PATTERNS)
     if channel in MARKETPLACE_CHANNELS:
         patterns += _MARKETPLACE_PATTERNS
+    if product_collection not in (None, "watches"):
+        patterns += _JEWELRY_PATTERNS
     for pattern, issue in patterns:
         for match in pattern.finditer(text or ""):
             if not _confirmed(match, issue, product_collection) and not _fact_allows(

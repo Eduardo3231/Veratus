@@ -2300,6 +2300,16 @@ def whatsapp_conversation_state(conversation_id):
         return jsonify({"status": "error", "message": "conversation_not_found"}), 404
     except ValueError:
         return jsonify({"status": "error", "message": "invalid_state"}), 400
+    # O pedido de pessoa na entrada também pôs o motor em HUMAN: os dois voltam
+    # juntos, senão o canal fica BOT e o motor segue mudo.
+    engine, _ = _engine_or_error()
+    if engine is not None:
+        try:
+            engine.set_state(
+                "whatsapp", conversation_id, data["state"], actor=data["actor"].strip()
+            )
+        except KeyError:
+            pass
     return jsonify({"conversation": conversation}), 200
 
 
@@ -2490,6 +2500,76 @@ def instagram_webhook():
     return jsonify({"status": "received", **counts}), 200
 
 
+@app.route("/integrations/facebook/webhook", methods=["GET", "POST"])
+def facebook_webhook():
+    """Messenger da Página (canal principal): guarda a mensagem e dispara o canal."""
+    if request.method == "GET":
+        return _meta_subscription("FACEBOOK_VERIFY_TOKEN")
+    payload, error = _meta_signed_payload("FACEBOOK_APP_SECRET")
+    if error:
+        return error
+    from veratus_agents.channel_adapters import parse_messenger_messages
+
+    messages = parse_messenger_messages(payload, os.getenv("META_PAGE_ID", "").strip())
+    if not messages:
+        return jsonify({"status": "received", "messages": 0}), 200
+    try:
+        inbox = _direct_inbox()
+    except ValueError as exc:
+        app.logger.error("facebook_messenger_not_configured %s", exc)
+        # 503 faz a Meta reenviar em vez de perder a mensagem.
+        return jsonify(
+            {"status": "blocked", "message": "messenger_not_configured"}
+        ), 503
+    stored = 0
+    for item in messages:
+        _, inserted = inbox.receive(
+            "facebook",
+            item["contact"],
+            item["message_id"],
+            item["text"],
+            item["sent_at"],
+        )
+        stored += inserted
+    if stored:
+        _autoprocess("facebook")
+    return jsonify({"status": "received", "messages": stored}), 200
+
+
+@app.route("/feeds/meta-catalog.csv", methods=["GET"])
+def meta_catalog_feed():
+    """Feed do catálogo da Meta: o Commerce Manager busca por esta URL.
+
+    Desligado (``META_CATALOG_FEED_ENABLED``) responde 404. Só peças prontas,
+    com campos públicos: preço do site, link e foto liberada.
+    """
+    from veratus_agents.meta_webhooks import env_flag
+
+    if not env_flag("META_CATALOG_FEED_ENABLED"):
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    from veratus_agents.meta_catalog import feed_csv, feed_rows
+
+    return (
+        feed_csv(feed_rows()),
+        200,
+        {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Cache-Control": "public, max-age=900",
+        },
+    )
+
+
+@app.route("/os/meta-catalog", methods=["GET"])
+def os_meta_catalog():
+    """Prontidão do catálogo da Meta, peça por peça (revisão, nada é enviado)."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.meta_catalog import catalog_report
+
+    return jsonify(catalog_report()), 200
+
+
 @app.route("/integrations/instagram/replies", methods=["GET"])
 def instagram_replies():
     denied = _admin_required()
@@ -2626,6 +2706,7 @@ def _conversation_payment_linker(order, product):
 
 def _conversation_engine():
     from veratus_agents.channel_adapters import (
+        FacebookMessengerAdapter,
         FounderAlertSender,
         InstagramDirectAdapter,
         ManualPasteAdapter,
@@ -2670,6 +2751,14 @@ def _conversation_engine():
         )
     except Exception as exc:  # noqa: BLE001
         app.logger.error("conversation_adapter_unavailable channel=instagram %s", exc)
+    try:
+        adapters["facebook"] = FacebookMessengerAdapter(
+            _direct_inbox(),
+            access_token=os.getenv("META_PAGE_ACCESS_TOKEN", "").strip() or None,
+            page_id=os.getenv("META_PAGE_ID", "").strip() or None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("conversation_adapter_unavailable channel=facebook %s", exc)
     model = (
         LiveSalesModel()
         if os.getenv("OPENAI_API_KEY", "").strip()
@@ -2768,6 +2857,10 @@ def _process_channel(engine, channel, limit=20):
                 adapter.mark(item.message_id, "V2_ERROR")
             results.append({"message_id": item.message_id, "action": "ERROR"})
             continue
+        if result["action"] == "BUSY":
+            # Outra thread ou worker está na conversa: a mensagem segue pendente.
+            results.append({"message_id": item.message_id, "action": "BUSY"})
+            continue
         if result["action"] == "HANDOFF" and channel == "whatsapp":
             _whatsapp_channel().set_state(
                 item.conversation_id, "HUMAN", actor="sales-agent"
@@ -2790,6 +2883,9 @@ def _process_channel(engine, channel, limit=20):
 _autoprocess_lock = Lock()
 _autoprocess_running: set[str] = set()
 _autoprocess_again: set[str] = set()
+# Mensagem em conversa ocupada (BUSY) espera e tenta de novo, poucas vezes.
+AUTOPROCESS_BUSY_RETRIES = 3
+AUTOPROCESS_BUSY_WAIT_SECONDS = 5
 
 
 def _start_autoprocess_thread(channel):
@@ -2828,16 +2924,23 @@ def _autoprocess(channel):
 
 
 def _autoprocess_worker(channel):
+    busy_rounds = 0
     while True:
+        busy = False
         try:
             with app.app_context():
-                _process_channel(_conversation_engine(), channel)
+                results = _process_channel(_conversation_engine(), channel)
+            busy = any(item.get("action") == "BUSY" for item in results or [])
         except Exception as exc:  # noqa: BLE001 - o erro fica no log, sem texto do cliente
             app.logger.error(
                 "conversation_autoprocess_failed channel=%s error_type=%s",
                 channel,
                 type(exc).__name__,
             )
+        if busy and busy_rounds < AUTOPROCESS_BUSY_RETRIES:
+            busy_rounds += 1
+            time.sleep(AUTOPROCESS_BUSY_WAIT_SECONDS)
+            continue
         with _autoprocess_lock:
             if channel not in _autoprocess_again:
                 _autoprocess_running.discard(channel)
@@ -3077,10 +3180,18 @@ def mercado_pago_webhook():
         app.logger.error("mercado_pago_readback_failed http_status=%s", exc.http_status)
         # 5xx faz o Mercado Pago tentar de novo.
         return jsonify({"status": "error", "message": "readback_failed"}), 502
-    if result["status"] == "PAID":
-        engine, _ = _engine_or_error()
-        if engine is not None:
-            engine.payment_confirmed(result["order_id"])
+    # ALREADY_PROCESSED também: se a volta anterior caiu depois do PAID no ledger,
+    # o aviso ainda não saiu. payment_confirmed é idempotente por pedido.
+    if result["status"] in ("PAID", "ALREADY_PROCESSED"):
+        try:
+            engine, _ = _engine_or_error()
+            if engine is not None:
+                engine.payment_confirmed(result["order_id"])
+        except Exception as exc:  # noqa: BLE001 - 5xx faz o provedor reenviar
+            app.logger.error(
+                "conversation_payment_notice_failed error_type=%s", type(exc).__name__
+            )
+            return jsonify({"status": "error", "message": "notice_failed"}), 500
     return jsonify({"status": "received", "result": result["status"]}), 200
 
 

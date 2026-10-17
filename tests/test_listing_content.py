@@ -11,9 +11,12 @@ from pathlib import Path
 import pytest
 
 from scripts.build_landing import ON_HOLD as SITE_ON_HOLD
+from veratus_agents import commercial_config
 from veratus_agents.catalog import load_catalog
 from veratus_agents.listing_content import (
+    CHANNEL_LABELS,
     CHANNELS,
+    DESCRIPTION_LIMITS,
     MAX_HIGHLIGHTS,
     ON_HOLD,
     TITLE_LIMITS,
@@ -24,7 +27,7 @@ from veratus_agents.listing_content import (
     normalize_channel,
 )
 from veratus_agents.marketplace_adapters import Marketplace, build_distribution_draft
-from veratus_agents.policy import hard_review_customer_reply
+from veratus_agents.policy import MARKETPLACE_CHANNELS, hard_review_customer_reply
 
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCTS = load_catalog()
@@ -114,6 +117,7 @@ def test_every_text_passes_the_gate_of_its_channel(export) -> None:
 
 def test_titles_fit_the_channel_and_say_what_the_buyer_searches(export) -> None:
     assert TITLE_LIMITS == {
+        "facebook": 200,
         "mercado_livre": 60,
         "shopee": 120,
         "amazon": 200,
@@ -126,12 +130,18 @@ def test_titles_fit_the_channel_and_say_what_the_buyer_searches(export) -> None:
         assert listing["name"] in listing["title"]
         assert "Veratus" in listing["title"]
 
+    # Sem cor confirmada na ficha, o título não diz cor de mostrador.
     assert (
         by_key[("ocean-blue", "mercado_livre")]["title"]
-        == "Relógio Veratus Ocean Blue Esportivo Mostrador Azul"
+        == "Relógio Veratus Ocean Blue Esportivo"
     )
-    assert by_key[("ocean-blue", "amazon")]["title"].startswith(
-        "Veratus Relógio Ocean Blue, Esportivo e Versátil, Mostrador Azul"
+    assert (
+        by_key[("ocean-blue", "amazon")]["title"]
+        == "Veratus Relógio Ocean Blue, Esportivo e Versátil"
+    )
+    assert (
+        by_key[("ocean-blue", "facebook")]["title"]
+        == "Relógio Veratus Ocean Blue Esportivo e Versátil"
     )
     assert (
         by_key[("halo-verde", "shopee")]["title"]
@@ -164,7 +174,7 @@ def test_description_is_short_paragraphs_with_a_short_list_of_highlights(
         assert len(paragraphs) >= 3
         assert all(0 < len(paragraph) <= 320 for paragraph in paragraphs)
         assert 3 <= len(listing["highlights"]) <= MAX_HIGHLIGHTS
-        if listing["channel"] == "amazon":
+        if listing["channel"] in ("amazon", "facebook"):
             assert "pergunta" not in listing["description"]
             assert "chat" not in listing["description"]
 
@@ -205,7 +215,10 @@ def test_watches_wait_for_origin_and_real_photo(export) -> None:
     assert len(watches) == 9 * len(CHANNELS)
     for listing in watches:
         codes = _codes(listing)
-        assert {"NEEDS_REAL_PHOTO", "ORIGIN_UNCONFIRMED"} <= codes
+        assert "NEEDS_REAL_PHOTO" in codes
+        # O catálogo da Meta leva ao site, onde o relógio já está à venda: só
+        # os marketplaces exigem envio de dentro do Brasil.
+        assert ("ORIGIN_UNCONFIRMED" in codes) is (listing["channel"] != "facebook")
         # O criativo de vitrine está na quarentena: não vai para o anúncio.
         assert "MEDIA_IN_QUARANTINE" in codes
         assert listing["photos"] == []
@@ -271,7 +284,13 @@ def test_confirmed_sheet_facts_enter_the_watch_listing(watch_facts) -> None:
         assert "Movimento quartzo." in description
         assert "Caixa em aço inoxidável." in description
         assert "Caixa de 41 mm de diâmetro." in description
-        assert "Garantia de 90 dias contra defeito de fabricação." in description
+        # Prazo em dias é condição da venda direta: no marketplace o gate barra
+        # e a garantia segue só como atributo da ficha.
+        warranty = "Garantia de 90 dias contra defeito de fabricação."
+        assert (warranty in description) is (channel not in MARKETPLACE_CHANNELS)
+        assert listing["attributes"]["ficha"]["garantia"] == (
+            "90 dias contra defeito de fabricação"
+        )
         assert (
             "O Ocean Blue tem mostrador em tom azul e pulseira em tom prateado."
             in description
@@ -290,6 +309,117 @@ def test_confirmed_sheet_facts_enter_the_watch_listing(watch_facts) -> None:
         assert "NEEDS_REAL_PHOTO" in codes
         assert listing["attributes"]["ficha"]["movimento"] == "quartzo"
         assert "estoque" not in listing["attributes"]["ficha"]
+
+
+def _color_sheet(tmp_path, monkeypatch, models: dict[str, dict[str, tuple]]) -> None:
+    """Ficha só com as cores dadas; nenhum fato de cor embutido."""
+    lines = ["schema: veratus.watch_sheet/v1", "geral: {}", "modelos:"]
+    for model, fields in models.items():
+        lines.append(f"  {model}:")
+        for name, (value, status) in fields.items():
+            lines += [
+                f"    {name}:",
+                f"      valor: {value}",
+                f"      status: {status}",
+            ]
+    path = tmp_path / "ficha-relogios.yaml"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    monkeypatch.setenv("WATCH_SHEET_PATH", str(path))
+    for ref in [
+        ref for ref in commercial_config.CONFIRMED_SALES_FACTS if "-cores" in ref
+    ]:
+        monkeypatch.delitem(commercial_config.CONFIRMED_SALES_FACTS, ref)
+
+
+# Cor ou tom de relógio dito no texto (a paleta do site é só ilustração).
+WATCH_COLOR_WORDS = re.compile(
+    r"(?i)mostrador|acabamento|\btom\b|\b(azul|preto|branco|verde|marrom|cinza|"
+    r"dourad\w*|pratead\w*|vermelho|roxo|amarelo)\b"
+)
+
+
+def test_watch_dial_and_tone_never_come_from_the_palette(tmp_path, monkeypatch) -> None:
+    _color_sheet(tmp_path, monkeypatch, {})
+    # Paleta fictícia: mostrador azul e metal dourado, sem nada na ficha.
+    fake = {
+        **BY_ID["royal-blue"],
+        "palette": {"dial": "#15347a", "bezel": "#183b86", "metal": "gold"},
+    }
+
+    watches = [p for p in PRODUCTS if (p.get("collection") or "watches") == "watches"]
+
+    assert len(watches) == 9
+    for product in [*watches, fake]:
+        for channel in CHANNELS:
+            listing = listing_copy(product, channel)
+            for text in _texts(listing):
+                plain = text.replace(listing["name"], " ")
+                assert not WATCH_COLOR_WORDS.search(plain), (listing["id"], text)
+            attributes = listing["attributes"]
+            assert not {"cor_do_mostrador", "cor_da_pulseira", "tom"} & set(attributes)
+
+
+def test_watch_colors_come_only_from_the_confirmed_sheet(tmp_path, monkeypatch) -> None:
+    _color_sheet(
+        tmp_path,
+        monkeypatch,
+        {
+            # Paleta do site: mostrador azul. A ficha confirma preto.
+            "ocean-blue": {
+                "cor_mostrador": ("Preto", "CONFIRMADO"),
+                "cor_pulseira": ("Dourado", "PENDENTE"),
+            },
+            # Paleta do site: metal dourado. A ficha confirma pulseira prateada.
+            "bronze-heritage": {
+                "cor_mostrador": ("Marrom", "PENDENTE"),
+                "cor_pulseira": ("Prateado", "CONFIRMADO"),
+            },
+        },
+    )
+
+    for channel in CHANNELS:
+        ocean = listing_copy(BY_ID["ocean-blue"], channel)
+        bronze = listing_copy(BY_ID["bronze-heritage"], channel)
+
+        assert "Mostrador preto." in ocean["description"]
+        assert ocean["attributes"]["cor_do_mostrador"] == "preto"
+        assert "cor_da_pulseira" not in ocean["attributes"]
+        assert "Pulseira em tom prateado." in bronze["description"]
+        assert bronze["attributes"]["cor_da_pulseira"] == "prateado"
+        assert "cor_do_mostrador" not in bronze["attributes"]
+        for text in _texts(ocean) + _texts(bronze):
+            assert not re.search(r"(?i)azul|dourad|marrom|acabamento", text), text
+        for text in _texts(bronze):
+            assert "mostrador" not in text.casefold(), text
+        assert ocean["issues"] == bronze["issues"] == []
+
+    assert (
+        listing_copy(BY_ID["ocean-blue"], "mercado_livre")["title"]
+        == "Relógio Veratus Ocean Blue Esportivo Mostrador Preto"
+    )
+    assert (
+        listing_copy(BY_ID["bronze-heritage"], "facebook")["title"]
+        == "Relógio Veratus Bronze Heritage Clássico e Marcante Pulseira em Tom Prateado"
+    )
+
+
+def test_facebook_comes_first_with_the_meta_catalog_limits(export) -> None:
+    assert CHANNELS[0] == "facebook"
+    assert CHANNEL_LABELS["facebook"] == "Facebook (catálogo da Meta)"
+    assert DESCRIPTION_LIMITS == {"facebook": 9999}
+    assert next(iter(export["summary"])) == "facebook"
+    facebook = [item for item in export["listings"] if item["channel"] == "facebook"]
+
+    assert len(facebook) == len(PRODUCTS)
+    for listing in facebook:
+        assert listing["title_limit"] == 200
+        assert listing["description_limit"] == 9999
+        assert len(listing["description"]) <= 9999
+        # No gate, o Facebook não é marketplace sem contato (a venda é no site).
+        for text in _texts(listing):
+            assert not hard_review_customer_reply(
+                text, product_collection=listing["collection"], channel=None
+            )
 
 
 def test_channel_names_and_unknown_channel() -> None:

@@ -2,10 +2,12 @@
 
     python scripts/exportar_anuncios.py --saida anuncios.json
 
-Todos os produtos do catálogo × Mercado Livre, Shopee, Amazon e TikTok Shop
+Todos os produtos do catálogo × Facebook (catálogo da Meta, o marketplace
+principal), Mercado Livre, Shopee, Amazon e TikTok Shop
 (veratus_agents/listing_content.py), mais o resumo de prontidão por canal:
 quantos prontos, quantos bloqueados e por quê. Só leitura: sem rede, sem custo
-e sem fornecedor (só campos públicos do catálogo e fatos confirmados).
+e sem fornecedor (só campos públicos do catálogo e fatos confirmados). O feed
+CSV do Commerce Manager sai de scripts/exportar_catalogo_meta.py.
 """
 
 from __future__ import annotations

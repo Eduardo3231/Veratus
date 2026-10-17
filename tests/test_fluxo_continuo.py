@@ -287,7 +287,8 @@ def test_one_broken_message_does_not_stop_the_channel(tmp_path):
     assert adapter.marks == {"m1": "V2_ERROR", "m2": "V2_SEND"}
     tasks = [alert for alert in engine.store.alerts() if alert["delivery"] == "PAINEL"]
     assert [task["reason"] for task in tasks] == ["ERRO_INTERNO"]
-    assert tasks[0]["summary"] == ""  # sem texto do cliente na tarefa
+    # Sem texto do cliente na tarefa: só o motivo.
+    assert tasks[0]["summary"] == "Uma mensagem não foi processada por erro interno."
 
 
 def test_purchase_process_question_is_not_a_legal_threat():
