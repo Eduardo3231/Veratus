@@ -294,3 +294,70 @@ def test_purchase_process_question_is_not_a_legal_threat():
     assert classify("qual o processo de compra?", {}).trigger is None
     assert classify("vou abrir um processo contra vocês", {}).trigger == "RECLAMACAO"
     assert classify("vou te colocar na justiça", {}).trigger == "RECLAMACAO"
+
+
+def test_marketplace_contact_request_stays_in_the_listing(tmp_path):
+    adapter = _Adapter()
+    store = ConversationStore(tmp_path / "cv.sqlite3", encryption_key=KEY)
+    engine = ConversationEngine(
+        store,
+        adapters={"mercado_livre": adapter},
+        model=TemplateSalesModel(),
+        alert_sender=lambda alert: "TEST",
+        mode_resolver=lambda _channel: "AUTO",
+        knowledge_context=dict,
+    )
+    result = engine.handle(
+        InboundText(
+            "mercado_livre", "q-1", "q-1", "me passa seu whatsapp que eu compro"
+        )
+    )
+    assert result["action"] == "SEND"
+    assert result["intent"] == "contato_marketplace"
+    assert adapter.sent == [
+        (
+            "Por aqui mesmo eu te ajudo, e a compra é feita pelo próprio anúncio. "
+            "O que você quer saber da peça?"
+        )
+    ]
+    # Fora do marketplace o pedido de contato não muda nada.
+    assert classify("me passa seu whatsapp", {"channel": "whatsapp"}).intent == "outro"
+
+
+def test_marketplace_replies_never_promise_direct_sale_terms():
+    import re
+
+    from veratus_agents.catalog import find_product
+    from veratus_agents.conversations import INTENT_RISK, DraftRequest
+    from veratus_agents.policy import hard_review_customer_reply
+
+    model = TemplateSalesModel()
+    direct_terms = re.compile(
+        r"7 dias|R\$|\bpix\b|mercado pago|link de pagamento", re.IGNORECASE
+    )
+    for channel in ("mercado_livre", "shopee", "tiktok_shop", "amazon"):
+        for product_id in ("ocean-blue", "lumiere-bracelet", None):
+            product = find_product(product_id) if product_id else None
+            for intent in INTENT_RISK:
+                for discount in (False, True):
+                    draft = model.draft(
+                        DraftRequest(
+                            channel=channel,
+                            conversation_id="q-1",
+                            message="pergunta",
+                            intent=intent,
+                            topic="as medidas",
+                            product=product,
+                            context={},
+                            order=None,
+                            discount_request=discount,
+                        )
+                    )
+                    reply = draft["customer_reply"]
+                    assert not direct_terms.search(reply), (channel, intent, reply)
+                    assert not hard_review_customer_reply(
+                        reply,
+                        draft.get("commercial_claims"),
+                        product_collection=(product or {}).get("collection"),
+                        channel=channel,
+                    ), (channel, intent, reply)

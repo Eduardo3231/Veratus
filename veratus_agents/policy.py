@@ -215,6 +215,17 @@ _MARKETPLACE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         ),
         "contato externo em marketplace",
     ),
+    (
+        # Prazo em dias, preço do site, Pix e link do Mercado Pago são da venda
+        # direta: no marketplace valem o anúncio e o envio dele. Frete grátis
+        # continua permitido (fato confirmado para todos os canais).
+        re.compile(
+            r"\bem\s+at[eé]\s+\d+\s+dias?\b|\bR\$\s*\d|\bpix\b|"
+            r"\bmercado\s+pago\b|\blink\s+de\s+pagamento\b",
+            re.IGNORECASE,
+        ),
+        "condição da venda direta em marketplace",
+    ),
 ]
 
 

@@ -88,6 +88,7 @@ INTENT_RISK = {
     "pagamento_conferencia": 1,
     "endereco_pago": 1,
     "insatisfacao": 1,
+    "contato_marketplace": 0,
     # Aviso de pagamento confirmado pelo provedor (payment_confirmed).
     "pagamento_confirmado": 0,
     # Assunto que o modelo não reconhece: risco 1 com o revisor aprovando, 9 sem.
@@ -141,6 +142,7 @@ POLICY_INTENTS = frozenset(
         "pagamento_conferencia",
         "endereco_pago",
         "insatisfacao",
+        "contato_marketplace",
     }
 )
 # Marca da oferta de chamar o responsável, guardada em ``last_intent``: um "sim"
@@ -202,6 +204,20 @@ _DISSATISFIED = _phrases(
     "absurdo",
     "péssimo",
     "pessimo",
+)
+# Pedido de contato fora do marketplace: a regra do canal proíbe passar contato.
+_CONTACT_REQUEST = _phrases(
+    "whatsapp",
+    "zap",
+    "telefone",
+    "seu número",
+    "seu numero",
+    "seu contato",
+    "seu instagram",
+    "seu e-mail",
+    "seu email",
+    "fora do site",
+    "fora do mercado livre",
 )
 _PAYMENT_OUTSIDE_LINK = _phrases(
     "manda primeiro",
@@ -503,6 +519,10 @@ def classify(text: str, conversation: dict[str, Any]) -> Classification:
         return Classification("fora_de_vendas", task="FORA_DE_VENDAS")
     if _has(normalized, _DISSATISFIED):
         return Classification("insatisfacao", task="RECLAMACAO")
+    if conversation.get("channel") in MARKETPLACES and _has(
+        normalized, _CONTACT_REQUEST
+    ):
+        return Classification("contato_marketplace")
     if _has(normalized, _PAYMENT_OUTSIDE_LINK):
         return Classification("pagamento_fora_do_link")
     if _has(normalized, _PAYMENT_CLAIMED):
@@ -615,6 +635,65 @@ def _claims(*refs: str) -> list[dict[str, str]]:
     ]
 
 
+# No marketplace, preço, frete, prazo, pagamento e devolução são os do anúncio:
+# as condições da venda direta (frete grátis, 7 dias, Pix) não valem lá.
+_MARKETPLACE_NAMES = {
+    "mercado_livre": "Mercado Livre",
+    "shopee": "Shopee",
+    "tiktok_shop": "TikTok Shop",
+    "amazon": "Amazon",
+}
+
+
+def _marketplace_reply(request: DraftRequest, name: str | None) -> str | None:
+    """Texto fixo do marketplace para as intenções que mudam lá; None = o geral."""
+    channel = _MARKETPLACE_NAMES.get(request.channel, "marketplace")
+    intent = request.intent
+    if intent == "desconto_insistente" or (
+        intent == "preco" and request.discount_request
+    ):
+        return (
+            "O valor é o do anúncio, e não trabalhamos com desconto. Posso ajudar "
+            "com mais alguma dúvida sobre a peça?"
+        )
+    if intent == "preco":
+        subject = f"do {name}" if name else "da peça"
+        return (
+            f"O valor {subject} é o que aparece no anúncio, e o frete e o prazo o "
+            f"{channel} calcula para o seu CEP antes da compra."
+        )
+    if intent in ("frete", "prazo", "politica_prazo"):
+        return (
+            f"O frete e o prazo de entrega o {channel} calcula para o seu CEP e "
+            "mostra no anúncio antes da compra."
+        )
+    if intent == "politica_troca":
+        return f"A troca e a devolução seguem as regras do {channel} para esta compra."
+    if intent in ("dados_pedido", "link_pagamento"):
+        return "O pagamento é feito no próprio anúncio, na hora da compra."
+    if intent in ("status_pedido", "rastreio"):
+        return (
+            f"O rastreio aparece na sua compra, no {channel}, assim que o pedido "
+            "for despachado."
+        )
+    if intent == "fato_pendente" and not request.topic_facts:
+        return (
+            f"Sobre {request.topic or 'isso'}, a equipe ainda vai confirmar; a "
+            "informação entra no anúncio assim que estiver confirmada."
+        )
+    if intent == "so_pessoa":
+        return (
+            "Isso a equipe precisa confirmar e fica registrado. Posso ajudar com "
+            "mais alguma dúvida sobre a peça?"
+        )
+    if intent == "outro":
+        return (
+            "Posso te ajudar com qualquer dúvida sobre a peça, e a compra é feita "
+            "pelo próprio anúncio."
+        )
+    return None
+
+
 class TemplateSalesModel:
     """Modelo simulado: respostas determinísticas a partir dos fatos confirmados.
 
@@ -634,7 +713,10 @@ class TemplateSalesModel:
         marketplace = request.channel in MARKETPLACES
         intent = request.intent
         claims: list[dict[str, str]] = []
-        if intent == "saudacao":
+        special = _marketplace_reply(request, name) if marketplace else None
+        if special is not None:
+            reply = special
+        elif intent == "saudacao":
             reply = (
                 "Olá! Que bom ter você por aqui. Você procura um relógio ou uma joia?"
             )
@@ -759,6 +841,11 @@ class TemplateSalesModel:
                 if marketplace
                 else "A confirmação do pagamento chega automaticamente pelo Mercado "
                 "Pago, e eu aviso por aqui assim que ela chegar."
+            )
+        elif intent == "contato_marketplace":
+            reply = (
+                "Por aqui mesmo eu te ajudo, e a compra é feita pelo próprio "
+                "anúncio. O que você quer saber da peça?"
             )
         elif intent == "pagamento_fora_do_link":
             reply = (

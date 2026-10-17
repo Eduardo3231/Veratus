@@ -1051,6 +1051,19 @@ def test_marketplace_gate_forbids_links_handles_and_contacts():
         hard_review_customer_reply("Frete grátis para você.", channel="mercado_livre")
         == []
     )
+    # Prazo, preço do site e pagamento são da venda direta, não do anúncio.
+    for text in (
+        "A entrega é em até 7 dias.",
+        "Sai por R$ 289,90.",
+        "Pode pagar no Pix.",
+        "Mando o link de pagamento do Mercado Pago.",
+    ):
+        assert "condição da venda direta em marketplace" in (
+            hard_review_customer_reply(text, channel="mercado_livre")
+        )
+        assert "condição da venda direta em marketplace" not in (
+            hard_review_customer_reply(text, channel="whatsapp")
+        )
 
 
 def test_mercado_livre_answers_wait_for_the_flag():
