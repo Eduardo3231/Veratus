@@ -122,6 +122,7 @@ O fundador aprovou a prévia ("pode aplicar tudo no site"). A reestruturação e
   - Caminho (b), originais de marca: só com nota fiscal e autorização do fabricante, com a marca verdadeira na página.
   - O fundador ainda não escolheu entre (a) e (b).
 - **Pendente:** confirmar por documento a origem dos nove relógios já no site, cujos criativos mostram marca de terceiros no mostrador (o mesmo risco que o conselho apontou).
+- **17/10, novo pedido ("adicione esses modelos ao catálogo"):** 6 imagens. Duas são criativos da Veratus com mostrador "Yacht-Master / Superlative Chronometer" e selos sem comprovação ("Produto verificado", "Garantia de procedência", "Nota fiscal emitida"). Quatro são fotos de relógios com Rolex (Submariner, Yacht-Master, Datejust), Omega (Speedmaster, Seamaster) e Diesel no mostrador, incluindo modelos que não existem na linha oficial (Submariner de luneta branca, Rolex de caixa preta, Speedmaster Snoopy bicolor). **Não entraram**, pela mesma decisão acima; nenhum arquivo foi para o repositório. Seguem valendo os caminhos (a) e (b).
 
 ## Founder skill e o conselho (14/10)
 
