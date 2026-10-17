@@ -1,7 +1,8 @@
 """Modelo virtual de um dia da Veratus: o código real, com o mundo de fora em dublês.
 
 Roda o serviço inteiro (integrations/webhook.py) num diretório temporário:
-webhooks assinados do WhatsApp e do Instagram, perguntas do Mercado Livre, pedido,
+webhooks assinados do Messenger da Página do Facebook (o canal principal), do
+WhatsApp e do Instagram, perguntas do Mercado Livre, pedido,
 link e webhook do Mercado Pago, e o envio marcado no painel. Toda chamada HTTP
 para fora cai num roteador falso que registra e responde: nada sai da máquina.
 
@@ -45,10 +46,12 @@ DEFAULT_DATE = "2026-10-20"
 ADMIN = "simulacao-admin"
 WA_SECRET = "simulacao-whatsapp"
 IG_SECRET = "simulacao-instagram"
+FB_SECRET = "simulacao-facebook"
 MP_SECRET = "simulacao-mercado-pago"
 # Fixo para os ids de conversa saírem iguais entre execuções; não é segredo real.
 SALT = "simulacao-veratus"
 IG_OWN = "17800000000000000"
+FB_PAGE = "100000000000001"
 FOUNDER = "5500000000000"
 PNID = "SIMPNID"
 PAY_BASE = "https://pagamento.simulado.invalid/checkout"
@@ -63,6 +66,9 @@ SIMULATION_ENV = {
     "INSTAGRAM_APP_SECRET": IG_SECRET,
     "INSTAGRAM_USER_ID": IG_OWN,
     "INSTAGRAM_ACCESS_TOKEN": "simulacao",
+    "FACEBOOK_APP_SECRET": FB_SECRET,
+    "META_PAGE_ID": FB_PAGE,
+    "META_PAGE_ACCESS_TOKEN": "simulacao",
     "MERCADO_PAGO_ACCESS_TOKEN": "simulacao",
     "MERCADO_PAGO_WEBHOOK_SECRET": MP_SECRET,
     "PUBLIC_BASE_URL": "https://veratus.simulado.invalid",
@@ -78,8 +84,17 @@ SIMULATION_ENV = {
     "OPENAI_API_KEY": "",
     "CONVERSATION_AUTOPROCESS_ENABLED": "false",
 }
-CHANNELS = ("whatsapp", "instagram", "mercado_livre", "shopee", "tiktok_shop", "amazon")
+CHANNELS = (
+    "facebook",
+    "whatsapp",
+    "instagram",
+    "mercado_livre",
+    "shopee",
+    "tiktok_shop",
+    "amazon",
+)
 SEND_FLAGS = (
+    "FACEBOOK_MESSAGING_ENABLED",
     "WHATSAPP_SEND_ENABLED",
     "INSTAGRAM_MESSAGING_ENABLED",
     "INSTAGRAM_DM_ENABLED",
@@ -110,6 +125,7 @@ class Cliente:
     produto: str | None = None
     numero: str | None = None
     ig_id: str | None = None
+    psid: str | None = None
     perguntas: list[int] = field(default_factory=list)
     conversas: set[str] = field(default_factory=set)
     pedido: str | None = None
@@ -187,6 +203,32 @@ def clientes() -> dict[str, Cliente]:
             "polar-blue",
             numero="5511900000109",
         ),
+        # Facebook, o canal principal: loja do catálogo da Meta, anúncio que abre
+        # o Messenger e mensagem direta à Página.
+        Cliente(
+            "c10",
+            "Cliente 10 · Loja do Facebook",
+            "facebook",
+            "loja do Facebook (catálogo da Meta)",
+            "ocean-blue",
+            psid="fb-cliente-10",
+        ),
+        Cliente(
+            "c11",
+            "Cliente 11 · Anúncio no Facebook",
+            "facebook",
+            "anúncio que abre o Messenger",
+            "emerald-signature",
+            psid="fb-cliente-11",
+        ),
+        Cliente(
+            "c12",
+            "Cliente 12 · Página do Facebook",
+            "facebook",
+            "mensagem direta à Página",
+            "platinum-classic",
+            psid="fb-cliente-12",
+        ),
     ]
     return {item.key: item for item in lista}
 
@@ -207,6 +249,41 @@ def _site_message(name: str, product_id: str, order: bool = False) -> str:
 AD = {"ctwa_clid": "simulado-anuncio-1", "source_type": "ad", "headline": "Veratus"}
 # (hora, cliente, tipo, dados). Executado em ordem de hora: o dia intercalado.
 ROTEIRO: list[tuple[str, str, str, dict[str, Any]]] = [
+    # A mensagem pronta da loja do Facebook.
+    ("08:42", "c10", "fb", {"texto": "Olá, isso ainda está disponível?"}),
+    ("08:44", "c10", "fb", {"texto": "É o Ocean Blue. Quanto custa?"}),
+    ("08:47", "c10", "fb", {"texto": "Quero comprar"}),
+    (
+        "08:50",
+        "c10",
+        "fb",
+        {"texto": "Cliente Dez, 80010-010, Rua XV de Novembro, 10", "dados": True},
+    ),
+    ("09:02", "c10", "pago", {}),
+    (
+        "11:40",
+        "c11",
+        "fb",
+        {"texto": "Oi! Vi o anúncio do Emerald Signature. Demora quantos dias?"},
+    ),
+    ("11:42", "c11", "fb", {"texto": "Posso pagar quando chegar?"}),
+    ("11:45", "c11", "fb", {"texto": "Tudo bem. Quero o Emerald Signature"}),
+    (
+        "11:48",
+        "c11",
+        "fb",
+        {"texto": "Cliente Onze, 50010-000, Rua do Bom Jesus, 11", "dados": True},
+    ),
+    ("12:05", "c11", "pago", {}),
+    ("16:30", "c10", "envio", {}),
+    ("17:20", "c11", "envio", {}),
+    (
+        "19:05",
+        "c12",
+        "fb",
+        {"texto": "Boa noite! Vocês fazem gravação do nome no Platinum Classic?"},
+    ),
+    ("19:08", "c12", "fb", {"texto": "Entendi. E qual o prazo de entrega?"}),
     ("09:04", "c1", "wa", {"texto": _site_message("Royal Blue", "royal-blue")}),
     ("09:06", "c1", "wa", {"texto": "Tem desconto no Pix?"}),
     ("09:08", "c1", "wa", {"texto": "Fechado, quero comprar"}),
@@ -306,7 +383,7 @@ ROTEIRO: list[tuple[str, str, str, dict[str, Any]]] = [
 
 _REASONS = {
     "PEDIDO_DE_ATENDENTE": "o cliente pediu uma pessoa",
-    "RECLAMACAO": "ameaça jurídica ou pública (Procon)",
+    "RECLAMACAO": "ameaça jurídica (Procon, processo ou advogado)",
     "PROBLEMA_PAGAMENTO": "conferir pagamento",
     "SO_PESSOA": "pedido especial",
     "FORA_DE_VENDAS": "assunto fora de vendas",
@@ -338,7 +415,25 @@ class FakeRouter:
         method = method.upper()
         self.calls.append({"metodo": method, "host": host, "caminho": _path(path)})
         status, data = 404, {"error": "nao_simulado"}
-        if host == "graph.facebook.com" and path.endswith("/messages"):
+        if (
+            host == "graph.facebook.com"
+            and path.endswith("/messages")
+            and body.get("messaging_product") != "whatsapp"
+        ):
+            # Messenger da Página: mesma API do Graph, sem messaging_product.
+            recipient = body.get("recipient") or {}
+            self.outbox.append(
+                {
+                    "canal": "facebook",
+                    "para": recipient.get("id"),
+                    "texto": (body.get("message") or {}).get("text"),
+                }
+            )
+            status, data = (
+                200,
+                {"message_id": f"m_simulado.{self._next()}", "recipient_id": "x"},
+            )
+        elif host == "graph.facebook.com" and path.endswith("/messages"):
             if body.get("type") == "template":
                 self.outbox.append(
                     {
@@ -436,7 +531,7 @@ def _path(path: str) -> str:
         if (
             segment.isdigit()
             or segment.startswith(("SIM-", "PAG-"))
-            or segment in (IG_OWN, PNID)
+            or segment in (IG_OWN, PNID, FB_PAGE)
         ):
             segments.append(":id")
         else:
@@ -536,6 +631,39 @@ class Dia:
         if response.status_code != 200:
             raise RuntimeError(f"webhook whatsapp: {response.status_code}")
         self._process("whatsapp")
+
+    def fb(self, cliente: Cliente, texto: str) -> None:
+        self._wa_counter += 1
+        # Evento de entrada: a Página da Veratus é quem recebe a mensagem.
+        own_page = {"id": FB_PAGE}
+        payload = {
+            "object": "page",
+            "entry": [
+                {
+                    "id": FB_PAGE,
+                    "messaging": [
+                        {
+                            "sender": {"id": cliente.psid},
+                            "recipient": own_page,
+                            "timestamp": int(time.time() * 1000),
+                            "message": {
+                                "mid": f"m_cliente.{self._wa_counter}",
+                                "text": texto,
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+        body = json.dumps(payload).encode()
+        response = self._post(
+            "/integrations/facebook/webhook",
+            data=body,
+            headers=_meta_headers(FB_SECRET, body),
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"webhook facebook: {response.status_code}")
+        self._process("facebook")
 
     def comentario(self, cliente: Cliente, texto: str, media: str) -> None:
         payload = {
@@ -910,7 +1038,7 @@ class Dia:
     def rodar(self) -> None:
         for t, key, tipo, dados in sorted(ROTEIRO, key=lambda step: step[0]):
             cliente = self.clientes[key]
-            if tipo == "wa":
+            if tipo in ("wa", "fb"):
                 texto = (
                     "Envia nome, CEP e endereço"
                     if dados.get("dados")
@@ -924,7 +1052,10 @@ class Dia:
                     texto,
                     origem=cliente.origem if len(cliente.conversas) == 0 else None,
                 )
-                self.wa(cliente, dados["texto"], dados.get("referral"))
+                if tipo == "fb":
+                    self.fb(cliente, dados["texto"])
+                else:
+                    self.wa(cliente, dados["texto"], dados.get("referral"))
             elif tipo == "comentario":
                 self._add(
                     t,
@@ -1004,6 +1135,10 @@ class Dia:
                 "oferta",
             )
         }
+        # Chamada ao fundador é todo alerta que não fica só no painel.
+        alertas = engine.store.alerts()
+        chamadas = sum(1 for alert in alertas if alert["delivery"] != "PAINEL")
+        painel = sum(1 for alert in alertas if alert["delivery"] == "PAINEL")
         chamadas_http: dict[str, int] = {}
         for call in self.router.calls:
             label = f"{call['metodo']} {call['host']}{call['caminho']}"
@@ -1021,8 +1156,8 @@ class Dia:
                 ),
                 "enviados": sum(by_status.get(s, 0) for s in ("SHIPPED", "DELIVERED")),
                 "receita_confirmada_brl": orders["confirmed_net_merchandise_brl"],
-                "chamadas_ao_fundador": contagem["chamada"],
-                "tarefas_no_painel": contagem["tarefa"],
+                "chamadas_ao_fundador": chamadas,
+                "tarefas_no_painel": painel,
                 "respostas_enviadas": contagem["resposta_enviada"],
                 "rascunhos": contagem["rascunho"],
             },

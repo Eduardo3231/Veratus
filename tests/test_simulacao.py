@@ -30,7 +30,7 @@ def resultado():
 def test_the_day_goes_from_lead_to_paid_and_shipped_orders(resultado):
     alvo = resultado[0]["rodadas"]["alvo"]
     funil = alvo["funil"]
-    assert funil["leads"] == 9
+    assert funil["leads"] == 12
     assert funil["pedidos"] >= 3
     assert funil["pagos"] >= 3
     assert funil["enviados"] >= 3
@@ -46,6 +46,22 @@ def test_the_founder_is_called_only_when_the_client_asks_or_on_a_legal_threat(
             reasons |= set(canal["handoffs_by_reason"])
         assert reasons <= {"PEDIDO_DE_ATENDENTE", "RECLAMACAO"}
         assert rodada["funil"]["chamadas_ao_fundador"] == 2
+
+
+def test_facebook_is_the_main_channel_and_closes_sales(resultado):
+    assert resultado[0]["fluxo"]["channels"][0]["channel"] == "facebook"
+    alvo = resultado[0]["rodadas"]["alvo"]
+    facebook = [c for c in alvo["conversas"] if c["canal"] == "facebook"]
+    assert len(facebook) == 3
+    assert sum(1 for c in facebook if c["desfecho"] == "enviado") == 2
+    assert alvo["metricas_por_canal"]["facebook"]["orders_paid"] == 2
+    replies = [
+        item["texto"]
+        for item in alvo["linha_do_tempo"]
+        if item["canal"] == "facebook" and item["tipo"] == "resposta_enviada"
+    ]
+    # "Ainda está disponível?" não recebe promessa de estoque.
+    assert replies and "disponível" not in replies[0].lower()
 
 
 def test_today_nothing_leaves_the_machine(resultado):
@@ -78,6 +94,10 @@ def test_output_has_no_personal_data(resultado):
             assert cliente.numero not in dump
     assert simular_operacao.FOUNDER not in dump
     assert "01001-000" not in dump and "Praça da Sé" not in dump
+    assert "80010-010" not in dump and "Rua XV de Novembro" not in dump
+    for cliente in simular_operacao.clientes().values():
+        if cliente.psid:
+            assert cliente.psid not in dump
     assert not re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", dump)
 
 

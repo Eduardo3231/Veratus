@@ -463,7 +463,20 @@ _INTENTS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        # A mensagem pronta do Facebook ("Olá, isso ainda está disponível?").
+        "preco",
+        _phrases(
+            "quanto custa",
+            "quanto é",
+            "quanto e",
+            "preço",
+            "preco",
+            "valor",
+            "quanto sai",
+        ),
+    ),
+    (
+        # A mensagem pronta do Facebook ("Olá, isso ainda está disponível?"). Depois
+        # do preço: "confirmar disponibilidade e valor" (botão do site) quer o valor.
         "disponibilidade",
         _phrases(
             "ainda está disponível",
@@ -475,18 +488,6 @@ _INTENTS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "disponibilidade",
             "tem em estoque",
             "ainda tem",
-        ),
-    ),
-    (
-        "preco",
-        _phrases(
-            "quanto custa",
-            "quanto é",
-            "quanto e",
-            "preço",
-            "preco",
-            "valor",
-            "quanto sai",
         ),
     ),
     ("frete", _phrases("frete", "entrega grátis", "entrega gratis")),

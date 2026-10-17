@@ -2664,7 +2664,7 @@ def _conversation_order_factory(channel, conversation_id, product):
         return None
     reference = (
         conversation_id
-        if re.fullmatch(r"(?:wa|ig)_[a-f0-9]{32}", conversation_id)
+        if re.fullmatch(r"(?:wa|ig|fb)_[a-f0-9]{32}", conversation_id)
         else None
     )
     _, order = _order_ledger().record(

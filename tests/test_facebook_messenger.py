@@ -265,3 +265,14 @@ def test_meta_catalog_report_needs_the_admin_token():
         )
     assert denied.status_code in (401, 403)
     assert report.status_code == 200 and report.json["external_write"] is False
+
+
+def test_site_button_asking_availability_and_value_still_gets_the_price():
+    from veratus_agents.conversations import classify
+
+    site = (
+        "Olá! Vim pelo site da Veratus e tenho interesse em Polar Blue.\n"
+        "Gostaria de confirmar disponibilidade e valor."
+    )
+    assert classify(site, {}).intent == "preco"
+    assert classify("Olá, isso ainda está disponível?", {}).intent == "disponibilidade"

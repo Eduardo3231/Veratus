@@ -29,6 +29,7 @@ class OrderChannel(StrEnum):
     TIKTOK_SHOP = "tiktok_shop"
     AMAZON = "amazon"
     INSTAGRAM = "instagram"
+    FACEBOOK = "facebook"
     OTHER = "other"
 
 
@@ -94,10 +95,10 @@ class OrderRecord(BaseModel):
     sku: str = Field(min_length=2, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")
     channel: OrderChannel
     visit_ref: str | None = Field(default=None, pattern=r"^VT-[A-Z0-9]{1,13}$")
-    # Pseudonymous conversation id (HMAC: wa_ WhatsApp, ig_ Instagram), never
-    # the phone number or the account id.
+    # Pseudonymous conversation id (HMAC: wa_ WhatsApp, ig_ Instagram, fb_
+    # Facebook Messenger), never the phone number or the account id.
     conversation_ref: str | None = Field(
-        default=None, pattern=r"^(?:wa|ig)_[a-f0-9]{32}$"
+        default=None, pattern=r"^(?:wa|ig|fb)_[a-f0-9]{32}$"
     )
     utm_source: str | None = Field(default=None, max_length=80)
     utm_medium: str | None = Field(default=None, max_length=80)
