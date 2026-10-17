@@ -1,7 +1,39 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 17/10/2026, Claude Code (hook de sessão que instala os agentes da The Agency; etapa 1 da skill img-to-html em `design-systems/veratus-landing/`).
+**Última atualização:** 17/10/2026 (noite), Claude Code: vendas pela IA com o fundador só quando o cliente pede, fluxo contínuo por webhook, anúncios dos marketplaces, simulação do dia, correções na estrutura de agentes e no site, e a skill img-to-html aplicada em `design-systems/veratus-landing/`. Nada foi ligado, publicado ou mandado para a `main`.
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
+
+## Rodada de 17/10: a IA vende e só chama o fundador quando o cliente pede
+
+Pedido do fundador: "negociação com o cliente feita por IA (apenas me chamar, caso o cliente peça) -> conclusão da venda". Tudo na branch, com as flags como estavam (`SHADOW` e envios desligados). Feito com agentes da The Agency (lista no painel abaixo) e revisado por Code Reviewer e Legal Compliance Checker.
+
+- **Política de passagem v2** (`veratus_agents/conversations.py`):
+  - **CHAMADA** (estado `HUMAN` + alerta): o cliente pede uma pessoa (`PEDIDO_DE_ATENDENTE`, agora com "falar com o responsável", "me liga", "videochamada"), ou aceita a oferta do agente ("sim" curto logo depois da oferta); e a exceção de segurança, ameaça jurídica ou pública (`RECLAMACAO`: Procon, Reclame Aqui, advogado, abrir processo, na justiça). "Processo" sozinho não conta ("qual o processo de compra?").
+  - **TAREFA** (painel, `delivery=PAINEL`, sem ping; a IA segue): conferência de pagamento (estorno, cobrado duas vezes), nota fiscal, atacado, personalização, fora de vendas, troca de endereço depois de pago, insatisfação sem ameaça, fato não confirmado e `ENVIAR_RASTREIO` (cliente pede rastreio de pedido já despachado; o ledger não guarda o código).
+  - **Só a IA:** desconto em qualquer insistência (mantém o preço com fatos confirmados e oferece o responsável), "já paguei"/comprovante (a confirmação vem do Mercado Pago), "manda primeiro"/pago na entrega, Sedex e entrega amanhã, troca fora do prazo, IA travada (oferece o responsável em vez de passar).
+  - `GET /os/conversations/metrics` ganhou `tasks_by_reason`; `handoffs_by_reason` conta só chamadas.
+- **Conclusão da venda:** quando o webhook do Mercado Pago confirma (`payment_confirmed`), o cliente recebe "Pagamento confirmado pelo Mercado Pago..." pelo mesmo caminho de decisão (SHADOW enfileira; fora da janela de 24 h, só o template `pedido_confirmado`, que ainda não tem envio implementado: vai para a fila). Um aviso por pedido.
+- **Link de pagamento pelo nível do canal:** `_order_and_link` agora consulta `operations.permission_allowed`; fora de `AUTO` o pedido é registrado, mas o link não é criado (`CHANNEL_MODE_<nível>`).
+- **WhatsApp:** o pedido de pessoa na entrada (`wants_human`) usa a mesma lista do motor e gera exatamente uma chamada (`on_handoff` → `ConversationEngine.person_requested`).
+- **Marketplace** (`policy.py` e texto fixo): o gate barra prazo em dias, valor em R$, Pix, Mercado Pago e link de pagamento nas respostas do Mercado Livre, Shopee, TikTok Shop e Amazon (frete grátis segue permitido). O texto fixo tem versão de marketplace para preço, frete, prazo, troca, pagamento, rastreio, fato pendente e pedido de contato ("por aqui mesmo eu te ajudo, e a compra é feita pelo próprio anúncio").
+- **Fluxo contínuo** (`integrations/webhook.py`): `CONVERSATION_AUTOPROCESS_ENABLED` (padrão `false`, em `render.yaml` e `.env.example`). Ligada, cada webhook do WhatsApp e do Instagram que grava mensagem nova, e cada notificação `questions` do Mercado Livre, processa o canal em segundo plano (uma execução por canal por processo; o que chega no meio é pego na volta seguinte). Substitui o cron de `/os/conversations/process`.
+- **Bugs corrigidos no caminho:**
+  - o provedor de token do Mercado Livre chamava `from_env()` sem o store: o `TypeError` era engolido e **as perguntas do Mercado Livre nunca chegavam ao motor**;
+  - falha do modelo de linguagem derrubava o laço do canal: agora cai no texto fixo (evento `MODEL_FAILED`), e uma mensagem com erro vira tarefa `ERRO_INTERNO` sem parar as outras.
+- **Mapa do fluxo:** `veratus_agents/sales_flow.py` + `GET /os/flow` (admin): canal, origem do lead, papel por etapa (só ids do `AGENT_REGISTRY`), nível efetivo, chaves de envio (booleano) e métricas.
+- **Estrutura de agentes** (`operations.py`, `marketplace_ops.py`): o contrato do `paid-acquisition-worker` era sobrescrito pelo laço genérico; o guard de publicação usava `marketplace-agent`, que não existe, e pulava a checagem de permissão; os 4 papéis de 13/10 agora nunca recebem PUBLISH, SPEND, SEND_MARKETING, WRITE_PRICE nem EXTERNAL_WRITE em execução; `START_HERE.md` apontava para cinco documentos inexistentes.
+- **Docker:** `.dockerignore` excluía `social/` e o `Dockerfile` o copiava: **o build da imagem estava quebrado nesta branch** (reproduzido com `docker build`). A imagem leva só `social/calendario-*.json` e o `manifest.json` da quarentena, sem o qual o bloqueio de mídia com marca de terceiros ficava desligado dentro do serviço.
+- **Anúncios** (`veratus_agents/listing_content.py`, `scripts/exportar_anuncios.py`): título, descrição e destaques por canal só com campos públicos e fatos confirmados, todo texto passando no gate do canal; bloqueios junto. Hoje: **0 de 18 prontos** em cada canal (joias sem preço e em `DRAFT`; relógios sem foto real, origem e ficha). Limites de título (60/120/200/255) são suposição a conferir no painel de cada canal.
+- **Simulação** (`scripts/simular_operacao.py`): o serviço inteiro num diretório temporário, com Meta, Mercado Pago e Mercado Livre num roteador falso. Nove clientes fictícios, duas rodadas. Modo alvo: 4 pedidos, 3 pagos e enviados, 2 chamadas ao fundador (cliente pediu o dono; Procon), 3 tarefas. Hoje (padrões de produção): nenhuma escrita para fora, só a leitura das perguntas do Mercado Livre. Painel: https://claude.ai/artifact/52zdUdLvmqZTpafpKSU1fL (privado; o fundador compartilha).
+- **Site** (`landing/`, `scripts/build_landing.py`): contraste do rodapé do hero abaixo do AA, 31 alvos de toque menores que 44 px no celular, anel de foco cortado nos cards (o `ul[role=list]` anulava a margem do trilho), foco fora da tela no carrossel e sob a barra fixa, páginas legais sem estilo desde 16/10, números de "Como comprar" saindo do counter CSS para o HTML. Sem mudança de texto, preço ou foto.
+- **Skill img-to-html** (`design-systems/veratus-landing/`): etapa 1 (referência, wireframe tipado, plano) e etapas 2 a 5 (index.html sem CSS/JS inline, tokens no `:root`, uma classe por região). Diferença medida contra a referência: 0,01/255. É uma recriação de referência: `landing/` continua sendo o site.
+- **Verificação:** suíte inteira verde (ver o último commit desta rodada), `ruff check` e `ruff format --check` limpos, `knowledge lint` e `knowledge eval` (13/13), `compileall`, sintaxe 3.11 conferida com `python3.11 -m py_compile`.
+- **Pendências desta rodada:**
+  1. Ligar os canais (ordem em "Para ligar cada canal", abaixo): cada flag é decisão do fundador na hora.
+  2. Código de rastreio no ledger (hoje vira tarefa) e `send_template` do `pedido_confirmado` para fora da janela.
+  3. `social/fila-publicacao.csv` e `social/publishing-payloads.json` apontam para mídia em quarentena; nada lê esses arquivos. Aposentar ou refazer quando houver mídia liberada.
+  4. `integrations/agent_api.md` cita `docs/veratus-os.md`, que nunca existiu.
+  5. O hook de sessão só vale para sessões novas depois de chegar à `main`; o merge na `main` faz deploy no Render.
 
 ## Sessões na nuvem: agentes da The Agency e dependências (17/10)
 
@@ -201,7 +233,7 @@ O fundador decidiu que **os relógios sobem**: entram nos posts, nos anúncios e
   - `AUTO` envia também fechamento, coleta de dados, link, status e rastreio.
   - Risco 2 e intenção desconhecida nunca saem sozinhos.
   - Mesmo em `AUTO`, nada sai sem a chave do canal (`WHATSAPP_SEND_ENABLED`, `INSTAGRAM_MESSAGING_ENABLED`, `MERCADO_LIVRE_ANSWERS_ENABLED`). Quando o envio é bloqueado, o rascunho volta para a fila com o motivo.
-- **Gatilhos de passagem ao fundador** (`HUMAN`): atendente, reclamação/Procon/Reclame Aqui, problema de pagamento (inclusive comprovante), fora da política (desconto pela 2ª vez, troca fora do prazo, entrega expressa), fraude (enviar antes de pagar, pagar fora do link, trocar endereço depois de pago), só uma pessoa faz (nota fiscal, ligação, personalização, atacado), fora de vendas, IA travada (3 mensagens sem avanço ou 2 reprovações do gate).
+- **Gatilhos de passagem ao fundador** (`HUMAN`) — *substituídos pela política v2 de 17/10 (seção do topo)*: atendente, reclamação/Procon/Reclame Aqui, problema de pagamento (inclusive comprovante), fora da política (desconto pela 2ª vez, troca fora do prazo, entrega expressa), fraude (enviar antes de pagar, pagar fora do link, trocar endereço depois de pago), só uma pessoa faz (nota fiscal, ligação, personalização, atacado), fora de vendas, IA travada (3 mensagens sem avanço ou 2 reprovações do gate).
   - **Interpretação registrada:** o 9º gatilho, fato não confirmado, *não* põe a conversa em `HUMAN`. O agente responde "a equipe confirma" e o fundador recebe o alerta, mas a conversa continua (o prompt diz que ele "não bloqueia o resto da conversa"). Os outros oito param a conversa.
 - **Alerta ao fundador:**
   - template de utilidade `alerta_fundador` para `FOUNDER_ALERT_WHATSAPP` (motivo, resumo de até 3 linhas sem telefone/e-mail, sugestão);
@@ -304,7 +336,7 @@ Sempre na ordem: chave → teste em `SHADOW` → readiness → aprovação → s
 1. **Pacote:** commitar `config/channel_fees_2026-10.json` (substitui o provisório), `tests/golden/channel_economics_cases.json`, `knowledge/` (voz, roteiro, objeções, skills), `social/calendario-2026-10.json`/`.csv` e `landing/social/posts/2026-10/*.jpg`. Depois:
    - rodar `pytest -q tests/test_channel_economics.py` (os 60 casos);
    - rodar `knowledge lint` e `knowledge eval`.
-2. **Cron do processamento:** cron no Render a cada minuto chamando `POST /os/conversations/process` com `{"channel":"whatsapp"}` (e um por canal ligado), com `X-Veratus-Admin-Token`.
+2. **Processamento:** `CONVERSATION_AUTOPROCESS_ENABLED=true` (17/10) processa cada canal quando o webhook grava mensagem nova, sem cron. A alternativa continua valendo: cron no Render a cada minuto chamando `POST /os/conversations/process` com `{"channel":"whatsapp"}` (e um por canal ligado), com `X-Veratus-Admin-Token`.
 3. **WhatsApp:**
    - aprovar na Meta os templates de utilidade `pedido_confirmado`, `pedido_enviado` e `alerta_fundador` (parâmetros: motivo, resumo e sugestão);
    - cadastrar `FOUNDER_ALERT_WHATSAPP` no Render;

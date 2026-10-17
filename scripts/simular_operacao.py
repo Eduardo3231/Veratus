@@ -767,7 +767,9 @@ class Dia:
                         "link",
                         "Link do Mercado Pago criado (Pix ou cartão)",
                     )
+                    cliente.desfecho = "aguardando pagamento"
                 else:
+                    cliente.desfecho = "pedido sem link (canal em SHADOW)"
                     self._add(
                         t,
                         cliente,
