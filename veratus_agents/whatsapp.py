@@ -24,7 +24,7 @@ from uuid import uuid4
 import requests
 from cryptography.fernet import Fernet
 
-from .meta_webhooks import env_flag, graph_api_version, normalize_text
+from .meta_webhooks import env_flag, graph_api_version
 from .sqlstore import SqlStore
 
 MAX_TEXT_LENGTH = 4096
@@ -38,14 +38,6 @@ STATES = ("BOT", "HUMAN", "CLOSED")
 _VISIT_REF = re.compile(r"\bVT-[A-Z0-9]{1,13}\b")
 _PRODUCT = re.compile(r"\bproduto=([a-z0-9-]{2,60})\b")
 _ORIGIN = re.compile(r"Origem da visita:\s*([^\n]+)")
-_HANDOFF_PHRASES = (
-    "atendente",
-    "humano",
-    "humana",
-    "pessoa real",
-    "falar com alguem",
-    "falar com uma pessoa",
-)
 
 
 class WhatsAppConfigurationError(RuntimeError):
@@ -148,8 +140,10 @@ def extract_attribution(text: str) -> dict[str, Any]:
 
 
 def wants_human(text: str) -> bool:
-    normalized = normalize_text(text)
-    return any(phrase in normalized for phrase in _HANDOFF_PHRASES)
+    """Mesma lista e mesma regra do motor (PEDIDO_DE_ATENDENTE)."""
+    from .conversations import asks_for_person
+
+    return asks_for_person(text)
 
 
 def send_block_reasons(
@@ -267,6 +261,8 @@ CREATE TABLE IF NOT EXISTS wa_audit (
 
 DraftRunner = Callable[..., dict[str, Any]]
 RunLookup = Callable[[str], dict[str, Any] | None]
+# (conversa, mensagem, texto) de cada pedido de pessoa que tirou a conversa do BOT.
+HandoffCallback = Callable[[str, str, str], None]
 
 
 class WhatsAppChannel(SqlStore):
@@ -295,10 +291,20 @@ class WhatsAppChannel(SqlStore):
 
     # -- inbound -----------------------------------------------------------------
 
-    def receive(self, payload: dict[str, Any]) -> dict[str, int]:
-        """Store new messages and statuses. Meta retries, so replays are no-ops."""
+    def receive(
+        self,
+        payload: dict[str, Any],
+        *,
+        on_handoff: HandoffCallback | None = None,
+    ) -> dict[str, int]:
+        """Store new messages and statuses. Meta retries, so replays are no-ops.
+
+        ``on_handoff`` é chamado uma vez por pedido de pessoa, depois de gravar:
+        o motor registra a CHAMADA ao fundador (alerta e estado HUMAN).
+        """
         inbound, statuses = parse_notification(payload)
         counts = {"messages": 0, "duplicates": 0, "statuses": 0, "handoffs": 0}
+        requested: list[tuple[str, str, str]] = []
         now = _now().isoformat()
         with self._connect() as (db, mark):
             for message in inbound:
@@ -363,6 +369,9 @@ class WhatsAppChannel(SqlStore):
                         "customer",
                         {"message_id": message.message_id},
                     )
+                    requested.append(
+                        (conversation_id, message.message_id, message.text or "")
+                    )
             for status in statuses:
                 counts["statuses"] += db.execute(
                     self._sql(
@@ -372,6 +381,10 @@ class WhatsAppChannel(SqlStore):
                     ),
                     [status.status, status.message_id],
                 ).rowcount
+        # Fora da transação: o motor grava no mesmo banco.
+        if on_handoff is not None:
+            for item in requested:
+                on_handoff(*item)
         return counts
 
     def _apply_inbound(

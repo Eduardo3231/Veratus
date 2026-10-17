@@ -818,6 +818,9 @@ def mercado_livre_notifications():
         ), 503
     except Exception as exc:  # noqa: BLE001 - public boundary sanitizes storage errors
         return _oauth_persistence_unavailable("notification", exc)
+    if inserted and payload.get("topic") == "questions":
+        # Pergunta nova no anúncio: o motor busca as não respondidas na API.
+        _autoprocess("mercado_livre")
     return jsonify(
         {
             "status": "accepted" if inserted else "duplicate",
@@ -2190,11 +2193,31 @@ def whatsapp_webhook():
     from veratus_agents.whatsapp import WhatsAppConfigurationError
 
     try:
-        counts = _whatsapp_channel().receive(payload)
+        counts = _whatsapp_channel().receive(
+            payload, on_handoff=_whatsapp_person_requested
+        )
     except WhatsAppConfigurationError as exc:
         # 503 makes Meta retry for up to 7 days instead of losing the message.
         return _whatsapp_unavailable(exc)
+    if counts.get("messages"):
+        _autoprocess("whatsapp")
     return jsonify({"status": "received", **counts}), 200
+
+
+def _whatsapp_person_requested(conversation_id, message_id, text):
+    """Pedido de pessoa na entrada do WhatsApp: a mesma CHAMADA do motor."""
+    from veratus_agents.conversations import InboundText
+
+    try:
+        engine, _ = _engine_or_error()
+        if engine is not None:
+            engine.person_requested(
+                InboundText("whatsapp", conversation_id, message_id, text)
+            )
+    except Exception as exc:  # noqa: BLE001 - o webhook da Meta não cai pelo alerta
+        app.logger.error(
+            "whatsapp_person_request_failed error_type=%s", type(exc).__name__
+        )
 
 
 @app.route("/integrations/whatsapp/drafts/process", methods=["POST"])
@@ -2462,6 +2485,8 @@ def instagram_webhook():
             )
             stored += inserted
         counts = {**counts, "direct_messages": stored}
+        if stored:
+            _autoprocess("instagram")
     return jsonify({"status": "received", **counts}), 200
 
 
@@ -2543,7 +2568,8 @@ def _mercado_livre_token_provider():
             return None
         from veratus_agents.marketplace_clients import MercadoLivreOAuthTokenManager
 
-        manager = MercadoLivreOAuthTokenManager.from_env()
+        # Sem o store, from_env levantava TypeError e as perguntas nunca chegavam.
+        manager = MercadoLivreOAuthTokenManager.from_env(_mercado_oauth_store())
     except Exception:  # noqa: BLE001 - sem conexão, o canal só enfileira
         return None
     return manager.access_token
@@ -2683,7 +2709,7 @@ def os_conversations_process():
     data, error = _agent_json()
     if error:
         return jsonify({"status": "error", "message": error[0]}), error[1]
-    from veratus_agents.conversations import CHANNELS, InboundText
+    from veratus_agents.conversations import CHANNELS
 
     channel, limit = data.get("channel"), data.get("limit", 20)
     if (
@@ -2695,6 +2721,14 @@ def os_conversations_process():
     engine, error = _engine_or_error()
     if error:
         return error
+    results = _process_channel(engine, channel, limit)
+    return jsonify({"status": "ok", "channel": channel, "results": results}), 200
+
+
+def _process_channel(engine, channel, limit=20):
+    """Passa as mensagens pendentes do canal pelo motor (rota e processamento contínuo)."""
+    from veratus_agents.conversations import InboundText
+
     adapter = engine.adapters.get(channel)
     if channel == "mercado_livre":
         inbound = [
@@ -2712,7 +2746,28 @@ def os_conversations_process():
         inbound = []
     results = []
     for item in inbound:
-        result = engine.handle(item)
+        try:
+            result = engine.handle(item)
+        except Exception as exc:  # noqa: BLE001 - uma mensagem não para as outras
+            # Sem nova tentativa automática: repetir poderia duplicar envio ou
+            # alerta. A mensagem vira tarefa no painel e sai da fila do canal.
+            app.logger.error(
+                "conversation_message_failed channel=%s error_type=%s",
+                channel,
+                type(exc).__name__,
+            )
+            try:
+                engine.message_failed(item, exc)
+            except Exception as task_exc:  # noqa: BLE001 - a fila do canal segue
+                app.logger.error(
+                    "conversation_task_failed channel=%s error_type=%s",
+                    channel,
+                    type(task_exc).__name__,
+                )
+            if hasattr(adapter, "mark"):
+                adapter.mark(item.message_id, "V2_ERROR")
+            results.append({"message_id": item.message_id, "action": "ERROR"})
+            continue
         if result["action"] == "HANDOFF" and channel == "whatsapp":
             _whatsapp_channel().set_state(
                 item.conversation_id, "HUMAN", actor="sales-agent"
@@ -2725,7 +2780,69 @@ def os_conversations_process():
                 **{k: v for k, v in result.items() if k != "reply"},
             }
         )
-    return jsonify({"status": "ok", "channel": channel, "results": results}), 200
+    return results
+
+
+# Processamento contínuo: com CONVERSATION_AUTOPROCESS_ENABLED, cada webhook que
+# grava mensagem nova dispara o canal em segundo plano. Uma execução por canal
+# neste processo; o que chega no meio dela é pego na volta seguinte do laço.
+# Entre processos do gunicorn, claim_message do motor evita resposta dupla.
+_autoprocess_lock = Lock()
+_autoprocess_running: set[str] = set()
+_autoprocess_again: set[str] = set()
+
+
+def _start_autoprocess_thread(channel):
+    import threading
+
+    threading.Thread(
+        target=_autoprocess_worker,
+        args=(channel,),
+        name=f"autoprocess-{channel}",
+        daemon=True,
+    ).start()
+
+
+def _autoprocess(channel):
+    from veratus_agents.meta_webhooks import env_flag
+
+    if not env_flag("CONVERSATION_AUTOPROCESS_ENABLED"):
+        return False
+    with _autoprocess_lock:
+        if channel in _autoprocess_running:
+            _autoprocess_again.add(channel)
+            return True
+        _autoprocess_running.add(channel)
+    try:
+        _start_autoprocess_thread(channel)
+    except Exception as exc:  # noqa: BLE001 - o webhook responde mesmo sem a thread
+        with _autoprocess_lock:
+            _autoprocess_running.discard(channel)
+        app.logger.error(
+            "conversation_autoprocess_not_started channel=%s error_type=%s",
+            channel,
+            type(exc).__name__,
+        )
+        return False
+    return True
+
+
+def _autoprocess_worker(channel):
+    while True:
+        try:
+            with app.app_context():
+                _process_channel(_conversation_engine(), channel)
+        except Exception as exc:  # noqa: BLE001 - o erro fica no log, sem texto do cliente
+            app.logger.error(
+                "conversation_autoprocess_failed channel=%s error_type=%s",
+                channel,
+                type(exc).__name__,
+            )
+        with _autoprocess_lock:
+            if channel not in _autoprocess_again:
+                _autoprocess_running.discard(channel)
+                return
+            _autoprocess_again.discard(channel)
 
 
 @app.route("/os/conversations", methods=["GET"])
@@ -2877,6 +2994,20 @@ def os_conversations_metrics():
     if error:
         return error
     return jsonify({"channels": engine.metrics()}), 200
+
+
+@app.route("/os/flow", methods=["GET"])
+def os_flow():
+    """Fluxo de vendas por canal: papéis, nível, chaves de envio e métricas."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.sales_flow import flow_report
+
+    return jsonify(flow_report(engine, _order_ledger())), 200
 
 
 @app.route("/os/conversations/alerts", methods=["GET"])

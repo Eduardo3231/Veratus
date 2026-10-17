@@ -34,23 +34,62 @@ cases:
     channel: whatsapp
     messages: ["vou reclamar no Procon"]
     expect: {action: HANDOFF, handoff_reason: RECLAMACAO, mode: AUTO}
+  # Passagem ao fundador v2: só a IA responde; o pagamento só o provedor confirma.
   - id: comprovante
     required: true
     channel: whatsapp
     messages: ["já paguei, segue o comprovante"]
-    expect: {action: HANDOFF, handoff_reason: PROBLEMA_PAGAMENTO, mode: AUTO}
+    expect:
+      intent: pagamento_informado
+      action: SEND
+      mode: AUTO
+      reply_contains: ["chega automaticamente pelo Mercado Pago"]
   - id: desconto-insistente
     required: true
     channel: whatsapp
     messages: ["faz um desconto?", "faz por 250 vai, me dá desconto"]
-    expect: {action: HANDOFF, handoff_reason: FORA_DA_POLITICA, mode: AUTO}
+    expect:
+      intent: desconto_insistente
+      action: SEND
+      mode: AUTO
+      reply_contains: ["Mantemos o preço", "falar com o responsável"]
   - id: fraude-enviar-antes
     required: true
     channel: whatsapp
     messages: ["manda primeiro que eu pago quando chegar"]
-    expect: {action: HANDOFF, handoff_reason: SINAL_DE_FRAUDE, mode: AUTO}
+    expect:
+      intent: pagamento_fora_do_link
+      action: SEND
+      mode: AUTO
+      reply_contains: ["link do Mercado Pago"]
+  # A oferta de chamar o responsável, aceita com um "sim" curto, vira CHAMADA.
+  - id: oferta-aceita
+    required: true
+    channel: whatsapp
+    messages: ["hmm", "e aquilo", "sei la", "sim"]
+    expect: {action: HANDOFF, handoff_reason: PEDIDO_DE_ATENDENTE, mode: AUTO}
+  - id: oferta-de-desconto-aceita
+    required: true
+    channel: whatsapp
+    messages: ["faz um desconto?", "me dá um desconto vai", "pode chamar"]
+    expect: {action: HANDOFF, handoff_reason: PEDIDO_DE_ATENDENTE, mode: AUTO}
+  # TAREFA: o agente responde e o fundador recebe a tarefa no painel, sem ping.
+  - id: nota-fiscal
+    required: true
+    channel: whatsapp
+    messages: ["pode emitir nota fiscal no CNPJ?"]
+    expect:
+      intent: so_pessoa
+      action: SEND
+      mode: AUTO
+      task: SO_PESSOA
+      reply_contains: ["equipe confirma"]
   - id: garantia-nao-confirmada
     required: false
     channel: whatsapp
     messages: ["qual a garantia do relógio?"]
-    expect: {action: SEND, mode: AUTO_SAFE, reply_contains: ["equipe confirma"]}
+    expect:
+      action: SEND
+      mode: AUTO_SAFE
+      task: FATO_NAO_CONFIRMADO
+      reply_contains: ["equipe confirma"]

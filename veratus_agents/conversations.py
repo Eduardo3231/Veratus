@@ -13,10 +13,22 @@ Níveis por canal (``CONVERSATION_MODE_<CANAL>``, padrão ``SHADOW``):
 - ``AUTO_SAFE``: saem sozinhas as intenções de risco 0;
 - ``AUTO``: saem também as de risco 1 (dados do pedido, link, status, rastreio).
 
-Risco 2 (gatilhos de passagem ao fundador) nunca sai sozinho. Subir de nível
-nunca é automático; o disjuntor só rebaixa. Mesmo em ``AUTO``, o envio depende
-das chaves de cada canal (``WHATSAPP_SEND_ENABLED``, ``INSTAGRAM_MESSAGING_ENABLED``,
-``MERCADO_LIVRE_ANSWERS_ENABLED``, ``PAYMENT_LINKS_ENABLED``), todas ``false``.
+Passagem ao fundador em três níveis (política v2, pedido do fundador: "negociação
+feita por IA, apenas me chamar caso o cliente peça"):
+
+- CHAMADA: o cliente pede uma pessoa (ou aceita a oferta do agente) ou faz
+  ameaça jurídica/pública; estado ``HUMAN`` e alerta ao fundador;
+- TAREFA: o agente segue na conversa e o fundador recebe uma tarefa no painel,
+  sem ping (pagamento a conferir, pedido especial, fato não confirmado...);
+- só a IA: desconto, "já paguei", pagamento fora do link, prazo e troca fora da
+  política; quando trava, o agente oferece chamar o responsável.
+
+Risco 2 (CHAMADA) nunca sai sozinho. Subir de nível nunca é automático; o
+disjuntor só rebaixa. Mesmo em ``AUTO``, o envio depende das chaves de cada canal
+(``WHATSAPP_SEND_ENABLED``, ``INSTAGRAM_MESSAGING_ENABLED``,
+``MERCADO_LIVRE_ANSWERS_ENABLED``, ``PAYMENT_LINKS_ENABLED``), todas ``false``, e
+o link de pagamento só é criado no nível que ``operations.permission_allowed``
+permite (``AUTO``).
 """
 
 from __future__ import annotations
@@ -64,24 +76,44 @@ INTENT_RISK = {
     "link_pagamento": 1,
     "status_pedido": 1,
     "rastreio": 1,
-    # Assunto de venda que o modelo não reconhece: sempre vai para a fila.
+    # Respostas de política: texto fixo, só com fatos confirmados.
+    "desconto_insistente": 0,
+    "politica_prazo": 0,
+    "politica_troca": 0,
+    "so_pessoa": 0,
+    "fora_de_vendas": 0,
+    "oferta_responsavel": 0,
+    "pagamento_informado": 1,
+    "pagamento_fora_do_link": 1,
+    "pagamento_conferencia": 1,
+    "endereco_pago": 1,
+    "insatisfacao": 1,
+    # Aviso de pagamento confirmado pelo provedor (payment_confirmed).
+    "pagamento_confirmado": 0,
+    # Assunto que o modelo não reconhece: risco 1 com o revisor aprovando, 9 sem.
     "outro": 9,
 }
 
-HANDOFF_REASONS = (
-    "PEDIDO_DE_ATENDENTE",
-    "RECLAMACAO",
+# CHAMADA: estado HUMAN e alerta ao fundador. Só estes dois motivos.
+HANDOFF_REASONS = ("PEDIDO_DE_ATENDENTE", "RECLAMACAO")
+# TAREFA: fica no painel do fundador, sem ping; o agente segue na conversa.
+TASK_REASONS = (
     "PROBLEMA_PAGAMENTO",
-    "FORA_DA_POLITICA",
-    "FATO_NAO_CONFIRMADO",
-    "SINAL_DE_FRAUDE",
     "SO_PESSOA",
     "FORA_DE_VENDAS",
-    "IA_TRAVADA",
+    "SINAL_DE_FRAUDE",
+    "RECLAMACAO",
+    "FATO_NAO_CONFIRMADO",
 )
-# O fato não confirmado não para a conversa: a equipe confirma e o fundador é
-# avisado, mas o agente segue nos demais assuntos.
-NON_BLOCKING_REASONS = frozenset({"FATO_NAO_CONFIRMADO"})
+# O que o fundador faz com cada tarefa ({topic}: o assunto do fato pendente).
+_TASK_SUGGESTIONS = {
+    "PROBLEMA_PAGAMENTO": "Confira o pagamento no Mercado Pago e responda por aqui.",
+    "SO_PESSOA": "Confirme o pedido especial e responda por aqui.",
+    "FORA_DE_VENDAS": "Responda ou encaminhe fora do atendimento de vendas.",
+    "SINAL_DE_FRAUDE": "Troca de endereço depois do pagamento: confira antes.",
+    "RECLAMACAO": "Cliente insatisfeito: leia a conversa e acompanhe.",
+    "FATO_NAO_CONFIRMADO": "Confirmar {topic} e responder.",
+}
 # Mensagens transacionais usam sempre o texto determinístico: o link de
 # pagamento e o status do pedido não dependem do modelo.
 TRANSACTIONAL_INTENTS = frozenset(
@@ -94,6 +126,34 @@ TRANSACTIONAL_INTENTS = frozenset(
         "fato_confirmado",
     }
 )
+# Respostas de política também: pagamento, prazo, troca e desconto nunca ficam
+# por conta do modelo.
+POLICY_INTENTS = frozenset(
+    {
+        "desconto_insistente",
+        "politica_prazo",
+        "politica_troca",
+        "so_pessoa",
+        "fora_de_vendas",
+        "oferta_responsavel",
+        "pagamento_informado",
+        "pagamento_fora_do_link",
+        "pagamento_conferencia",
+        "endereco_pago",
+        "insatisfacao",
+    }
+)
+# Marca da oferta de chamar o responsável, guardada em ``last_intent``: um "sim"
+# curto logo depois vira PEDIDO_DE_ATENDENTE.
+OFFER_MARK = "oferta_responsavel"
+OFFER_INTENTS = frozenset({OFFER_MARK, "desconto_insistente", "insatisfacao"})
+OFFER_SENTENCE = "Se preferir falar com o responsável da Veratus, é só me dizer."
+OFFER_TEXT = "Quer que eu chame o responsável da Veratus para falar com você?"
+PAID_NOTICE = (
+    "Pagamento confirmado pelo Mercado Pago. Seu pedido entra em preparação e o "
+    "código de rastreio segue por aqui."
+)
+PAID_TEMPLATE = "pedido_confirmado"
 STALL_LIMIT = 3
 GATE_FAILURES_TO_TRIP = 2
 BREAKER_WINDOW = timedelta(hours=1)
@@ -103,113 +163,99 @@ def _phrases(*items: str) -> tuple[str, ...]:
     return tuple(normalize_text(item) for item in items)
 
 
-_TRIGGERS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    (
-        "PEDIDO_DE_ATENDENTE",
-        _phrases(
-            "atendente",
-            "humano",
-            "humana",
-            "pessoa real",
-            "falar com alguém",
-            "falar com uma pessoa",
-            "falar com o dono",
-            "gerente",
-        ),
-    ),
-    (
-        "RECLAMACAO",
-        _phrases(
-            "procon",
-            "reclame aqui",
-            "reclamação",
-            "reclamar",
-            "vou processar",
-            "advogado",
-            "golpe",
-            "absurdo",
-            "péssimo",
-            "pessimo",
-            "denunciar",
-        ),
-    ),
-    (
-        "SINAL_DE_FRAUDE",
-        _phrases(
-            "manda primeiro",
-            "envia primeiro",
-            "pago quando chegar",
-            "pagar quando chegar",
-            "pago na entrega",
-            "pagar fora do link",
-            "transferência direta",
-            "transferencia direta",
-            "deposito na sua conta",
-            "depósito na sua conta",
-            "pix na sua conta pessoal",
-            "manda o pix pessoal",
-        ),
-    ),
-    (
-        "PROBLEMA_PAGAMENTO",
-        _phrases(
-            "comprovante",
-            "já paguei",
-            "ja paguei",
-            "paguei",
-            "cobrado duas vezes",
-            "cobraram duas vezes",
-            "estorno",
-            "não consigo pagar",
-            "nao consigo pagar",
-            "pagamento recusado",
-            "link não funciona",
-            "link nao funciona",
-        ),
-    ),
-    (
-        "SO_PESSOA",
-        _phrases(
-            "me liga",
-            "ligação",
-            "ligacao",
-            "chamada de vídeo",
-            "videochamada",
-            "nota fiscal",
-            "personalizar",
-            "gravação",
-            "gravar o nome",
-            "atacado",
-            "revenda",
-            "revender",
-            "retirar pessoalmente",
-            "buscar pessoalmente",
-        ),
-    ),
-    (
-        "FORA_DE_VENDAS",
-        _phrases(
-            "vaga",
-            "emprego",
-            "currículo",
-            "curriculo",
-            "trabalhar com vocês",
-            "trabalhar com voces",
-            "sou fornecedor",
-            "imprensa",
-            "jornalista",
-            "permuta",
-            "parceria",
-            "patrocínio",
-            "patrocinio",
-        ),
-    ),
+_PERSON_REQUEST = _phrases(
+    "atendente",
+    "humano",
+    "humana",
+    "pessoa real",
+    "falar com alguém",
+    "falar com uma pessoa",
+    "falar com o dono",
+    "falar com o responsável",
+    "gerente",
+    "me liga",
+    "ligação",
+    "ligacao",
+    "chamada de vídeo",
+    "videochamada",
 )
-_OUT_OF_POLICY = _phrases(
-    "troca depois de",
-    "trocar depois de",
-    "fora do prazo",
-    "entrega expressa",
+# Ameaça jurídica ou pública é a exceção de segurança: vai direto ao fundador e
+# rebaixa o canal, porque é risco à marca que a IA não negocia.
+# "processo" sozinho pegava "qual o processo de compra?": só a ação judicial conta.
+_LEGAL_THREAT = _phrases(
+    "procon",
+    "reclame aqui",
+    "vou processar",
+    "abrir um processo",
+    "entrar com um processo",
+    "processo judicial",
+    "na justiça",
+    "na justica",
+    "pequenas causas",
+    "advogado",
+    "denunciar",
+)
+_DISSATISFIED = _phrases(
+    "reclamação",
+    "reclamar",
+    "golpe",
+    "absurdo",
+    "péssimo",
+    "pessimo",
+)
+_PAYMENT_OUTSIDE_LINK = _phrases(
+    "manda primeiro",
+    "envia primeiro",
+    "pago quando chegar",
+    "pagar quando chegar",
+    "pago na entrega",
+    "pagar fora do link",
+    "transferência direta",
+    "transferencia direta",
+    "depósito",
+    "deposito",
+    "pix na sua conta pessoal",
+    "pix pessoal",
+)
+_PAYMENT_PROBLEM = _phrases(
+    "cobrado duas vezes",
+    "cobraram duas vezes",
+    "estorno",
+    "não consigo pagar",
+    "nao consigo pagar",
+    "pagamento recusado",
+    "link não funciona",
+    "link nao funciona",
+)
+_PAYMENT_CLAIMED = _phrases("comprovante", "já paguei", "ja paguei", "paguei")
+_TEAM_ONLY = _phrases(
+    "nota fiscal",
+    "personalizar",
+    "gravação",
+    "gravar o nome",
+    "atacado",
+    "revenda",
+    "revender",
+    "retirar pessoalmente",
+    "buscar pessoalmente",
+)
+_NOT_SALES = _phrases(
+    "vaga",
+    "emprego",
+    "currículo",
+    "curriculo",
+    "trabalhar com vocês",
+    "trabalhar com voces",
+    "sou fornecedor",
+    "imprensa",
+    "jornalista",
+    "permuta",
+    "parceria",
+    "patrocínio",
+    "patrocinio",
+)
+_RUSH_DELIVERY = _phrases(
+    "expressa",
     "sedex",
     "chega amanhã",
     "chega amanha",
@@ -218,6 +264,12 @@ _OUT_OF_POLICY = _phrases(
     "urgente pra amanhã",
     "urgente pra amanha",
 )
+_LATE_RETURN = _phrases("troca depois de", "trocar depois de", "fora do prazo")
+# "Sim" curto: só estas palavras, até cinco, com ao menos uma afirmativa.
+_YES_WORDS = frozenset(
+    {"sim", "quero", "pode", "chama", "chamar", "por", "favor", "ser"}
+)
+_YES_CORE = frozenset({"sim", "quero", "pode", "chama", "chamar", "favor"})
 _DISCOUNT = _phrases(
     "desconto", "abaixa", "baixar o preço", "baixar o preco", "faz por", "cupom"
 )
@@ -405,32 +457,74 @@ def _has(text: str, phrases: tuple[str, ...]) -> bool:
 @dataclass(frozen=True)
 class Classification:
     intent: str
-    trigger: str | None = None
+    trigger: str | None = None  # CHAMADA: o fundador assume a conversa
     topic: str | None = None
     discount_request: bool = False
+    task: str | None = None  # TAREFA no painel, sem ping
+
+
+def _clean(text: str) -> str:
+    normalized = normalize_text(text or "")
+    normalized = re.sub(r"[^\w\s@.,'/-]", " ", normalized)
+    return " ".join(normalized.split())
+
+
+def _short_yes(normalized: str) -> bool:
+    words = re.findall(r"[a-z]+", normalized)
+    return (
+        0 < len(words) <= 5
+        and set(words) <= _YES_WORDS
+        and bool(set(words) & _YES_CORE)
+    )
+
+
+def asks_for_person(text: str) -> bool:
+    """O cliente pede uma pessoa; o WhatsApp usa a mesma lista na entrada."""
+    return _has(_clean(text), _PERSON_REQUEST)
 
 
 def classify(text: str, conversation: dict[str, Any]) -> Classification:
-    """Intenção e gatilho de passagem; determinístico e auditável."""
-    normalized = normalize_text(text or "")
-    normalized = re.sub(r"[^\w\s@.,'/-]", " ", normalized)
-    normalized = " ".join(normalized.split())
-    for reason, phrases in _TRIGGERS:
-        if _has(normalized, phrases):
-            return Classification("outro", reason)
+    """Intenção, CHAMADA ou TAREFA; determinístico e auditável."""
+    normalized = _clean(text)
+    # Antes de _INTENTS: "sim, quero" e "pode ser" também são fechamento.
+    if conversation.get("last_intent") == OFFER_MARK and _short_yes(normalized):
+        return Classification("outro", "PEDIDO_DE_ATENDENTE")
+    if _has(normalized, _PERSON_REQUEST):
+        return Classification("outro", "PEDIDO_DE_ATENDENTE")
+    if _has(normalized, _LEGAL_THREAT):
+        return Classification("outro", "RECLAMACAO")
+    if _has(normalized, _PAYMENT_PROBLEM):
+        return Classification("pagamento_conferencia", task="PROBLEMA_PAGAMENTO")
     if _has(normalized, _ADDRESS_CHANGE) and conversation.get("paid"):
-        return Classification("outro", "SINAL_DE_FRAUDE")
-    if _has(normalized, _OUT_OF_POLICY):
-        return Classification("outro", "FORA_DA_POLITICA")
+        return Classification("endereco_pago", task="SINAL_DE_FRAUDE")
+    if _has(normalized, _TEAM_ONLY):
+        return Classification("so_pessoa", task="SO_PESSOA")
+    if _has(normalized, _NOT_SALES):
+        return Classification("fora_de_vendas", task="FORA_DE_VENDAS")
+    if _has(normalized, _DISSATISFIED):
+        return Classification("insatisfacao", task="RECLAMACAO")
+    if _has(normalized, _PAYMENT_OUTSIDE_LINK):
+        return Classification("pagamento_fora_do_link")
+    if _has(normalized, _PAYMENT_CLAIMED):
+        return Classification("pagamento_informado")
+    if _has(normalized, _RUSH_DELIVERY):
+        return Classification("politica_prazo")
+    if _has(normalized, _LATE_RETURN):
+        return Classification("politica_troca")
     if _has(normalized, _DISCOUNT):
         if int(conversation.get("discount_requests") or 0) >= 1:
-            return Classification("outro", "FORA_DA_POLITICA", discount_request=True)
+            return Classification("desconto_insistente", discount_request=True)
         return Classification("preco", discount_request=True)
     for topic, phrases in _PENDING_TOPICS:
         if _has(normalized, phrases):
-            return Classification("fato_pendente", "FATO_NAO_CONFIRMADO", topic)
+            return Classification(
+                "fato_pendente", topic=topic, task="FATO_NAO_CONFIRMADO"
+            )
     if conversation.get("awaiting_data") and _CEP.search(text or ""):
         return Classification("dados_pedido")
+    # A resposta a "outro" pergunta "Quer ver os modelos?": o "sim" é o catálogo.
+    if conversation.get("last_intent") == "outro" and _short_yes(normalized):
+        return Classification("catalogo")
     for intent, phrases in _INTENTS:
         if _has(normalized, phrases):
             return Classification(intent)
@@ -637,8 +731,76 @@ class TemplateSalesModel:
                 "O código de rastreio a equipe envia por aqui assim que o pedido for "
                 "despachado."
             )
+        elif intent == "desconto_insistente":
+            reply = (
+                "Mantemos o preço, que já inclui frete grátis, sem taxa adicional, "
+                "com entrega em até 7 dias e desistência em até 7 dias após o "
+                f"recebimento. {OFFER_SENTENCE}"
+            )
+            claims = _claims(
+                "frete-gratis", "sem-taxas", "entrega-7-dias", "desistencia-7-dias"
+            )
+        elif intent == "politica_prazo":
+            reply = (
+                "O prazo confirmado é a entrega em até 7 dias, com frete grátis. "
+                "Quer seguir com o pedido?"
+            )
+            claims = _claims("entrega-7-dias", "frete-gratis")
+        elif intent == "politica_troca":
+            reply = (
+                "Você pode desistir da compra em até 7 dias após o recebimento. "
+                "Posso ajudar com mais alguma coisa?"
+            )
+            claims = _claims("desistencia-7-dias")
+        elif intent == "pagamento_informado":
+            # Nunca confirma pagamento por mensagem ou print: só o provedor confirma.
+            reply = (
+                "A confirmação do pagamento chega automaticamente pelo próprio anúncio."
+                if marketplace
+                else "A confirmação do pagamento chega automaticamente pelo Mercado "
+                "Pago, e eu aviso por aqui assim que ela chegar."
+            )
+        elif intent == "pagamento_fora_do_link":
+            reply = (
+                "Por segurança, o pagamento é feito só pelo próprio anúncio."
+                if marketplace
+                else "Por segurança, o pedido é enviado só depois do pagamento "
+                "confirmado pelo link do Mercado Pago. Quer seguir com o pedido?"
+            )
+        elif intent == "pagamento_conferencia":
+            where = "" if marketplace else " no Mercado Pago"
+            reply = (
+                f"Entendi. Vou registrar para a equipe conferir o pagamento{where}, "
+                "e retornamos por aqui."
+            )
+        elif intent == "endereco_pago":
+            reply = (
+                "Por segurança, o endereço não muda por aqui depois do pagamento. "
+                "A equipe confere e retorna por aqui."
+            )
+        elif intent == "so_pessoa":
+            reply = (
+                "Isso a equipe confirma por aqui em seguida. Enquanto isso, posso "
+                "ajudar a escolher o modelo?"
+            )
+        elif intent == "fora_de_vendas":
+            reply = (
+                "Esse assunto é tratado fora do atendimento de vendas e fica "
+                "registrado para a equipe. Posso ajudar com algum relógio ou joia "
+                "da Veratus?"
+            )
+        elif intent == "insatisfacao":
+            reply = (
+                "Sinto muito por isso. Pode me contar com detalhes o que aconteceu? "
+                f"Fica registrado para a equipe acompanhar. {OFFER_SENTENCE}"
+            )
+        elif intent == OFFER_MARK:
+            reply = OFFER_TEXT
         else:
-            reply = "A equipe responde por aqui em seguida."
+            reply = (
+                "Posso te ajudar a escolher um relógio ou uma joia da Veratus. "
+                "Quer ver os modelos?"
+            )
         return {
             "customer_reply": reply,
             "intent": intent,
@@ -1337,12 +1499,20 @@ class ConversationEngine:
             self.store.update(key, product_id=product["id"])
         intent = classification.intent
         trigger = classification.trigger
+        task = classification.task
+        topic = classification.topic
         facts_for_topic: list[tuple[str, str]] = []
-        if trigger == "FATO_NAO_CONFIRMADO":
+        if task == "FATO_NAO_CONFIRMADO":
             # Campo confirmado na ficha dos relógios: o agente responde com o fato.
-            facts_for_topic, complete = topic_facts(classification.topic, product)
+            facts_for_topic, complete = topic_facts(topic, product)
             if complete:
-                intent, trigger = "fato_confirmado", None
+                intent, task = "fato_confirmado", None
+        if intent == "preco" and not classification.discount_request and product:
+            from .catalog import public_price
+
+            if not public_price(product):
+                # "A equipe confirma o preço" vira tarefa, não promessa solta.
+                task, topic = "FATO_NAO_CONFIRMADO", f"o preço do {product['name']}"
         changes: dict[str, Any] = {}
         if classification.discount_request:
             changes["discount_requests"] = int(conversation["discount_requests"]) + 1
@@ -1351,12 +1521,17 @@ class ConversationEngine:
             if intent == conversation["last_intent"] or intent == "outro"
             else 1
         )
-        changes.update(last_intent=intent, repeat_count=repeat)
+        if trigger is None and repeat >= STALL_LIMIT:
+            # IA travada: em vez de passar, o agente oferece chamar o responsável.
+            intent, repeat = OFFER_MARK, 0
+            self._offered(key, channel, mode)
+        changes.update(
+            last_intent=OFFER_MARK if intent in OFFER_INTENTS else intent,
+            repeat_count=repeat,
+        )
         self.store.update(key, **changes)
 
-        if trigger is None and repeat >= STALL_LIMIT:
-            trigger = "IA_TRAVADA"
-        if trigger and trigger not in NON_BLOCKING_REASONS:
+        if trigger:
             return self._handoff(key, channel, mode, trigger, inbound, intent)
 
         risk = INTENT_RISK.get(intent, 9)
@@ -1365,7 +1540,7 @@ class ConversationEngine:
             conversation_id=inbound.conversation_id,
             message=inbound.text,
             intent=intent,
-            topic=classification.topic,
+            topic=topic,
             product=product,
             context=self.knowledge_context(),
             order=self._order(conversation),
@@ -1375,41 +1550,131 @@ class ConversationEngine:
         if intent == "fechamento" and product and channel not in MARKETPLACES:
             self.store.update(key, awaiting_data=1)
         if intent == "dados_pedido":
-            outcome = self._order_and_link(key, channel, conversation, inbound)
-            if outcome.get("handoff"):
-                return self._handoff(
-                    key, channel, mode, outcome["handoff"], inbound, intent
-                )
+            outcome = self._order_and_link(key, channel, mode, conversation, inbound)
+            if outcome.get("task"):
+                task, topic = outcome["task"], "o preço antes do link de pagamento"
             request.payment_url = outcome.get("url")
             if outcome.get("blocked"):
                 risk = 9  # sem link criado, o fundador decide o que dizer
-        model = TemplateSalesModel() if intent in TRANSACTIONAL_INTENTS else self.model
-        draft = model.draft(request)
+        deterministic = intent in TRANSACTIONAL_INTENTS or intent in POLICY_INTENTS
+        model = TemplateSalesModel() if deterministic else self.model
+        try:
+            draft = model.draft(request)
+        except Exception as exc:  # noqa: BLE001 - modelo fora do ar não para a conversa
+            model = self._fallback(key, channel, mode, intent, exc)
+            draft = model.draft(request)
         reply, issues = self._gate(draft, channel, product)
         if issues:
             self._gate_failed(key, channel, mode, intent, issues)
-            draft = model.rewrite(request, draft, issues)
+            try:
+                draft = model.rewrite(request, draft, issues)
+            except Exception as exc:  # noqa: BLE001
+                model = self._fallback(key, channel, mode, intent, exc)
+                draft = model.rewrite(request, draft, issues)
             reply, issues = self._gate(draft, channel, product)
-            if issues:
-                self._gate_failed(key, channel, mode, intent, issues)
-                return self._handoff(key, channel, mode, "IA_TRAVADA", inbound, intent)
-        review = draft.get("review") or {}
-        if review and review.get("approved_for_human_review") is False:
-            risk = 9  # o revisor não aprovou: nunca sai sozinho
+        if issues:
+            self._gate_failed(key, channel, mode, intent, issues)
+            # Duas reprovações na mesma mensagem: oferta em vez de passagem, no
+            # nível já rebaixado pelo disjuntor, se ele disparou.
+            mode = self.mode(channel)
+            intent, risk, reply = OFFER_MARK, INTENT_RISK[OFFER_MARK], OFFER_TEXT
+            self.store.update(key, last_intent=OFFER_MARK, repeat_count=0)
+            self._offered(key, channel, mode)
+        else:
+            review = draft.get("review") or {}
+            if intent == "outro":
+                risk = 1 if review.get("approved_for_human_review") is True else 9
+            elif review and review.get("approved_for_human_review") is False:
+                risk = 9  # o revisor não aprovou: nunca sai sozinho
 
-        if trigger in NON_BLOCKING_REASONS:
-            self._alert(
-                channel,
-                key,
-                trigger,
-                inbound.text,
-                f"Confirmar {classification.topic or 'o fato'} e responder.",
+        extra: dict[str, Any] = {}
+        if task:
+            suggestion = _TASK_SUGGESTIONS[task].format(topic=topic or "o fato")
+            self._task(channel, key, task, inbound.text, suggestion)
+            extra["task"] = task
+        return self._respond(
+            key,
+            channel,
+            mode,
+            conversation,
+            inbound.conversation_id,
+            inbound.message_id,
+            intent=intent,
+            risk=risk,
+            reply=reply,
+            **extra,
+        )
+
+    def message_failed(self, inbound: InboundText, exc: Exception) -> None:
+        """Erro inesperado numa mensagem: tarefa no painel, sem o texto do cliente."""
+        key = self.store.key(inbound.channel, inbound.conversation_id)
+        self.store.event(
+            inbound.channel, key, "HANDLE_FAILED", result=type(exc).__name__
+        )
+        self._task(
+            inbound.channel,
+            key,
+            "ERRO_INTERNO",
+            "",
+            "A mensagem não foi processada por erro interno: responda pelo canal.",
+        )
+
+    def _fallback(
+        self, key: str, channel: str, mode: str, intent: str, exc: Exception
+    ) -> TemplateSalesModel:
+        """Falha do modelo de linguagem: segue com o texto fixo, que passa no gate."""
+        self.store.event(
+            channel,
+            key,
+            "MODEL_FAILED",
+            intent=intent,
+            mode=mode,
+            action="FALLBACK",
+            result=type(exc).__name__,
+            detail={"model": self.model.name, "fallback": TemplateSalesModel.name},
+        )
+        return TemplateSalesModel()
+
+    def person_requested(self, inbound: InboundText) -> dict[str, Any]:
+        """Pedido de pessoa que o canal já tirou do BOT na entrada (WhatsApp).
+
+        Registra a mesma CHAMADA do motor uma vez: estado HUMAN e alerta.
+        """
+        channel = inbound.channel
+        if channel not in CHANNELS:
+            raise ValueError("canal_desconhecido")
+        mode = self.mode(channel)
+        if not self.store.claim_message(channel, inbound.message_id):
+            return self._result("DUPLICATE", mode)
+        conversation = self.store.conversation(channel, inbound.conversation_id)
+        key = conversation["conv_key"]
+        if not conversation["first_inbound_at"]:
+            self.store.update(
+                key, first_inbound_at=(inbound.received_at or _now()).isoformat()
             )
-        decision = decide(mode, risk)
-        if decision == "SEND":
-            sent = self._send(
-                channel, inbound.conversation_id, reply, inbound.message_id
-            )
+        if conversation["state"] != "BOT":
+            return self._result("SKIPPED", mode, reason=conversation["state"])
+        return self._handoff(
+            key, channel, mode, "PEDIDO_DE_ATENDENTE", inbound, "outro"
+        )
+
+    def _respond(
+        self,
+        key: str,
+        channel: str,
+        mode: str,
+        conversation: dict[str, Any],
+        conversation_id: str,
+        message_id: str | None,
+        *,
+        intent: str,
+        risk: int,
+        reply: str,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        """Enviar ou pôr na fila uma resposta já aprovada pelo gate."""
+        if decide(mode, risk) == "SEND":
+            sent = self._send(channel, conversation_id, reply, message_id or key)
             if sent["status"] == "SENT":
                 self._responded(key, conversation)
                 self.store.event(
@@ -1424,7 +1689,13 @@ class ConversationEngine:
                     detail={"model": self.model.name},
                 )
                 return self._result(
-                    "SEND", mode, intent=intent, risk=risk, reply=reply, sent=True
+                    "SEND",
+                    mode,
+                    intent=intent,
+                    risk=risk,
+                    reply=reply,
+                    sent=True,
+                    **extra,
                 )
             reason = ",".join(sent.get("reasons") or [sent.get("error", "SEND_FAILED")])
             event = "SEND_FAILED" if sent["status"] == "FAILED" else "SEND_BLOCKED"
@@ -1442,7 +1713,7 @@ class ConversationEngine:
             draft_id = self.store.enqueue(
                 key,
                 channel,
-                message_id=inbound.message_id,
+                message_id=message_id,
                 intent=intent,
                 risk=risk,
                 mode=mode,
@@ -1458,12 +1729,13 @@ class ConversationEngine:
                 reply=reply,
                 draft_id=draft_id,
                 reason=reason,
+                **extra,
             )
         status = "SHADOW_DRAFT" if mode == "SHADOW" else "PENDING_APPROVAL"
         draft_id = self.store.enqueue(
             key,
             channel,
-            message_id=inbound.message_id,
+            message_id=message_id,
             intent=intent,
             risk=risk,
             mode=mode,
@@ -1483,7 +1755,13 @@ class ConversationEngine:
             detail={"draft_id": draft_id, "model": self.model.name},
         )
         return self._result(
-            "QUEUE", mode, intent=intent, risk=risk, reply=reply, draft_id=draft_id
+            "QUEUE",
+            mode,
+            intent=intent,
+            risk=risk,
+            reply=reply,
+            draft_id=draft_id,
+            **extra,
         )
 
     # -- etapas ------------------------------------------------------------------
@@ -1588,14 +1866,6 @@ class ConversationEngine:
         suggestions = {
             "PEDIDO_DE_ATENDENTE": "Assuma a conversa e cumprimente o cliente.",
             "RECLAMACAO": "Responda com calma, entenda o problema e registre.",
-            "PROBLEMA_PAGAMENTO": (
-                "Confira o pagamento no Mercado Pago antes de qualquer confirmação."
-            ),
-            "FORA_DA_POLITICA": "Explique a política; desconto e troca fora do prazo não.",
-            "SINAL_DE_FRAUDE": "Não envie nada antes do pagamento confirmado no provedor.",
-            "SO_PESSOA": "Atenda o pedido pessoalmente.",
-            "FORA_DE_VENDAS": "Responda ou encaminhe fora do atendimento de vendas.",
-            "IA_TRAVADA": "Leia a conversa e responda; o agente parou nela.",
         }
         self._alert(
             channel,
@@ -1608,6 +1878,18 @@ class ConversationEngine:
             self._trip(channel, "reclamação de cliente")
         return self._result("HANDOFF", mode, intent=intent, risk=2, reason=reason)
 
+    @staticmethod
+    def _alert_payload(
+        channel: str, key: str | None, reason: str, text: str, suggestion: str
+    ) -> dict[str, Any]:
+        return {
+            "channel": channel,
+            "conv_key": key,
+            "reason": reason,
+            "summary": summarize(text),
+            "suggestion": suggestion,
+        }
+
     def _alert(
         self,
         channel: str,
@@ -1616,13 +1898,7 @@ class ConversationEngine:
         text: str,
         suggestion: str,
     ) -> None:
-        alert = {
-            "channel": channel,
-            "conv_key": key,
-            "reason": reason,
-            "summary": summarize(text),
-            "suggestion": suggestion,
-        }
+        alert = self._alert_payload(channel, key, reason, text, suggestion)
         delivery = "QUEUED"
         if self.alert_sender is not None:
             try:
@@ -1630,6 +1906,28 @@ class ConversationEngine:
             except Exception as exc:  # noqa: BLE001 - o alerta nunca derruba a conversa
                 delivery = f"FAILED:{type(exc).__name__}"
         self.store.record_alert(alert, delivery)
+
+    def _task(
+        self, channel: str, key: str, reason: str, text: str, suggestion: str
+    ) -> None:
+        """TAREFA: fica no painel do fundador, sem ping; o agente segue."""
+        alert = self._alert_payload(channel, key, reason, text, suggestion)
+        self.store.record_alert(alert, delivery="PAINEL")
+        self.store.event(
+            channel, key, "TASK", action="TASK", result="PAINEL", reason=reason
+        )
+
+    def _offered(self, key: str, channel: str, mode: str) -> None:
+        """Oferta de chamar o responsável (IA travada): sem alerta nem tarefa."""
+        self.store.event(
+            channel,
+            key,
+            "HANDOFF_OFFERED",
+            intent=OFFER_MARK,
+            mode=mode,
+            action="OFFER",
+            reason="IA_TRAVADA",
+        )
 
     def _send(
         self, channel: str, conversation_id: str, text: str, message_id: str
@@ -1649,6 +1947,7 @@ class ConversationEngine:
         self,
         key: str,
         channel: str,
+        mode: str,
         conversation: dict[str, Any],
         inbound: InboundText,
     ) -> dict[str, Any]:
@@ -1657,10 +1956,8 @@ class ConversationEngine:
         if product is None:
             return {"blocked": True}
         from .catalog import public_price
+        from .operations import permission_allowed
 
-        price = public_price(product)
-        if price is None:
-            return {"handoff": "FATO_NAO_CONFIRMADO"}
         self.store.save_customer_data(key, inbound.text)
         adapter = self.adapters.get(channel)
         if hasattr(adapter, "redact"):
@@ -1670,6 +1967,9 @@ class ConversationEngine:
         self.store.event(
             channel, key, "CUSTOMER_DATA_RECEIVED", detail={"encrypted": True}
         )
+        if public_price(product) is None:
+            # Sem preço confirmado não há pedido nem link: vira tarefa.
+            return {"blocked": True, "task": "FATO_NAO_CONFIRMADO"}
         if self.order_factory is None:
             return {"blocked": True}
         order = self.order_factory(channel, inbound.conversation_id, product)
@@ -1684,11 +1984,28 @@ class ConversationEngine:
         )
         if self.payment_linker is None:
             return {"blocked": True}
+        if not permission_allowed(
+            "sales-agent", "CREATE_PAYMENT_LINK", channel_mode=mode
+        ):
+            # Criar o link é escrita externa no Mercado Pago: só no nível que o
+            # registro de agentes permite; abaixo dele, a resposta vai para a fila.
+            reasons = [f"CHANNEL_MODE_{mode}"]
+            self.store.event(
+                channel,
+                key,
+                "PAYMENT_LINK",
+                mode=mode,
+                result="BLOCKED",
+                reason=",".join(reasons),
+                detail={"order_id": order["order_id"]},
+            )
+            return {"blocked": True, "reasons": reasons}
         link = self.payment_linker(order, product)
         self.store.event(
             channel,
             key,
             "PAYMENT_LINK",
+            mode=mode,
             result=link["status"],
             reason=",".join(link.get("reasons") or []),
             detail={"order_id": order["order_id"]},
@@ -1782,7 +2099,13 @@ class ConversationEngine:
         )
         return {**public_conversation(conversation), "state": state}
 
-    def payment_confirmed(self, order_id: str) -> None:
+    def payment_confirmed(self, order_id: str) -> list[dict[str, Any]]:
+        """Pagamento confirmado pelo provedor: marca o pedido e avisa o cliente.
+
+        Chamado só pelo webhook validado do Mercado Pago, depois da leitura de
+        volta; nunca por mensagem ou print do cliente.
+        """
+        notices = []
         for conversation in self.store.conversations():
             if conversation["order_id"] == order_id:
                 self.store.update(conversation["conv_key"], paid=1)
@@ -1792,6 +2115,109 @@ class ConversationEngine:
                     "ORDER_PAID",
                     detail={"order_id": order_id},
                 )
+                notices.append(self._paid_notice(conversation, order_id))
+        return notices
+
+    def _paid_notice(
+        self, conversation: dict[str, Any], order_id: str
+    ) -> dict[str, Any]:
+        """Conclusão da venda: um aviso por pedido, pelo mesmo caminho de decisão."""
+        channel, key = conversation["channel"], conversation["conv_key"]
+        mode = self.mode(channel)
+        # O webhook repete e pode chegar em paralelo: a reserva é atômica.
+        if not self.store.claim_message(channel, f"paid-notice:{order_id}"):
+            return self._result("DUPLICATE", mode)
+        reply, reasons = self._gate({"customer_reply": PAID_NOTICE}, channel, None)
+        if conversation["state"] != "BOT":
+            # Com o fundador na conversa, ele decide o aviso.
+            reasons.append(f"STATE_{conversation['state']}")
+        risk = INTENT_RISK["pagamento_confirmado"]
+        if not reasons and decide(mode, risk) == "SEND":
+            sent = self._send_paid_notice(
+                channel, conversation["conversation_id"], reply, order_id
+            )
+            if sent["status"] == "SENT":
+                self._responded(key, conversation)
+                self.store.event(
+                    channel,
+                    key,
+                    "ORDER_PAID_NOTICE",
+                    intent="pagamento_confirmado",
+                    risk=risk,
+                    mode=mode,
+                    action="SEND",
+                    result="SENT",
+                    detail={"order_id": order_id, "via": sent.get("via", "text")},
+                )
+                return self._result(
+                    "SEND", mode, intent="pagamento_confirmado", sent=True
+                )
+            reasons = sent.get("reasons") or [sent.get("error", "SEND_FAILED")]
+        reason = ",".join(reasons) or None
+        status = "SHADOW_DRAFT" if mode == "SHADOW" else "PENDING_APPROVAL"
+        draft_id = self.store.enqueue(
+            key,
+            channel,
+            message_id=None,
+            intent="pagamento_confirmado",
+            risk=risk,
+            mode=mode,
+            reply=reply,
+            status=status,
+            reason=reason,
+        )
+        self.store.event(
+            channel,
+            key,
+            "ORDER_PAID_NOTICE",
+            intent="pagamento_confirmado",
+            risk=risk,
+            mode=mode,
+            action="QUEUE",
+            result=status,
+            reason=reason,
+            detail={"order_id": order_id, "draft_id": draft_id},
+        )
+        return self._result(
+            "QUEUE",
+            mode,
+            intent="pagamento_confirmado",
+            draft_id=draft_id,
+            reason=reason,
+        )
+
+    def _send_paid_notice(
+        self, channel: str, conversation_id: str, text: str, order_id: str
+    ) -> dict[str, Any]:
+        from .channel_adapters import UTILITY_TEMPLATES
+
+        adapter = self.adapters.get(channel)
+        if adapter is None:
+            return {"status": "BLOCKED", "reasons": ["ADAPTER_MISSING"]}
+        idempotency_key = f"paid:{order_id}"
+        try:
+            if adapter.window_open(conversation_id, _now()):
+                return adapter.send(
+                    conversation_id, text, idempotency_key=idempotency_key
+                )
+            send_template = getattr(adapter, "send_template", None)
+            if (
+                channel == "whatsapp"
+                and send_template is not None
+                and PAID_TEMPLATE in UTILITY_TEMPLATES
+            ):
+                # Fora da janela de 24 h, só o template utilitário aprovado.
+                return {
+                    **send_template(
+                        conversation_id,
+                        PAID_TEMPLATE,
+                        idempotency_key=idempotency_key,
+                    ),
+                    "via": PAID_TEMPLATE,
+                }
+            return {"status": "BLOCKED", "reasons": ["CUSTOMER_SERVICE_WINDOW_CLOSED"]}
+        except Exception as exc:  # noqa: BLE001 - o webhook do provedor não cai pelo aviso
+            return {"status": "FAILED", "reasons": [f"SEND_ERROR_{type(exc).__name__}"]}
 
     # -- prontidão e métricas ----------------------------------------------------
 
@@ -1876,10 +2302,14 @@ class ConversationEngine:
                 if item["mode"]:
                     bucket = by_mode.setdefault(item["mode"], {})
                     bucket[item["event"]] = bucket.get(item["event"], 0) + 1
+            # Passagens (CHAMADA) e tarefas no painel, por motivo.
             handoffs: dict[str, int] = {}
+            tasks: dict[str, int] = {}
             for item in events:
                 if item["event"] == "HANDOFF":
                     handoffs[item["reason"]] = handoffs.get(item["reason"], 0) + 1
+                elif item["event"] == "TASK":
+                    tasks[item["reason"]] = tasks.get(item["reason"], 0) + 1
             first_response = [
                 (
                     datetime.fromisoformat(c["first_response_at"])
@@ -1898,6 +2328,7 @@ class ConversationEngine:
                 "approved_without_edit": sum(1 for d in decided if not d["edited"]),
                 "approved_with_edit": sum(1 for d in decided if d["edited"]),
                 "handoffs_by_reason": handoffs,
+                "tasks_by_reason": tasks,
                 "conversation_to_order": sum(1 for c in conversations if c["order_id"]),
                 "orders_paid": sum(1 for c in conversations if c["paid"]),
                 "gate_failures": sum(1 for e in events if e["event"] == "GATE_FAILED"),
@@ -2021,6 +2452,8 @@ def run_eval(directory: Path, *, live: bool = False) -> dict[str, Any]:
                 and result.get("reason") != expect["handoff_reason"]
             ):
                 problems.append(f"handoff_reason: {result.get('reason')}")
+            if "task" in expect and result.get("task") != expect["task"]:
+                problems.append(f"task: {result.get('task')} != {expect['task']}")
             for fragment in expect.get("reply_contains") or []:
                 if fragment not in str(result.get("reply") or ""):
                     problems.append(f"resposta sem '{fragment}'")

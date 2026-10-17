@@ -25,10 +25,16 @@ from veratus_agents.channel_adapters import (
     parse_instagram_messages,
 )
 from veratus_agents.conversations import (
+    OFFER_MARK,
+    OFFER_TEXT,
+    PAID_NOTICE,
+    POLICY_INTENTS,
     ConversationEngine,
     ConversationStore,
+    DraftRequest,
     InboundText,
     TemplateSalesModel,
+    asks_for_person,
     classify,
     decide,
 )
@@ -41,7 +47,7 @@ from veratus_agents.payments import (
     verify_signature,
 )
 from veratus_agents.policy import hard_review_customer_reply
-from veratus_agents.whatsapp import WhatsAppChannel, WhatsAppCloudClient
+from veratus_agents.whatsapp import WhatsAppChannel, WhatsAppCloudClient, wants_human
 
 KEY = Fernet.generate_key().decode("ascii")
 NUMBER = "5511999990000"
@@ -235,7 +241,19 @@ def test_whatsapp_conversation_reaches_the_payment_link_in_auto(tmp_path):
     adapter = WhatsAppAdapter(wa, client=client, enabled=True)
     ledger = OrderLedger(tmp_path / "orders.sqlite3")
     mp_session = FakeSession(
-        {"checkout/preferences": {"id": "pref-1", "init_point": "https://mp.test/p/1"}}
+        {
+            "checkout/preferences": {
+                "id": "pref-1",
+                "init_point": "https://mp.test/p/1",
+            },
+            "/v1/payments/77": {
+                "id": 77,
+                "status": "approved",
+                "external_reference": "ord-test-0001",
+                "currency_id": "BRL",
+                "transaction_amount": 289.90,
+            },
+        }
     )
     mp = MercadoPagoClient("mp-token", session=mp_session)
 
@@ -314,6 +332,176 @@ def test_whatsapp_conversation_reaches_the_payment_link_in_auto(tmp_path):
     inbox = json.dumps(wa.get(conversation["conversation_id"]), default=str)
     assert "01310" not in inbox and "Paulista" not in inbox
 
+    # Conclusão da venda: só o provedor confirma, e o cliente é avisado uma vez.
+    confirmed = confirm_payment("77", client=mp, ledger=ledger)
+    notices = engine.payment_confirmed(confirmed["order_id"])
+    replay = engine.payment_confirmed(confirmed["order_id"])
+    sent = [
+        call[2]["json"]["text"]["body"]
+        for call in wa_session.calls
+        if call[0] == "POST" and "messages" in call[1]
+    ]
+    assert confirmed["status"] == "PAID"
+    assert [item["action"] for item in notices] == ["SEND"]
+    assert [item["action"] for item in replay] == ["DUPLICATE"]
+    assert sent[-1] == PAID_NOTICE and sent.count(PAID_NOTICE) == 1
+    assert len(engine.store.events(event="ORDER_PAID_NOTICE")) == 1
+
+
+def _order_engine(tmp_path, mode, linked):
+    def order_factory(channel, conversation_id, product):
+        return {"order_id": "ord-lvl-0001", "sku": product["id"]}
+
+    def payment_linker(order, product):
+        linked.append(order["order_id"])
+        return {"status": "CREATED", "url": "https://mp.test/p/x"}
+
+    return make_engine(
+        tmp_path, mode=mode, order_factory=order_factory, payment_linker=payment_linker
+    )
+
+
+@pytest.mark.parametrize(
+    ("mode", "cap"),
+    [
+        ("SHADOW", None),
+        ("SUPERVISED", None),
+        ("AUTO_SAFE", None),
+        ("AUTO", "AUTO_SAFE"),  # o disjuntor rebaixou o canal
+    ],
+)
+def test_payment_link_is_only_created_at_the_allowed_level(tmp_path, mode, cap):
+    linked = []
+    engine, adapter, _ = _order_engine(tmp_path, mode, linked)
+    if cap:
+        engine.store.set_cap("whatsapp", cap, "teste")
+    say(engine, "quero comprar o Ocean Blue")
+    result = say(engine, "Maria Souza, CEP 01310-100, Av. Paulista 1000")
+
+    effective = cap or mode
+    assert (result["action"], result["risk"]) == ("QUEUE", 9)
+    assert linked == []  # nenhuma escrita no Mercado Pago
+    assert "mp.test" not in result["reply"] and adapter.sent == []
+    [event] = engine.store.events(event="PAYMENT_LINK")
+    assert (event["result"], event["reason"]) == (
+        "BLOCKED",
+        f"CHANNEL_MODE_{effective}",
+    )
+    assert engine.store.get("whatsapp", "c1")["order_id"] == "ord-lvl-0001"
+
+
+def test_payment_link_is_created_in_auto(tmp_path):
+    linked = []
+    engine, adapter, _ = _order_engine(tmp_path, "AUTO", linked)
+    say(engine, "quero comprar o Ocean Blue")
+    result = say(engine, "Maria Souza, CEP 01310-100, Av. Paulista 1000")
+
+    assert result["action"] == "SEND"
+    assert linked == ["ord-lvl-0001"]
+    assert "https://mp.test/p/x" in adapter.sent[-1]
+
+
+# -- aviso de pagamento confirmado (conclusão da venda) -------------------------------
+
+
+class ClosedWindowAdapter(RecordingAdapter):
+    def window_open(self, conversation_id, now):
+        return False
+
+
+class TemplateAdapter(ClosedWindowAdapter):
+    def __init__(self):
+        super().__init__()
+        self.templates = []
+
+    def send_template(self, conversation_id, template, *, idempotency_key):
+        self.templates.append((template, idempotency_key))
+        return {"status": "SENT", "message_id": "tpl-1"}
+
+
+def _paid_engine(tmp_path, mode="AUTO", adapter=None):
+    engine, adapter, alerts = make_engine(tmp_path, mode=mode, adapter=adapter)
+    say(engine, "oi")
+    engine.store.update("whatsapp:c1", order_id="ord-paid-0001")
+    return engine, adapter, alerts
+
+
+@pytest.mark.parametrize("mode", ["AUTO_SAFE", "AUTO"])
+def test_paid_order_is_announced_once(tmp_path, mode):
+    engine, adapter, alerts = _paid_engine(tmp_path, mode)
+    first = engine.payment_confirmed("ord-paid-0001")
+    again = engine.payment_confirmed("ord-paid-0001")
+
+    assert [item["action"] for item in first] == ["SEND"]
+    assert [item["action"] for item in again] == ["DUPLICATE"]
+    assert adapter.sent[-1] == PAID_NOTICE
+    assert adapter.sent.count(PAID_NOTICE) == 1
+    [notice] = engine.store.events(event="ORDER_PAID_NOTICE")
+    assert notice["result"] == "SENT"
+    assert engine.store.get("whatsapp", "c1")["paid"] == 1
+    assert alerts == []
+
+
+@pytest.mark.parametrize(
+    ("mode", "status"), [("SHADOW", "SHADOW_DRAFT"), ("SUPERVISED", "PENDING_APPROVAL")]
+)
+def test_paid_notice_waits_in_the_queue_below_auto_safe(tmp_path, mode, status):
+    engine, adapter, _ = _paid_engine(tmp_path, mode)
+    [result] = engine.payment_confirmed("ord-paid-0001")
+
+    assert result["action"] == "QUEUE"
+    assert adapter.sent == []  # SHADOW nunca envia
+    draft = engine.store.draft(result["draft_id"])
+    assert (draft["status"], draft["reply"]) == (status, PAID_NOTICE)
+    assert engine.payment_confirmed("ord-paid-0001")[0]["action"] == "DUPLICATE"
+    notices = [d for d in engine.store.queue() if d["intent"] == "pagamento_confirmado"]
+    assert len(notices) == 1
+
+
+def test_paid_notice_outside_the_window_only_uses_the_utility_template(tmp_path):
+    engine, adapter, _ = _paid_engine(tmp_path, adapter=ClosedWindowAdapter())
+    [queued] = engine.payment_confirmed("ord-paid-0001")
+
+    assert queued["action"] == "QUEUE"
+    assert queued["reason"] == "CUSTOMER_SERVICE_WINDOW_CLOSED"
+    assert adapter.sent == []
+
+    templated, template_adapter, _ = _paid_engine(
+        tmp_path / "t", adapter=TemplateAdapter()
+    )
+    [sent] = templated.payment_confirmed("ord-paid-0001")
+
+    assert sent["action"] == "SEND"
+    assert template_adapter.templates == [("pedido_confirmado", "paid:ord-paid-0001")]
+    assert template_adapter.sent == []  # texto livre fora da janela, nunca
+    [event] = templated.store.events(event="ORDER_PAID_NOTICE")
+    assert json.loads(event["detail_json"])["via"] == "pedido_confirmado"
+
+
+def test_paid_notice_goes_to_the_founder_when_he_has_the_conversation(tmp_path):
+    engine, adapter, _ = _paid_engine(tmp_path)
+    engine.set_state("whatsapp", "c1", "HUMAN", actor="fundador")
+    [result] = engine.payment_confirmed("ord-paid-0001")
+
+    assert (result["action"], result["reason"]) == ("QUEUE", "STATE_HUMAN")
+    assert adapter.sent.count(PAID_NOTICE) == 0
+
+
+class FailingAdapter(RecordingAdapter):
+    def send(self, conversation_id, text, *, idempotency_key, human_written=False):
+        raise ConnectionError("rede")
+
+
+def test_paid_notice_failure_never_breaks_the_provider_webhook(tmp_path):
+    engine, _, _ = make_engine(tmp_path, mode="AUTO", adapter=FailingAdapter())
+    engine.store.conversation("whatsapp", "c1")
+    engine.store.update("whatsapp:c1", order_id="ord-paid-0001")
+    [result] = engine.payment_confirmed("ord-paid-0001")
+
+    assert result["action"] == "QUEUE"
+    assert result["reason"] == "SEND_ERROR_ConnectionError"
+    assert engine.store.get("whatsapp", "c1")["paid"] == 1
+
 
 def test_customer_data_is_not_collected_before_the_yes(tmp_path):
     engine, _, _ = make_engine(tmp_path, mode="AUTO")
@@ -323,24 +511,32 @@ def test_customer_data_is_not_collected_before_the_yes(tmp_path):
     assert engine.store.customer_data("whatsapp:c1") is None
 
 
-# -- gatilhos de passagem ao fundador -------------------------------------------------
+# -- passagem ao fundador: CHAMADA, TAREFA e só a IA ----------------------------------
+
+
+def panel_tasks(engine):
+    return [item for item in engine.store.alerts() if item["delivery"] == "PAINEL"]
 
 
 @pytest.mark.parametrize(
     ("messages", "reason"),
     [
         (["quero falar com um atendente"], "PEDIDO_DE_ATENDENTE"),
+        (["posso falar com o responsável?"], "PEDIDO_DE_ATENDENTE"),
+        (["me liga agora, por favor"], "PEDIDO_DE_ATENDENTE"),
+        (["dá pra fazer uma videochamada?"], "PEDIDO_DE_ATENDENTE"),
         (["vou reclamar no Reclame Aqui"], "RECLAMACAO"),
-        (["já paguei, segue o comprovante"], "PROBLEMA_PAGAMENTO"),
-        (["faz um desconto?", "faz por 250, me dá desconto"], "FORA_DA_POLITICA"),
-        (["consegue entrega expressa pra amanhã?"], "FORA_DA_POLITICA"),
-        (["manda primeiro que eu pago quando chegar"], "SINAL_DE_FRAUDE"),
-        (["pode emitir nota fiscal no CNPJ?"], "SO_PESSOA"),
-        (["vocês têm vaga de emprego?"], "FORA_DE_VENDAS"),
-        (["hmm", "e aquilo", "sei la"], "IA_TRAVADA"),
+        (["vou chamar meu advogado"], "RECLAMACAO"),
+        # Oferta do agente aceita com um "sim" curto.
+        (["hmm", "e aquilo", "sei la", "sim"], "PEDIDO_DE_ATENDENTE"),
+        (
+            ["faz um desconto?", "faz por 250, me dá desconto", "pode chamar"],
+            "PEDIDO_DE_ATENDENTE",
+        ),
+        (["que absurdo, péssimo isso", "quero"], "PEDIDO_DE_ATENDENTE"),
     ],
 )
-def test_each_trigger_stops_the_agent(tmp_path, messages, reason):
+def test_call_hands_over_and_alerts_the_founder(tmp_path, messages, reason):
     engine, _, alerts = make_engine(tmp_path, mode="AUTO")
     for text in messages:
         result = say(engine, text)
@@ -348,21 +544,243 @@ def test_each_trigger_stops_the_agent(tmp_path, messages, reason):
     assert result["action"] == "HANDOFF"
     assert result["reason"] == reason
     assert engine.store.get("whatsapp", "c1")["state"] == "HUMAN"
-    alert = next(item for item in alerts if item["reason"] == reason)
+    [alert] = [item for item in alerts if item["reason"] == reason]
     assert len(alert["summary"].splitlines()) <= 3
+    assert engine.metrics()["whatsapp"]["handoffs_by_reason"] == {reason: 1}
     # Parado: a próxima mensagem não gera resposta.
     assert say(engine, "oi")["action"] == "SKIPPED"
 
 
-def test_unconfirmed_fact_alerts_without_stopping_the_conversation(tmp_path):
+@pytest.mark.parametrize(
+    ("text", "intent", "reason", "fragment"),
+    [
+        (
+            "fui cobrado duas vezes no cartão",
+            "pagamento_conferencia",
+            "PROBLEMA_PAGAMENTO",
+            "conferir o pagamento no Mercado Pago",
+        ),
+        (
+            "o link não funciona",
+            "pagamento_conferencia",
+            "PROBLEMA_PAGAMENTO",
+            "conferir o pagamento no Mercado Pago",
+        ),
+        (
+            "pode emitir nota fiscal no CNPJ?",
+            "so_pessoa",
+            "SO_PESSOA",
+            "equipe confirma",
+        ),
+        ("vocês vendem no atacado?", "so_pessoa", "SO_PESSOA", "equipe confirma"),
+        (
+            "vocês têm vaga de emprego?",
+            "fora_de_vendas",
+            "FORA_DE_VENDAS",
+            "fora do atendimento de vendas",
+        ),
+        (
+            "isso é um absurdo, péssimo atendimento",
+            "insatisfacao",
+            "RECLAMACAO",
+            "Se preferir falar com o responsável da Veratus, é só me dizer.",
+        ),
+        (
+            "qual a garantia do relógio?",
+            "fato_pendente",
+            "FATO_NAO_CONFIRMADO",
+            "equipe confirma",
+        ),
+    ],
+)
+def test_task_keeps_the_agent_and_skips_the_ping(
+    tmp_path, text, intent, reason, fragment
+):
     engine, adapter, alerts = make_engine(tmp_path, mode="AUTO")
-    result = say(engine, "qual a garantia do relógio?")
+    result = say(engine, text)
 
     assert result["action"] == "SEND"
-    assert "equipe confirma" in adapter.sent[-1]
-    assert alerts[-1]["reason"] == "FATO_NAO_CONFIRMADO"
+    assert (result["intent"], result["task"]) == (intent, reason)
+    assert fragment in adapter.sent[-1]
+    assert alerts == []  # sem ping
+    [task] = panel_tasks(engine)
+    assert task["reason"] == reason
+    assert len(task["summary"].splitlines()) <= 3
     assert engine.store.get("whatsapp", "c1")["state"] == "BOT"
+    metrics = engine.metrics()["whatsapp"]
+    assert metrics["tasks_by_reason"] == {reason: 1}
+    assert metrics["handoffs_by_reason"] == {}
+    # Sem ameaça jurídica, o disjuntor não rebaixa o canal.
+    assert engine.mode("whatsapp") == "AUTO"
     assert say(engine, "e o frete?")["action"] == "SEND"
+
+
+def test_address_change_after_payment_is_a_task(tmp_path):
+    engine, adapter, alerts = make_engine(tmp_path, mode="AUTO")
+    say(engine, "oi")
+    engine.store.update("whatsapp:c1", paid=1)
+    result = say(engine, "quero trocar o endereço de entrega")
+
+    assert (result["intent"], result["task"]) == ("endereco_pago", "SINAL_DE_FRAUDE")
+    assert "endereço não muda por aqui depois do pagamento" in adapter.sent[-1]
+    assert alerts == []
+    assert [task["reason"] for task in panel_tasks(engine)] == ["SINAL_DE_FRAUDE"]
+
+
+def test_unpriced_product_is_a_task_not_a_loose_promise(tmp_path):
+    engine, adapter, alerts = make_engine(tmp_path, mode="AUTO")
+    result = say(engine, "quanto custa o Halo Verde?")
+
+    assert (result["intent"], result["task"]) == ("preco", "FATO_NAO_CONFIRMADO")
+    assert "equipe confirma" in adapter.sent[-1]
+    assert alerts == []
+    [task] = panel_tasks(engine)
+    assert "Halo Verde" in task["suggestion"]
+
+
+@pytest.mark.parametrize(
+    ("messages", "intent", "fragment"),
+    [
+        (
+            ["já paguei, segue o comprovante"],
+            "pagamento_informado",
+            "chega automaticamente pelo Mercado Pago",
+        ),
+        (
+            ["manda primeiro que eu pago quando chegar"],
+            "pagamento_fora_do_link",
+            "depois do pagamento confirmado pelo link do Mercado Pago",
+        ),
+        (
+            ["posso fazer um depósito?"],
+            "pagamento_fora_do_link",
+            "link do Mercado Pago",
+        ),
+        (["manda o pix pessoal"], "pagamento_fora_do_link", "link do Mercado Pago"),
+        (
+            ["consegue entrega expressa pra amanhã?"],
+            "politica_prazo",
+            "entrega em até 7 dias",
+        ),
+        (["manda por sedex?"], "politica_prazo", "entrega em até 7 dias"),
+        (
+            ["dá pra trocar depois de 30 dias?"],
+            "politica_troca",
+            "desistir da compra em até 7 dias após o recebimento",
+        ),
+        (
+            ["faz um desconto?", "faz por 250, me dá desconto"],
+            "desconto_insistente",
+            "Se preferir falar com o responsável da Veratus, é só me dizer.",
+        ),
+        (
+            ["faz um desconto?", "faz por 250", "e um cupom?"],
+            "desconto_insistente",
+            "Mantemos o preço",
+        ),
+    ],
+)
+def test_ai_only_answers_without_task_or_ping(tmp_path, messages, intent, fragment):
+    engine, adapter, alerts = make_engine(tmp_path, mode="AUTO")
+    for text in messages:
+        result = say(engine, text)
+
+    assert result["action"] == "SEND"
+    assert result["intent"] == intent
+    assert "task" not in result
+    assert fragment in adapter.sent[-1]
+    assert alerts == [] and engine.store.alerts() == []
+    assert engine.store.get("whatsapp", "c1")["state"] == "BOT"
+
+
+def test_first_discount_keeps_the_current_reply_and_the_second_holds_the_price(
+    tmp_path,
+):
+    engine, adapter, _ = make_engine(tmp_path, mode="AUTO")
+    first = say(engine, "faz um desconto?")
+    second = say(engine, "me dá um desconto vai")
+
+    assert first["intent"] == "preco"
+    assert "não trabalhamos com desconto" in adapter.sent[0]
+    assert second["intent"] == "desconto_insistente"
+    for fact in (
+        "frete grátis",
+        "sem taxa adicional",
+        "entrega em até 7 dias",
+        "desistência em até 7 dias após o recebimento",
+    ):
+        assert fact in adapter.sent[1]
+    assert engine.store.get("whatsapp", "c1")["last_intent"] == OFFER_MARK
+
+
+def test_payment_is_never_confirmed_by_the_customer_message(tmp_path):
+    engine, adapter, _ = make_engine(tmp_path, mode="AUTO")
+    say(engine, "paguei! segue o print do comprovante")
+
+    assert "confirmado" not in adapter.sent[-1]
+    assert engine.store.get("whatsapp", "c1")["paid"] == 0
+    assert engine.store.events(event="ORDER_PAID") == []
+
+
+def test_stalled_agent_offers_the_founder_instead_of_handing_off(tmp_path):
+    engine, adapter, alerts = make_engine(tmp_path, mode="AUTO")
+    for text in ["hmm", "e aquilo", "sei la"]:
+        result = say(engine, text)
+
+    assert (result["action"], result["intent"]) == ("SEND", OFFER_MARK)
+    assert adapter.sent[-1] == OFFER_TEXT
+    assert engine.store.get("whatsapp", "c1")["last_intent"] == OFFER_MARK
+    assert alerts == [] and engine.store.alerts() == []
+    offers = engine.store.events(event="HANDOFF_OFFERED")
+    assert [item["reason"] for item in offers] == ["IA_TRAVADA"]
+    # Recusa segue normal: o agente continua e ninguém é chamado.
+    declined = say(engine, "não, pode seguir")
+    assert declined["action"] == "SEND"
+    assert engine.store.get("whatsapp", "c1")["state"] == "BOT"
+    assert alerts == []
+
+
+class UnapprovedModel(TemplateSalesModel):
+    def draft(self, request):
+        return {
+            **super().draft(request),
+            "review": {"approved_for_human_review": False},
+        }
+
+
+def test_other_intent_guides_the_customer_and_follows_the_reviewer(tmp_path):
+    engine, adapter, _ = make_engine(tmp_path, mode="AUTO")
+    approved = say(engine, "hmm")
+
+    assert (approved["action"], approved["risk"]) == ("SEND", 1)
+    assert adapter.sent[-1] == (
+        "Posso te ajudar a escolher um relógio ou uma joia da Veratus. "
+        "Quer ver os modelos?"
+    )
+    assert "equipe" not in adapter.sent[-1]
+    assert say(engine, "sim")["intent"] == "catalogo"
+
+    unreviewed, _, _ = make_engine(tmp_path / "b", mode="AUTO", model=UnapprovedModel())
+    refused = say(unreviewed, "hmm")
+    assert (refused["action"], refused["risk"]) == ("QUEUE", 9)
+
+
+def test_every_policy_reply_passes_the_gate():
+    model = TemplateSalesModel()
+    for intent in sorted(POLICY_INTENTS | {"outro"}):
+        for channel in ("whatsapp", "mercado_livre"):
+            draft = model.draft(
+                DraftRequest(channel, "c1", "texto", intent, None, None, {})
+            )
+            assert draft["customer_reply"]
+            assert (
+                hard_review_customer_reply(
+                    draft["customer_reply"],
+                    draft["commercial_claims"],
+                    channel=channel,
+                )
+                == []
+            ), (intent, channel)
 
 
 class BadModel(TemplateSalesModel):
@@ -373,15 +791,20 @@ class BadModel(TemplateSalesModel):
         return draft
 
 
-def test_two_gate_failures_hand_off_and_trip_the_breaker(tmp_path):
+def test_two_gate_failures_offer_the_founder_and_trip_the_breaker(tmp_path):
     engine, adapter, alerts = make_engine(tmp_path, mode="AUTO", model=BadModel())
     result = say(engine, "oi")
 
-    assert result["action"] == "HANDOFF"
-    assert result["reason"] == "IA_TRAVADA"
-    assert adapter.sent == []
+    assert (result["action"], result["intent"]) == ("SEND", OFFER_MARK)
+    assert adapter.sent == [OFFER_TEXT]  # nunca o rascunho reprovado
     assert engine.mode("whatsapp") == "AUTO_SAFE"
-    assert any(alert["reason"] == "DISJUNTOR" for alert in alerts)
+    assert [alert["reason"] for alert in alerts] == ["DISJUNTOR"]
+    assert engine.store.get("whatsapp", "c1")["state"] == "BOT"
+    accepted = say(engine, "sim, por favor")
+    assert (accepted["action"], accepted["reason"]) == (
+        "HANDOFF",
+        "PEDIDO_DE_ATENDENTE",
+    )
 
 
 def test_complaint_lowers_the_channel_one_level(tmp_path):
@@ -413,9 +836,39 @@ def test_classifier_reads_intents():
     assert classify("quanto custa?", {}).intent == "preco"
     assert classify("aceita cartão?", {}).intent == "como_pedir"
     assert classify("01310-100", {"awaiting_data": 1}).intent == "dados_pedido"
-    assert classify("quero trocar o endereço", {"paid": 1}).trigger == (
-        "SINAL_DE_FRAUDE"
+    paid_address = classify("quero trocar o endereço", {"paid": 1})
+    assert (paid_address.intent, paid_address.task) == (
+        "endereco_pago",
+        "SINAL_DE_FRAUDE",
     )
+    assert classify("quero trocar o endereço", {}).task is None
+
+
+def test_short_yes_accepts_only_right_after_the_offer():
+    offer = {"last_intent": OFFER_MARK}
+    for yes in (
+        "sim",
+        "Sim!",
+        "quero",
+        "pode",
+        "pode chamar",
+        "chama",
+        "por favor",
+        "sim, quero",
+        "pode ser",
+    ):
+        assert classify(yes, offer).trigger == "PEDIDO_DE_ATENDENTE", yes
+    for no in ("não", "não precisa", "pode seguir", "sim, mas qual o prazo?"):
+        assert classify(no, offer).trigger is None, no
+    # Sem a oferta, "sim, quero" e "pode ser" continuam sendo fechamento.
+    assert classify("sim, quero", {}).intent == "fechamento"
+    assert classify("pode ser", {"last_intent": "preco"}).intent == "fechamento"
+
+
+def test_whatsapp_entry_uses_the_engine_phrase_list():
+    for text in ("Prefiro falar com um atendente", "me liga?", "chamada de vídeo"):
+        assert wants_human(text) and asks_for_person(text)
+    assert not wants_human("qual o prazo?")
 
 
 # -- disjuntor e prontidão ------------------------------------------------------------

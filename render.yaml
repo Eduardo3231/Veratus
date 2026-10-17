@@ -218,6 +218,8 @@ services:
         value: "SHADOW"
       - key: CONVERSATION_MODEL
         value: "live"
+      - key: CONVERSATION_AUTOPROCESS_ENABLED
+        value: "false"
       - key: FOUNDER_ALERT_WHATSAPP
         sync: false
       - key: FOUNDER_ALERT_EMAIL

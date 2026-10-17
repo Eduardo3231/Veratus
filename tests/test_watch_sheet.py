@@ -271,7 +271,10 @@ def test_agent_still_asks_the_team_while_pending(tmp_path):
 
     assert result["intent"] == "fato_pendente"
     assert "equipe confirma" in adapter.sent[-1]
-    assert alerts[-1]["reason"] == "FATO_NAO_CONFIRMADO"
+    # Vira tarefa no painel, sem ping ao fundador.
+    assert alerts == []
+    [task] = conversations.store.alerts()
+    assert (task["reason"], task["delivery"]) == ("FATO_NAO_CONFIRMADO", "PAINEL")
 
 
 # -- comando e rota -------------------------------------------------------------------
