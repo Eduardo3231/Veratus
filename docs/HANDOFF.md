@@ -1,7 +1,16 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 16/10/2026, Claude Code (reestruturação aplicada em `landing/` na branch, sem deploy; lote de 52 arquivos de relógios bloqueado).
+**Última atualização:** 17/10/2026, Claude Code (hook de sessão que instala os agentes da The Agency; etapa 1 da skill img-to-html em `design-systems/veratus-landing/`).
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
+
+## Sessões na nuvem: agentes da The Agency e dependências (17/10)
+
+`.claude/hooks/session-start.sh`, registrado em `.claude/settings.json`, roda no início de cada sessão do Claude Code na nuvem (fora dela sai sem fazer nada):
+
+- instala os 282 agentes de `msitarzewski/agency-agents` (MIT) fixados no commit `652b2692`, pelo instalador oficial, em `~/.claude/agents/`; um marcador evita reinstalar; sem rede para o GitHub a sessão abre sem eles;
+- cria `~/.venvs/veratus` com `requirements-dev.txt` e põe esse Python no `PATH` da sessão.
+
+Medido numa home limpa: 32 s na primeira vez, 0,7 s nas seguintes. Sessões novas clonam a branch padrão, então o hook só vale para elas depois que chegar à `main`. Trocar de versão da The Agency = trocar `AGENCY_COMMIT` depois de ler o diff deles.
 
 ## Site reestruturado em `landing/` (16/10): pronto na branch, sem deploy
 
