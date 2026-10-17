@@ -267,6 +267,7 @@ ROTEIRO: list[tuple[str, str, str, dict[str, Any]]] = [
         {"texto": "Oi! Vi o anúncio do Emerald Signature. Demora quantos dias?"},
     ),
     ("11:42", "c11", "fb", {"texto": "Posso pagar quando chegar?"}),
+    ("11:43", "c11", "fb", {"texto": "Achei um pouco caro"}),
     ("11:45", "c11", "fb", {"texto": "Tudo bem. Quero o Emerald Signature"}),
     (
         "11:48",
@@ -284,6 +285,9 @@ ROTEIRO: list[tuple[str, str, str, dict[str, Any]]] = [
         {"texto": "Boa noite! Vocês fazem gravação do nome no Platinum Classic?"},
     ),
     ("19:08", "c12", "fb", {"texto": "Entendi. E qual o prazo de entrega?"}),
+    ("19:10", "c12", "fb", {"texto": "Você é um robô?"}),
+    ("19:12", "c12", "fb", {"texto": "Vou pensar"}),
+    ("19:40", "c12", "fb", {"texto": "Vou pensar mais um pouco"}),
     ("09:04", "c1", "wa", {"texto": _site_message("Royal Blue", "royal-blue")}),
     ("09:06", "c1", "wa", {"texto": "Tem desconto no Pix?"}),
     ("09:08", "c1", "wa", {"texto": "Fechado, quero comprar"}),
@@ -301,7 +305,9 @@ ROTEIRO: list[tuple[str, str, str, dict[str, Any]]] = [
         {"texto": "Oi, vi o anúncio do Ocean Blue. A caixa é de aço?", "referral": AD},
     ),
     ("09:33", "c2", "wa", {"texto": "E quanto custa?"}),
-    ("09:36", "c2", "wa", {"texto": "Quero esse"}),
+    # Método Harvey: a objeção de quem decide junto vira um resumo para mostrar.
+    ("09:34", "c2", "wa", {"texto": "Vou ver com minha esposa"}),
+    ("09:36", "c2", "wa", {"texto": "Ela gostou, quero esse"}),
     (
         "09:39",
         "c2",

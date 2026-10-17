@@ -3,6 +3,21 @@
 **Última atualização:** 17/10/2026 (fim da noite), Claude Code: Facebook como canal principal (Messenger da Página e catálogo da Meta), correções da revisão independente (dados pessoais, chamadas ao fundador, marketplace, concorrência, pagamento) e painel ao vivo refeito. Nada foi ligado, publicado ou mandado para a `main`.
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
 
+## Método Harvey no agente de vendas (17/10)
+
+- **Origem:** https://github.com/ethanplusai/harvey (commit `e114e95`, MIT; aviso em `knowledge/skills/HARVEY-LICENSE`). O Harvey é um agente de prospecção B2B (e-mail frio, LinkedIn, busca de contatos). Isso **não** foi usado: a Veratus não faz contato frio. Das 9 skills, valeram as de conversa: `sales_methodology`, `objection_handling` (LAARC), `offer_strategy` e as regras éticas.
+- **Skills de venda** (`knowledge/skills/harvey-metodo.md`, `harvey-objecoes.md`, `harvey-fechamento.md`, `harvey-limites.md`, cada uma com menos de 800 caracteres, o corte do `LiveSalesModel`): vão no contexto do modelo de linguagem em toda conversa; `SALES_INSTRUCTIONS` ganhou o passo 8 (método Harvey).
+- **Texto fixo no motor** (`conversations.py`, intenções de risco 0 em `POLICY_INTENTS`), antes tudo caía em "outro":
+  - `objecao_preco` ("tá caro", "achei caro"): reconhece, mostra o que está incluído (frete grátis, sem taxas, desistência em 7 dias) e pergunta se pesa o valor ou o modelo; conta como pedido de desconto, então insistir vira `desconto_insistente`.
+  - `hesitacao` / `hesitacao_final` ("vou pensar"): uma pergunta de diagnóstico; na segunda vez, porta aberta e silêncio.
+  - `consultar_alguem` ("vou ver com minha esposa"): resumo do relógio com valor e prazo para mostrar.
+  - `sem_interesse` ("não tenho interesse"): agradece e para, sem nova oferta.
+  - `pergunta_ia` ("você é um robô?"): diz que é o assistente virtual da Veratus e oferece o responsável.
+  - Versões de marketplace sem as condições da venda direta.
+- **Fora, de propósito:** blefe, intimidação, urgência e "takeaway" encenado do personagem (prática abusiva no CDC e contra as regras daqui); e-mail frio, LinkedIn, multicanal e busca de contatos.
+- **Verificação:** 5 casos novos obrigatórios em `knowledge/conversas-teste.yaml` (eval 18/18), `tests/test_harvey.py`, suíte inteira verde, simulação com as cenas do método (c2, c11, c12), mesmas 2 chamadas ao fundador.
+- **Decisão do fundador:** dar ao atendente o nome "Harvey" para o cliente (hoje ele se apresenta como "assistente virtual da Veratus").
+
 ## Gestor do Instagram: skills `ig-*` (17/10)
 
 - 13 skills de https://github.com/Jakeschincariol/instagram-agent-skill (commit `d03c56b`, MIT) em `.claude/skills/ig-*`; origem em `.claude/skills/instagram-agent-skill-ORIGEM.md`.

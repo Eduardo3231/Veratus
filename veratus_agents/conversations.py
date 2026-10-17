@@ -94,6 +94,13 @@ INTENT_RISK = {
     "contato_marketplace": 0,
     # "Isso ainda está disponível?": sem estoque confirmado, texto fixo sem prometer.
     "disponibilidade": 0,
+    # Método Harvey (knowledge/skills/harvey-*.md): objeção com texto fixo.
+    "objecao_preco": 0,
+    "hesitacao": 0,
+    "hesitacao_final": 0,
+    "consultar_alguem": 0,
+    "sem_interesse": 0,
+    "pergunta_ia": 0,
     # Aviso de pagamento confirmado pelo provedor (payment_confirmed).
     "pagamento_confirmado": 0,
     # Assunto que o modelo não reconhece: risco 1 com o revisor aprovando, 9 sem.
@@ -174,12 +181,20 @@ POLICY_INTENTS = frozenset(
         "insatisfacao",
         "contato_marketplace",
         "disponibilidade",
+        "objecao_preco",
+        "hesitacao",
+        "hesitacao_final",
+        "consultar_alguem",
+        "sem_interesse",
+        "pergunta_ia",
     }
 )
 # Marca da oferta de chamar o responsável, guardada em ``last_intent``: um "sim"
 # curto logo depois vira PEDIDO_DE_ATENDENTE.
 OFFER_MARK = "oferta_responsavel"
-OFFER_INTENTS = frozenset({OFFER_MARK, "desconto_insistente", "insatisfacao"})
+OFFER_INTENTS = frozenset(
+    {OFFER_MARK, "desconto_insistente", "insatisfacao", "pergunta_ia"}
+)
 OFFER_SENTENCE = "Se preferir falar com o responsável da Veratus, é só me dizer."
 OFFER_TEXT = "Quer que eu chame o responsável da Veratus para falar com você?"
 PAID_NOTICE = (
@@ -330,6 +345,70 @@ _YES_WORDS = frozenset(
     {"sim", "quero", "pode", "chama", "chamar", "por", "favor", "ser"}
 )
 _YES_CORE = frozenset({"sim", "quero", "pode", "chama", "chamar", "favor"})
+# Método Harvey: as objeções que o agente trata com uma tentativa só.
+_PRICE_OBJECTION = _phrases(
+    "tá caro",
+    "ta caro",
+    "está caro",
+    "esta caro",
+    "achei caro",
+    "um pouco caro",
+    "muito caro",
+    "caro demais",
+    "salgado",
+    "fora do meu orçamento",
+    "fora do meu orcamento",
+)
+_HESITATION = _phrases(
+    "vou pensar",
+    "deixa eu pensar",
+    "preciso pensar",
+    "depois eu vejo",
+    "depois vejo",
+    "vou ver depois",
+    "mais tarde eu vejo",
+    "talvez depois",
+)
+_ASK_SOMEONE = _phrases(
+    "com minha esposa",
+    "com a minha esposa",
+    "com meu marido",
+    "com o meu marido",
+    "com minha mulher",
+    "com minha namorada",
+    "com meu namorado",
+    "vou consultar",
+    "preciso consultar",
+    "mostrar pra minha",
+    "mostrar para minha",
+    "mostrar pro meu",
+)
+_NO_INTEREST = _phrases(
+    "não tenho interesse",
+    "nao tenho interesse",
+    "sem interesse",
+    "não quero mais",
+    "nao quero mais",
+    "pare de me mandar",
+    "para de me mandar",
+    "não me mande",
+    "nao me mande",
+)
+# Honestidade sobre ser automação (harvey-limites.md).
+_ASKS_IF_BOT = _phrases(
+    "robô",
+    "robo",
+    "é um bot",
+    "e um bot",
+    "chatbot",
+    "inteligência artificial",
+    "inteligencia artificial",
+    "é uma ia",
+    "e uma ia",
+    "você é humano",
+    "voce e humano",
+    "é uma pessoa de verdade",
+)
 _DISCOUNT = _phrases(
     "desconto", "abaixa", "baixar o preço", "baixar o preco", "faz por", "cupom"
 )
@@ -603,6 +682,10 @@ def classify(text: str, conversation: dict[str, Any]) -> Classification:
         normalized, _CONTACT_REQUEST
     ):
         return Classification("contato_marketplace")
+    if _has(normalized, _NO_INTEREST):
+        return Classification("sem_interesse")
+    if _has(normalized, _ASKS_IF_BOT):
+        return Classification("pergunta_ia")
     if _has(normalized, _PAYMENT_OUTSIDE_LINK):
         return Classification("pagamento_fora_do_link")
     if _has(normalized, _PAYMENT_CLAIMED):
@@ -615,6 +698,18 @@ def classify(text: str, conversation: dict[str, Any]) -> Classification:
         if int(conversation.get("discount_requests") or 0) >= 1:
             return Classification("desconto_insistente", discount_request=True)
         return Classification("preco", discount_request=True)
+    if _has(normalized, _PRICE_OBJECTION):
+        # Conta como pedido de desconto: insistir depois vira desconto_insistente.
+        if int(conversation.get("discount_requests") or 0) >= 1:
+            return Classification("desconto_insistente", discount_request=True)
+        return Classification("objecao_preco", discount_request=True)
+    if _has(normalized, _ASK_SOMEONE):
+        return Classification("consultar_alguem")
+    if _has(normalized, _HESITATION):
+        # Uma tentativa por objeção: na segunda vez, porta aberta e silêncio.
+        if conversation.get("last_intent") in ("hesitacao", "hesitacao_final"):
+            return Classification("hesitacao_final")
+        return Classification("hesitacao")
     for topic, phrases in _PENDING_TOPICS:
         if _has(normalized, phrases):
             return Classification(
@@ -732,6 +827,16 @@ def _marketplace_reply(request: DraftRequest, name: str | None) -> str | None:
         request.channel, ("o marketplace", "do marketplace", "no marketplace")
     )
     intent = request.intent
+    if intent == "objecao_preco":
+        return (
+            "Entendo. O valor é o do anúncio, e não trabalhamos com desconto. O que "
+            "pesa mais na sua decisão: o valor ou a escolha do modelo?"
+        )
+    if intent == "consultar_alguem":
+        return (
+            "Claro, fique à vontade: o anúncio tem as informações para mostrar, e a "
+            "compra é feita por ele quando decidirem."
+        )
     if intent == "desconto_insistente" or (
         intent == "preco" and request.discount_request
     ):
@@ -941,6 +1046,26 @@ class TemplateSalesModel:
                 else "A confirmação do pagamento chega automaticamente pelo Mercado "
                 "Pago, e eu aviso por aqui assim que ela chegar."
             )
+        elif intent == "objecao_preco":
+            reply = (
+                "Entendo, vale decidir com calma. O valor já inclui frete grátis e não "
+                "tem taxa adicional, e você pode desistir em até 7 dias após o "
+                "recebimento. O que pesa mais na sua decisão: o valor ou a escolha do "
+                "modelo?"
+            )
+            claims = _claims("frete-gratis", "sem-taxas", "desistencia-7-dias")
+        elif intent == "consultar_alguem" and is_watch and public_price(product):
+            reply = (
+                f"Claro. Para facilitar, o resumo: {name}, R$ 289,90, com frete "
+                "grátis e entrega em até 7 dias. Quando decidirem, é só me chamar "
+                "por aqui."
+            )
+            claims = _claims("preco-relogios", "frete-gratis", "entrega-7-dias")
+        elif intent == "consultar_alguem":
+            reply = (
+                "Claro, fique à vontade. Se me disser qual peça vocês estão vendo, eu "
+                "mando um resumo curto para mostrar."
+            )
         elif intent == "disponibilidade":
             # Estoque não é fato confirmado: a disponibilidade sai com o pedido.
             reply = (
@@ -949,6 +1074,21 @@ class TemplateSalesModel:
                 if name
                 else "Olá! A disponibilidade a equipe confirma junto com o seu "
                 "pedido. Qual peça você viu?"
+            )
+        elif intent == "hesitacao":
+            reply = (
+                "Claro, sem pressa. Para te ajudar a decidir: ficou alguma dúvida sobre "
+                "o modelo, a entrega ou o pagamento?"
+            )
+        elif intent == "hesitacao_final":
+            reply = "Tudo bem. Quando quiser retomar, é só me chamar por aqui."
+        elif intent == "sem_interesse":
+            reply = "Tudo bem, obrigado por avisar. Se mudar de ideia, é só me chamar."
+        elif intent == "pergunta_ia":
+            # Nunca se passa por pessoa (harvey-limites.md).
+            reply = (
+                "Sou o assistente virtual da Veratus e respondo com as informações "
+                f"confirmadas da loja. {OFFER_SENTENCE}"
             )
         elif intent == "contato_marketplace":
             reply = (

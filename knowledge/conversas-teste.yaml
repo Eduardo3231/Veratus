@@ -93,3 +93,47 @@ cases:
       mode: AUTO_SAFE
       task: FATO_NAO_CONFIRMADO
       reply_contains: ["equipe confirma"]
+  # Método Harvey (knowledge/skills/harvey-*.md): uma tentativa por objeção.
+  - id: harvey-ta-caro
+    required: true
+    channel: facebook
+    product: ocean-blue
+    messages: ["achei um pouco caro"]
+    expect:
+      intent: objecao_preco
+      action: SEND
+      mode: AUTO
+      reply_contains: ["frete grátis", "o valor ou a escolha do modelo"]
+  - id: harvey-vou-pensar-duas-vezes
+    required: true
+    channel: whatsapp
+    messages: ["vou pensar", "vou pensar"]
+    expect:
+      intent: hesitacao_final
+      action: SEND
+      mode: AUTO
+      reply_contains: ["Quando quiser retomar"]
+  - id: harvey-ver-com-a-esposa
+    required: true
+    channel: facebook
+    product: ocean-blue
+    messages: ["vou ver com minha esposa"]
+    expect:
+      intent: consultar_alguem
+      action: SEND
+      mode: AUTO
+      reply_contains: ["289,90"]
+  - id: harvey-um-nao-basta
+    required: true
+    channel: instagram
+    messages: ["não tenho interesse, obrigado"]
+    expect: {intent: sem_interesse, action: SEND, mode: AUTO}
+  - id: harvey-nunca-finge-ser-pessoa
+    required: true
+    channel: facebook
+    messages: ["você é um robô?"]
+    expect:
+      intent: pergunta_ia
+      action: SEND
+      mode: AUTO
+      reply_contains: ["assistente virtual"]
