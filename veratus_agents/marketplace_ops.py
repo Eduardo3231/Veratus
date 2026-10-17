@@ -704,7 +704,7 @@ class ExternalWriteGuard:
         product: dict[str, Any],
         *,
         approval: ApprovalRequestLike | None = None,
-        agent: str = "marketplace-agent",
+        agent: str | None = None,
         publish_enabled: bool = False,
     ) -> tuple[bool, list[str]]:
         reasons: list[str] = []
@@ -723,12 +723,12 @@ class ExternalWriteGuard:
         if product.get("status") != ProductStatus.APPROVED.value:
             reasons.append("PRODUCT_NOT_APPROVED")
         try:
-            from .operations import AGENT_REGISTRY
+            from .operations import AGENT_REGISTRY, OperationalRuntime
 
-            if (
-                agent in AGENT_REGISTRY
-                and "PUBLISH" not in AGENT_REGISTRY[agent].permissions
-            ):
+            # Sem agente, vale o agente do canal; id fora do registro não publica.
+            agent = agent or OperationalRuntime.CHANNEL_AGENTS.get(channel, "")
+            registered = AGENT_REGISTRY.get(agent)
+            if registered is None or "PUBLISH" not in registered.permissions:
                 reasons.append("AGENT_PUBLISH_PERMISSION_REQUIRED")
         except ImportError:
             reasons.append("AGENT_REGISTRY_UNAVAILABLE")

@@ -401,6 +401,15 @@ APPROVAL_GATED_PERMISSIONS = frozenset({"SCHEDULE_APPROVED_CONTENT"})
 FORBIDDEN_FOR_NEW_ROLES = frozenset(
     {"PUBLISH", "SPEND", "SEND_MARKETING", "WRITE_PRICE", "EXTERNAL_WRITE"}
 )
+# Os papéis de 2026-10-13: mesmo com o registro alterado, nunca recebem as
+# permissões de FORBIDDEN_FOR_NEW_ROLES em tempo de execução.
+NEW_ROLE_IDS = frozenset(
+    {"customer-supervisor", "sales-agent", "aftersales-agent", "social-media-worker"}
+)
+
+
+def _forbidden_for_role(agent_id: str, permission: str) -> bool:
+    return agent_id in NEW_ROLE_IDS and permission in FORBIDDEN_FOR_NEW_ROLES
 
 
 def permission_allowed(
@@ -415,8 +424,11 @@ def permission_allowed(
 
     ``CONVERSE`` só envia sozinho em ``AUTO_SAFE`` (risco 0) ou ``AUTO``
     (risco até 1); ``CREATE_PAYMENT_LINK`` só em ``AUTO``;
-    ``SCHEDULE_APPROVED_CONTENT`` só para item ``APPROVED``.
+    ``SCHEDULE_APPROVED_CONTENT`` só para item ``APPROVED``. Os papéis novos
+    nunca recebem publicar, gastar, marketing, preço ou escrita externa.
     """
+    if _forbidden_for_role(agent_id, permission):
+        return False
     definition = AGENT_REGISTRY.get(agent_id)
     if definition is None or permission not in definition.permissions:
         return False
@@ -484,6 +496,9 @@ _TEAM_CONTRACTS = {
     ),
 }
 for _agent_id, _definition in list(AGENT_REGISTRY.items()):
+    if _definition.mission:
+        # Contrato escrito na própria definição (paid-acquisition-worker) prevalece.
+        continue
     _mission, _capabilities, _tools, _read, _escalations = _TEAM_CONTRACTS.get(
         _agent_id,
         (
@@ -1046,7 +1061,11 @@ class CommandEngine:
 
     def authorize(self, agent: str, permission: str) -> None:
         definition = AGENT_REGISTRY.get(agent)
-        if definition is None or permission not in definition.permissions:
+        if (
+            definition is None
+            or permission not in definition.permissions
+            or _forbidden_for_role(agent, permission)
+        ):
             raise PermissionError(f"{agent} não possui {permission}")
 
     def delegate(
@@ -1224,7 +1243,7 @@ class ParsedCommand:
 
 
 class OperationalRuntime:
-    """Deterministic 15-agent runtime.
+    """Deterministic runtime for every role in ``AGENT_REGISTRY``.
 
     The runtime deliberately stops at persisted local drafts. An external API write is
     never performed here; publishing belongs behind the approval and write guard.

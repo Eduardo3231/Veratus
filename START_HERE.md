@@ -69,7 +69,7 @@ Para chamar o agente via API, leia `integrations/agent_api.md`.
 
 ## 6. Testar o Product Master
 
-Com o serviço HTTP em execução, use os contratos em `docs/veratus-os.md`. O Product Master funciona sem chamada a modelo e, por isso, não consome tokens. Ele cria SKU, calcula preço, aplica QA e mantém o histórico de cada decisão.
+Com o serviço HTTP em execução, use as rotas `/os/*` listadas em `integrations/agent_api.md` (seção "Veratus OS e Product Master"). O Product Master funciona sem chamada a modelo e, por isso, não consome tokens. Ele cria SKU, calcula preço, aplica QA e mantém o histórico de cada decisão.
 
 ## O que ainda não está automático
 
@@ -86,9 +86,8 @@ Esses itens foram deixados fora do V1 de propósito. Primeiro valide a qualidade
 - `veratus_agents/policy.py` — gate determinístico;
 - `catalog/products.json` — catálogo usado pela IA;
 - `integrations/webhook.py` — API HTTP;
-- `docs/agent-system-v1.md` — arquitetura;
-- `docs/veratus-os.md` — Product Master, papéis e contratos;
-- `docs/agent-registry.json` — estado e permissões das 13 funções;
-- `docs/project-audit-2026-09-18.md` — auditoria atual e pendências.
-- `veratus_agents/operations.py` — registry, comandos, tarefas, permissões e simulação do Veratus OS.
-- `IMPLEMENTATION_REPORT.md` — resultado desta rodada e testes.
+- `integrations/agent_api.md` — rotas do agente e do Veratus OS;
+- `veratus_agents/operations.py` — registry, comandos, tarefas, permissões e simulação do Veratus OS;
+- `AGENT_REGISTRY`, em `veratus_agents/operations.py` — os 19 papéis, com nível, supervisor e permissões. Com o serviço no ar, `GET /os/agents` e `GET /os/agents/<id>` (cabeçalho `X-Veratus-Admin-Token`) devolvem o registro e o estado de cada papel;
+- `docs/HANDOFF.md` — estado atual, decisões abertas e verificação de cada rodada;
+- `docs/evidence/` — auditorias e evidências por rodada.

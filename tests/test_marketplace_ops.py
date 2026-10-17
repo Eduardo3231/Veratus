@@ -231,3 +231,26 @@ def test_filled_sheet_releases_the_watch_draft(tmp_path, filled_watch_sheet):
     assert listing["payload"]["ficha"]["gtin"] == "ISENTO"
     _, reasons = ExternalWriteGuard(store).check("amazon", product)
     assert not any(reason.startswith("WATCH_INFO_PENDING") for reason in reasons)
+
+
+def test_publish_guard_requires_a_registered_agent_with_publish(tmp_path, monkeypatch):
+    # Tudo o mais aberto (só no processo do teste): só o agente segura a publicação.
+    for name in (
+        "PUBLISH_ENABLED",
+        "SHOPEE_ENABLED",
+        "SHOPEE_PUBLISH_ENABLED",
+    ):
+        monkeypatch.setenv(name, "true")
+    monkeypatch.setenv("MARKETPLACE_MODE", "LIVE")
+    store = MarketplaceStore(tmp_path / "marketplace.sqlite3")
+    product = {"sku": "VRT-JOI-TESTE", "category": "Colares", "status": "APPROVED"}
+    approval = type("Approval", (), {"status": "APPROVED"})()
+    guard = ExternalWriteGuard(store)
+
+    # Padrão (agente do canal), papel do registro sem PUBLISH e ids fora do registro.
+    for agent in (None, "shopee-agent", "marketplace-agent", "agente-inventado"):
+        allowed, reasons = guard.check(
+            "shopee", product, approval=approval, agent=agent, publish_enabled=True
+        )
+        assert allowed is False
+        assert reasons == ["AGENT_PUBLISH_PERMISSION_REQUIRED"]

@@ -14,7 +14,10 @@ leads.csv
 runtime
 tests
 docs
-social
+# De social/ a imagem leva só o calendário que `social_scheduler import` lê;
+# auditoria, legendas, medição, prévias e a fila antiga ficam fora.
+social/*
+!social/calendario-*.json
 marketing
 automations
 branding
@@ -23,5 +26,7 @@ tmp-*
 *.zip
 *.pdf
 quarantine
+# Só a lista da quarentena entra, para o bloqueio valer no serviço; a mídia não.
+!quarantine/third-party-marks/manifest.json
 # Fotos originais (com EXIF) antes do tratamento.
 incoming

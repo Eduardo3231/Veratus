@@ -235,3 +235,53 @@ def test_gated_permissions_follow_channel_level_and_approval():
         "SCHEDULE_APPROVED_CONTENT",
         item_status="PENDING_APPROVAL",
     )
+
+
+def test_paid_acquisition_worker_keeps_its_own_contract():
+    definition = AGENT_REGISTRY["paid-acquisition-worker"]
+
+    # O laço de contratos não pode trocar o que a definição escreveu.
+    assert definition.mission.startswith("planejar, monitorar e reconciliar")
+    assert "attribution-reconciliation" in definition.capabilities
+    assert "paid-media-adapter" in definition.tools
+    assert definition.read_scope == ("product-master", "orders", "paid-media-readback")
+    assert definition.write_scope == ("paid-media-draft",)
+    assert "overspend" in definition.escalation_rules
+    # Os demais seguem o contrato do time ou o padrão.
+    assert AGENT_REGISTRY["sales-agent"].mission.startswith("conduzir a conversa")
+    assert AGENT_REGISTRY["shopee-agent"].mission.startswith(
+        "executar responsabilidades de"
+    )
+
+
+@pytest.mark.parametrize("agent_id", sorted(NEW_ROLES))
+def test_new_roles_never_get_forbidden_permissions_at_runtime(monkeypatch, agent_id):
+    from dataclasses import replace
+
+    from veratus_agents.operations import (
+        FORBIDDEN_FOR_NEW_ROLES,
+        NEW_ROLE_IDS,
+        permission_allowed,
+    )
+
+    assert NEW_ROLE_IDS == set(NEW_ROLES)
+    # Mesmo com o registro adulterado, o papel novo não publica nem gasta.
+    definition = AGENT_REGISTRY[agent_id]
+    monkeypatch.setitem(
+        AGENT_REGISTRY,
+        agent_id,
+        replace(
+            definition, permissions=definition.permissions | FORBIDDEN_FOR_NEW_ROLES
+        ),
+    )
+    engine = CommandEngine()
+    for permission in sorted(FORBIDDEN_FOR_NEW_ROLES):
+        assert not permission_allowed(
+            agent_id,
+            permission,
+            channel_mode="AUTO",
+            risk=0,
+            item_status="APPROVED",
+        )
+        with pytest.raises(PermissionError):
+            engine.authorize(agent_id, permission)
