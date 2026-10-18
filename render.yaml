@@ -264,3 +264,25 @@ services:
         value: "false"
       - key: META_PAGE_ID
         sync: false
+      - key: CEP_LOOKUP_ENABLED
+        value: "false"
+      - key: CHATWOOT_SYNC_ENABLED
+        value: "false"
+      - key: CHATWOOT_BASE_URL
+        sync: false
+      - key: CHATWOOT_ACCOUNT_ID
+        sync: false
+      - key: CHATWOOT_INBOX_ID
+        sync: false
+      - key: CHATWOOT_API_TOKEN
+        sync: false
+      - key: CHATWOOT_WEBHOOK_TOKEN
+        sync: false
+      - key: CHATWOOT_WEBHOOK_SECRET
+        sync: false
+      - key: TWENTY_SYNC_ENABLED
+        value: "false"
+      - key: TWENTY_API_URL
+        sync: false
+      - key: TWENTY_API_KEY
+        sync: false

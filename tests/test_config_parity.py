@@ -30,6 +30,9 @@ MUST_BE_FALSE = {
     "CONVERSATION_AUTOPROCESS_ENABLED",
     "FACEBOOK_MESSAGING_ENABLED",
     "META_CATALOG_FEED_ENABLED",
+    "CEP_LOOKUP_ENABLED",
+    "CHATWOOT_SYNC_ENABLED",
+    "TWENTY_SYNC_ENABLED",
     *CHANNEL_FLAGS,
 }
 # Platform/container settings live only in the Blueprint; the MailerLite key is

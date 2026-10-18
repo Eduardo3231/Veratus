@@ -43,6 +43,20 @@ if [ ! -x "$VENV/bin/python" ]; then
 fi
 "$VENV/bin/python" -m pip install --quiet --disable-pip-version-check -r "$PROJECT_DIR/requirements-dev.txt"
 
+# Grafo do código para economizar token (local, sem LLM). Sem rede, segue sem ele.
+GRAPHIFY_VERSION="0.9.92"
+if ! graphify --version 2>/dev/null | grep -q "$GRAPHIFY_VERSION"; then
+  uv tool install --quiet "graphifyy==$GRAPHIFY_VERSION" 2>/dev/null ||
+    "$VENV/bin/python" -m pip install --quiet "graphifyy==$GRAPHIFY_VERSION" 2>/dev/null ||
+    echo "session-start: graphify não instalado" >&2
+fi
+if command -v graphify >/dev/null 2>&1 || [ -x "$VENV/bin/graphify" ]; then
+  GRAPHIFY="$(command -v graphify || echo "$VENV/bin/graphify")"
+  (cd "$PROJECT_DIR" && "$GRAPHIFY" extract . --code-only >/dev/null 2>&1 &&
+    "$GRAPHIFY" cluster-only . --no-label >/dev/null 2>&1) ||
+    echo "session-start: grafo do código não gerado" >&2
+fi
+
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   echo "export PATH=\"$VENV/bin:\$PATH\"" >> "$CLAUDE_ENV_FILE"
 fi

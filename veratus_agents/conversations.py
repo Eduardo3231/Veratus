@@ -799,6 +799,8 @@ class DraftRequest:
     topic_facts: list[tuple[str, str]] = field(default_factory=list)
     # Origem da conversa (resposta a Story, UTM do site): vai no link do Harvey.
     origin: dict[str, Any] = field(default_factory=dict)
+    # Consulta do CEP no fechamento (``cep.lookup``): só status, cidade e UF.
+    delivery: dict[str, Any] | None = None
 
 
 class DraftModel(Protocol):
@@ -976,6 +978,12 @@ class TemplateSalesModel:
         marketplace = request.channel in MARKETPLACES
         intent = request.intent
         claims: list[dict[str, str]] = []
+        delivery = request.delivery or {}
+        place = (
+            f" para entrega em {delivery['city']}/{delivery['state']}"
+            if delivery.get("status") == "FOUND"
+            else ""
+        )
         from .harvey import CLOSE_ON_WHATSAPP
 
         special = _marketplace_reply(request, name) if marketplace else None
@@ -1063,14 +1071,22 @@ class TemplateSalesModel:
             )
         elif intent == "fechamento":
             reply = "Ótimo! Qual modelo você quer levar?"
+        elif intent == "dados_pedido" and delivery.get("status") == "NOT_FOUND":
+            reply = (
+                "Não encontrei esse CEP. Pode conferir os 8 números e me mandar de "
+                "novo?"
+            )
         elif intent in ("dados_pedido", "link_pagamento") and request.payment_url:
             reply = (
-                "Pedido registrado. Aqui está o link de pagamento (Pix ou cartão "
-                f"pelo Mercado Pago): {request.payment_url} Assim que o pagamento "
-                "for confirmado, eu aviso por aqui."
+                f"Pedido registrado{place}. Aqui está o link de pagamento (Pix ou "
+                f"cartão pelo Mercado Pago): {request.payment_url} Assim que o "
+                "pagamento for confirmado, eu aviso por aqui."
             )
         elif intent in ("dados_pedido", "link_pagamento"):
-            reply = "Recebi seus dados. O link de pagamento segue por aqui em seguida."
+            reply = (
+                f"Recebi seus dados{place}. O link de pagamento segue por aqui em "
+                "seguida."
+            )
         elif intent == "status_pedido" and request.order:
             labels = {
                 "PENDING": "aguarda a confirmação do pagamento",
@@ -1922,6 +1938,7 @@ class ConversationEngine:
         order_lookup: Callable[[str], dict[str, Any] | None] | None = None,
         knowledge_context: Callable[[], dict[str, Any]] | None = None,
         mode_resolver: Callable[[str], str] = channel_mode,
+        cep_lookup: Callable[[str], dict[str, Any]] | None = None,
     ) -> None:
         self.store = store
         self.adapters = adapters
@@ -1932,6 +1949,9 @@ class ConversationEngine:
         self.order_lookup = order_lookup
         self.knowledge_context = knowledge_context or _default_knowledge_context
         self.mode_resolver = mode_resolver
+        if cep_lookup is None:
+            from .cep import lookup as cep_lookup
+        self.cep_lookup = cep_lookup
 
     # -- nível efetivo -----------------------------------------------------------
 
@@ -2077,6 +2097,7 @@ class ConversationEngine:
                 adapter.redact(inbound.message_id)
         elif intent == "dados_pedido":
             outcome = self._order_and_link(key, channel, mode, conversation, inbound)
+            request.delivery = outcome.get("delivery")
             if outcome.get("task"):
                 task, topic = outcome["task"], "o preço do pedido"
             request.payment_url = outcome.get("url")
@@ -2538,9 +2559,22 @@ class ConversationEngine:
         self.store.event(
             channel, key, "CUSTOMER_DATA_RECEIVED", detail={"encrypted": True}
         )
+        delivery = self.cep_lookup(inbound.text)
+        if delivery["status"] in ("FOUND", "NOT_FOUND"):
+            self.store.event(channel, key, "CEP_CHECKED", result=delivery["status"])
+        if delivery["status"] == "NOT_FOUND":
+            # CEP que não existe: sem pedido, e o próximo envio ainda é dado do pedido.
+            self.store.update(key, awaiting_data=1)
+            return {"delivery": delivery}
+        if delivery["status"] != "FOUND":
+            delivery = None
         if public_price(product) is None:
             # Sem preço confirmado não há pedido nem link: vira tarefa.
-            return {"blocked": True, "task": "FATO_NAO_CONFIRMADO"}
+            return {
+                "blocked": True,
+                "task": "FATO_NAO_CONFIRMADO",
+                "delivery": delivery,
+            }
         if self.order_factory is None:
             return {"blocked": True}
         order = self.order_factory(channel, inbound.conversation_id, product)
@@ -2570,7 +2604,7 @@ class ConversationEngine:
                 reason=",".join(reasons),
                 detail={"order_id": order["order_id"]},
             )
-            return {"blocked": True, "reasons": reasons}
+            return {"blocked": True, "reasons": reasons, "delivery": delivery}
         link = self.payment_linker(order, product)
         self.store.event(
             channel,
@@ -2582,8 +2616,12 @@ class ConversationEngine:
             detail={"order_id": order["order_id"]},
         )
         if link["status"] != "CREATED":
-            return {"blocked": True, "reasons": link.get("reasons")}
-        return {"url": link["url"]}
+            return {
+                "blocked": True,
+                "reasons": link.get("reasons"),
+                "delivery": delivery,
+            }
+        return {"url": link["url"], "delivery": delivery}
 
     # -- ações do fundador -------------------------------------------------------
 
