@@ -2574,6 +2574,158 @@ def os_harvey():
     return jsonify(report(engine)), 200
 
 
+ESCRITORIO_DIR = Path(__file__).resolve().parent / "escritorio"
+_CHATWOOT_CHANNELS = frozenset({"whatsapp", "instagram", "facebook", "mercado_livre"})
+
+
+@lru_cache(maxsize=4)
+def _chatwoot_bridge_cached(store: str):
+    from veratus_agents.chatwoot import ChatwootBridge
+
+    return ChatwootBridge.from_env(store)
+
+
+def _chatwoot_bridge():
+    settings = AgentSettings.from_env()
+    return _chatwoot_bridge_cached(
+        settings.database_url or str(settings.runtime_dir / "chatwoot.sqlite3")
+    )
+
+
+def _mirror_to_chatwoot(item, result):
+    """Espelha a conversa na caixa do fundador (Chatwoot); desligado, não faz nada."""
+    from veratus_agents.meta_webhooks import env_flag
+
+    if item.channel not in _CHATWOOT_CHANNELS or not env_flag("CHATWOOT_SYNC_ENABLED"):
+        return
+    try:
+        bridge = _chatwoot_bridge()
+        key = f"{item.channel}:{item.conversation_id}"
+        bridge.mirror_inbound(item.channel, key, item.text, intent=result.get("intent"))
+        reply = result.get("reply")
+        if result["action"] == "SEND" and result.get("external_message_sent") and reply:
+            bridge.mirror_reply(key, reply)
+        elif result["action"] == "QUEUE" and reply:
+            bridge.note(key, f"Rascunho do Harvey (não enviado): {reply}")
+        elif result["action"] == "HANDOFF":
+            bridge.escalate(key, result.get("reason") or "PEDIDO_DE_ATENDENTE")
+    except Exception as exc:  # noqa: BLE001 - o espelho não para a conversa
+        app.logger.error("chatwoot_mirror_failed error_type=%s", type(exc).__name__)
+
+
+@app.route("/integrations/chatwoot/webhook", methods=["POST"])
+def chatwoot_webhook():
+    """Resposta do fundador no Chatwoot sai pelo canal; resolver devolve ao Harvey."""
+    from veratus_agents.chatwoot import verify_webhook_signature, verify_webhook_token
+
+    body = request.get_data()
+    if len(body) > 256 * 1024:
+        return jsonify({"status": "error", "message": "payload_too_large"}), 413
+    signed = verify_webhook_signature(
+        body,
+        request.headers.get("X-Chatwoot-Timestamp"),
+        request.headers.get("X-Chatwoot-Signature"),
+    )
+    if not (signed or verify_webhook_token(request.args.get("token"))):
+        return jsonify({"status": "error", "message": "unauthorized"}), 401
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    bridge = _chatwoot_bridge()
+    action = bridge.handle_webhook(request.get_json(silent=True))
+    if action["action"] == "IGNORE":
+        return jsonify({"status": "ignored", "reason": action.get("reason")}), 200
+    channel, conversation_id = action["conv_key"].split(":", 1)
+    conversation = engine.store.get(channel, conversation_id)
+    if conversation is None:
+        return jsonify({"status": "ignored", "reason": "unknown_conversation"}), 200
+    wanted = "BOT" if action["action"] == "BOT" else "HUMAN"
+    if conversation["state"] != wanted and (
+        wanted == "BOT" or conversation["state"] == "BOT"
+    ):
+        engine.set_state(channel, conversation_id, wanted, actor="founder-chatwoot")
+        if channel == "whatsapp":
+            _whatsapp_channel().set_state(
+                conversation_id, wanted, actor="founder-chatwoot"
+            )
+    if action["action"] == "BOT":
+        return jsonify({"status": "bot"}), 200
+    adapter = engine.adapters.get(channel)
+    if adapter is None:
+        bridge.note(action["conv_key"], "Não entregue: canal sem adaptador.")
+        return jsonify({"status": "not_sent"}), 200
+    # Escrita do fundador: a janela de 24 h e o resto das regras ficam no adaptador.
+    sent = adapter.send(
+        conversation_id,
+        action["text"],
+        idempotency_key=f"chatwoot:{action['message_id']}",
+        human_written=True,
+    )
+    if sent.get("status") != "SENT":
+        reasons = ", ".join(sent.get("reasons") or [])
+        bridge.note(action["conv_key"], f"Não entregue: {sent.get('status')} {reasons}")
+    return jsonify({"status": "processed", "send": sent.get("status")}), 200
+
+
+@app.route("/os/crm/twenty", methods=["GET"])
+def os_crm_twenty():
+    """Prévia do funil no Twenty (nada é enviado)."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.crm_twenty import TwentySync
+
+    return jsonify(TwentySync.from_env().preview(engine)), 200
+
+
+@app.route("/os/crm/twenty/sync", methods=["POST"])
+def os_crm_twenty_sync():
+    """Leva as conversas ao Twenty; desligado, devolve a prévia (DISABLED)."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.crm_twenty import TwentySync
+
+    return jsonify(TwentySync.from_env().sync(engine)), 200
+
+
+@app.route("/os/escritorio", methods=["GET"])
+def os_escritorio():
+    """O escritório virtual agora: cada agente como funcionário, sem dado de cliente."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.office import snapshot
+
+    return jsonify(snapshot(engine, _runtime(), _order_ledger())), 200
+
+
+@app.route("/os/escritorio/painel", methods=["GET"])
+def os_escritorio_painel():
+    """Página do escritório: sem dados; ela pede o token e lê /os/escritorio."""
+    html = (ESCRITORIO_DIR / "painel.html").read_text(encoding="utf-8")
+    script = (ESCRITORIO_DIR / "office.js").read_text(encoding="utf-8")
+    body = html.replace("/*__OFFICE_JS__*/", script.replace("</", "<\\/"))
+    return (
+        body,
+        200,
+        {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+            "X-Robots-Tag": "noindex",
+        },
+    )
+
+
 @app.route("/os/meta-catalog", methods=["GET"])
 def os_meta_catalog():
     """Prontidão do catálogo da Meta, peça por peça (revisão, nada é enviado)."""
@@ -2876,6 +3028,7 @@ def _process_channel(engine, channel, limit=20):
             # Outra thread ou worker está na conversa: a mensagem segue pendente.
             results.append({"message_id": item.message_id, "action": "BUSY"})
             continue
+        _mirror_to_chatwoot(item, result)
         if result["action"] == "HANDOFF" and channel == "whatsapp":
             _whatsapp_channel().set_state(
                 item.conversation_id, "HUMAN", actor="sales-agent"

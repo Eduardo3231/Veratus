@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Escritório Veratus</title>
+<style>
+/* O escritório ocupa a largura; abaixo, a equipe por sala e o cartão de quem você escolheu. */
+:root {
+  --bg: #0d0d0d; --surface: #151412; --surface-2: #1d1b18;
+  --line: rgba(246, 244, 240, 0.12); --line-strong: rgba(246, 244, 240, 0.22);
+  --fg: #f6f4f0; --muted: #a39e95; --gold: #c8a56a; --gold-soft: rgba(200, 165, 106, 0.14); --on-gold: #141311;
+  --ok: #86b892; --warn: #dcae52; --alert: #e0836e;
+  --display: "Cormorant Garamond", Georgia, serif; --body: "Jost", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); }
+.page { max-width: 1280px; margin: 0 auto; padding-block: 20px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: baseline; justify-content: space-between; }
+h1 { font: 600 30px/1.1 var(--display); margin: 0; letter-spacing: 0.01em; }
+.meta { color: var(--muted); font: 13px var(--mono); }
+form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+input { background: var(--surface); color: var(--fg); border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px 10px; font: 14px var(--mono); min-width: 0; }
+button { background: var(--gold); color: var(--on-gold); border: 0; border-radius: 6px; padding: 8px 14px; font: 600 14px var(--body); cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.palco { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+#escritorio { display: block; width: 100%; min-width: 760px; }
+.baixo { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 860px) { .baixo { grid-template-columns: 1fr; } }
+.salas { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.sala h2 { font: 600 11px var(--body); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.pessoa { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; width: 100%; text-align: left; background: transparent; color: var(--fg); border: 1px solid transparent; border-radius: 8px; padding: 7px 8px; font: 14px var(--body); }
+.pessoa:hover, .pessoa[aria-pressed="true"] { border-color: var(--line-strong); background: var(--surface); }
+.pessoa .ponto { width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; grid-row: span 2; background: var(--muted); }
+.pessoa small { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.trabalhando .ponto { background: var(--ok); } .aprovacao .ponto { background: var(--warn); }
+.bloqueado .ponto { background: var(--alert); } .desligado .ponto { background: var(--line-strong); }
+.cartao { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--surface); min-width: 0; }
+.cartao h3 { font: 600 24px/1.1 var(--display); margin: 0; }
+.cartao p { margin: 6px 0; color: var(--muted); }
+.cartao ol { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+.cartao li { display: grid; grid-template-columns: 46px 1fr; gap: 8px; font-size: 13.5px; }
+.cartao time { font: 12px var(--mono); color: var(--gold); }
+.aviso { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>Escritório Veratus</h1>
+      <span class="meta" id="estado">Informe o token de administrador para ver o escritório ao vivo.</span>
+    </div>
+    <form id="acesso">
+      <label for="token" class="meta">Token</label>
+      <input id="token" type="password" autocomplete="off" required>
+      <button type="submit">Entrar</button>
+    </form>
+  </header>
+  <div class="palco"><canvas id="escritorio" aria-label="Escritório virtual com cada agente na sua mesa"></canvas></div>
+  <div class="baixo">
+    <div class="salas" id="salas"></div>
+    <section class="cartao" id="cartao" aria-live="polite"><p>Escolha alguém no escritório ou na lista.</p></section>
+  </div>
+  <p class="aviso">Os nomes são internos. Para o cliente, só o Harvey fala, como assistente virtual. Esta página só lê; nada é enviado daqui.</p>
+</div>
+<script>/*__OFFICE_JS__*/</script>
+<script>
+(() => {
+  'use strict';
+  const SALAS = { diretoria: 'Diretoria', atendimento: 'Atendimento', marketplaces: 'Marketplaces', redes: 'Redes e mídia', produto: 'Produto', fundador: 'Sala do fundador' };
+  const STATUS = { trabalhando: 'trabalhando', aguardando: 'aguardando', aprovacao: 'espera sua aprovação', bloqueado: 'bloqueado', desligado: 'desligado' };
+  const $ = (id) => document.getElementById(id);
+  let token = '';
+  try { token = sessionStorage.getItem('veratus-admin') || ''; } catch (e) { token = ''; }
+  let data = null; let office = null; let selected = 'sales-agent'; let timer = null; let first = true;
+
+  function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
+
+  function renderList() {
+    const box = $('salas'); box.replaceChildren();
+    for (const [sala, nome] of Object.entries(SALAS)) {
+      const membros = data.funcionarios.filter((m) => m.sala === sala);
+      if (!membros.length) continue;
+      const sec = el('section', 'sala'); sec.append(el('h2', '', nome));
+      for (const m of membros) {
+        const a = data.agentes[m.id] || {};
+        const b = el('button', `pessoa ${a.status || ''}`); b.type = 'button';
+        b.setAttribute('aria-pressed', String(m.id === selected));
+        b.append(el('span', 'ponto'), el('span', '', `${m.nome} · ${m.cargo}`), el('small', '', `${STATUS[a.status] || ''}: ${a.agora || ''}`));
+        b.addEventListener('click', () => select(m.id));
+        sec.append(b);
+      }
+      box.append(sec);
+    }
+  }
+
+  function renderCard() {
+    const m = data.funcionarios.find((x) => x.id === selected); const a = data.agentes[selected];
+    const card = $('cartao'); card.replaceChildren();
+    if (!m || !a) { card.append(el('p', '', 'Escolha alguém no escritório ou na lista.')); return; }
+    card.append(el('h3', '', m.nome), el('p', '', `${m.cargo} · ${STATUS[a.status] || a.status}`), el('p', '', `Agora: ${a.agora}`));
+    if (a.chaves && a.chaves.length) card.append(el('p', '', 'Chaves: ' + a.chaves.map((c) => `${c.nome} ${c.ligada ? 'ligada' : 'desligada'}`).join(', ')));
+    const ol = el('ol');
+    for (const item of a.ultimas || []) { const li = el('li'); li.append(el('time', '', item.t), el('span', '', item.texto)); ol.append(li); }
+    if (!ol.children.length) ol.append(el('li', '', 'Nenhuma ação hoje.'));
+    card.append(ol);
+  }
+
+  function select(id) { selected = id; if (office) office.select(id); renderList(); renderCard(); }
+
+  async function load() {
+    try {
+      const response = await fetch('/os/escritorio', { headers: { 'X-Veratus-Admin-Token': token }, cache: 'no-store' });
+      if (response.status === 401 || response.status === 403) { $('estado').textContent = 'Token recusado. Confira e entre de novo.'; return; }
+      if (!response.ok) { $('estado').textContent = `O Veratus OS respondeu ${response.status}. Tento de novo em 15 s.`; return; }
+      data = await response.json();
+      if (!office) office = VeratusOffice.create($('escritorio'), { staff: data.funcionarios, onSelect: select, selected });
+      office.update(data, { animar: !first }); first = false;
+      $('estado').textContent = `Ao vivo · atualizado às ${data.quadro.relogio} (horário de Brasília)`;
+      renderList(); renderCard();
+    } catch (e) {
+      $('estado').textContent = 'Sem conexão com o Veratus OS. Tento de novo em 15 s.';
+    }
+  }
+
+  function start() { window.clearInterval(timer); load(); timer = window.setInterval(load, 15000); }
+  $('acesso').addEventListener('submit', (event) => {
+    event.preventDefault(); token = $('token').value.trim();
+    try { sessionStorage.setItem('veratus-admin', token); } catch (e) { /* sem armazenamento: vale só nesta aba */ }
+    start();
+  });
+  if (token) start();
+})();
+</script>
+</body>
+</html>

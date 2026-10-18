@@ -117,6 +117,25 @@ ROUNDS = {
 }
 AFTERSALES_INTENTS = frozenset({"status_pedido", "rastreio"})
 
+# Expediente do time: as ordens que o gerente geral dá durante o dia, pela mesma
+# rota de comandos do Veratus OS (/os/commands). Cada tarefa que um agente
+# conclui vira um passo dele no escritório. "reuniao" junta os supervisores.
+EXPEDIENTE: list[tuple[str, str, dict[str, Any]]] = [
+    (
+        "08:00",
+        "Analise o estado atual dos produtos e dos marketplaces",
+        {"reuniao": True},
+    ),
+    ("08:20", "Prepare os relógios para os marketplaces", {}),
+    ("10:00", "GET /os/meta-catalog", {"ator": "meta-agent"}),
+    ("10:30", "GET /os/social/posts", {"ator": "social-media-worker"}),
+    ("12:00", "Sincronize os marketplaces", {}),
+    ("15:00", "Sincronize os marketplaces", {}),
+    ("16:00", "GET /os/paid-media/status", {"ator": "paid-acquisition-worker"}),
+    ("18:00", "Quais aprovações pendentes?", {"reuniao": True}),
+    ("18:05", "Quais erros?", {}),
+]
+
 
 @dataclass
 class Cliente:
@@ -596,6 +615,23 @@ def _mp_headers(data_id: str) -> dict[str, str]:
     return {"x-signature": f"ts={ts},v1={v1}", "x-request-id": request_id}
 
 
+def _leitura(path: str, body: dict[str, Any]) -> str:
+    """Resumo de uma leitura de rotina, sem dado de cliente nem custo."""
+    if path == "/os/meta-catalog":
+        return (
+            f"Catálogo da Meta: {body.get('exported', 0)} peças no feed, "
+            f"{body.get('blocked', 0)} esperando foto, preço ou estoque confirmado"
+        )
+    if path == "/os/social/posts":
+        posts = body.get("posts") or []
+        if not posts:
+            return "Agenda das redes vazia: espera o calendário e as artes do mês"
+        return f"Agenda das redes: {len(posts)} posts no calendário"
+    if path == "/os/paid-media/status":
+        return "Mídia paga conferida: campanhas em rascunho pausado, nada gasto"
+    return f"Leu {path}"
+
+
 class Dia:
     """Uma rodada: o serviço inteiro num diretório temporário."""
 
@@ -604,6 +640,9 @@ class Dia:
 
         self.nome = nome
         self.webhook = webhook
+        # O runtime operacional fica em cache no processo: cada rodada abre o seu.
+        webhook._runtime_engine = None
+        webhook._operational_runtime_instance = None
         self.client = webhook.app.test_client()
         self.router = FakeRouter()
         self.clientes = clientes()
@@ -868,6 +907,53 @@ class Dia:
             self.pedidos[order_id] = f"Pedido {len(self.pedidos) + 1}"
         return self.pedidos[order_id]
 
+    def rotina(self, t: str, dados: dict[str, Any]) -> None:
+        """Uma ordem do expediente: cada tarefa concluída vira um passo de quem fez."""
+        from veratus_agents.office import describe_task
+
+        ordem = dados["ordem"]
+        if ordem.startswith("GET "):
+            response = self._admin_get(ordem[4:])
+            body = response.json or {}
+            self._passo(t, dados["ator"], _leitura(ordem[4:], body), ordem)
+            return
+        runtime = self.webhook._runtime()
+        antes = set(runtime.tasks.tasks)
+        response = self._admin_post("/os/commands", {"message": ordem})
+        if response.status_code != 201:
+            raise RuntimeError(f"comando {ordem!r}: {response.status_code}")
+        runtime = self.webhook._runtime()
+        novas = [task for key, task in runtime.tasks.tasks.items() if key not in antes]
+        hora, minuto = (int(parte) for parte in t.split(":"))
+        for indice, task in enumerate(novas):
+            # O gerente distribui e cada um entrega em sequência, um minuto depois do outro.
+            total = hora * 60 + minuto + indice
+            quando = f"{total // 60:02d}:{total % 60:02d}"
+            result = task.result if isinstance(task.result, dict) else {}
+            self._passo(
+                quando,
+                task.agent,
+                describe_task(task.action, result),
+                ordem,
+                reuniao=bool(dados.get("reuniao")) and indice == 0,
+                bloqueado=str(getattr(task.status, "value", task.status))
+                != "COMPLETED",
+            )
+
+    def _passo(self, t: str, ator: str, texto: str, ordem: str, **extra: Any) -> None:
+        item = {
+            "t": t,
+            "canal": None,
+            "conversa": None,
+            "cliente": None,
+            "ator": ator,
+            "tipo": "rotina",
+            "texto": texto,
+            "ordem": ordem,
+        }
+        item.update({k: v for k, v in extra.items() if v})
+        self.timeline.append(item)
+
     def _add(
         self, t: str, cliente: Cliente, ator: str, tipo: str, texto: str, **extra: Any
     ) -> None:
@@ -1064,12 +1150,14 @@ class Dia:
                 )
             elif name == "ORDER_PAID":
                 order_id = detail.get("order_id") or cliente.pedido
+                pedido = self.webhook._order_ledger().get(order_id) or {}
                 self._add(
                     t,
                     cliente,
                     "mercado-pago",
                     "pagamento",
                     f"{self._label(order_id)} pago: webhook assinado e leitura de volta no Mercado Pago",
+                    valor=pedido.get("sale_price"),
                 )
                 cliente.desfecho = "pago"
             elif name == "GATE_FAILED":
@@ -1102,7 +1190,17 @@ class Dia:
     # -- dia ------------------------------------------------------------------------
 
     def rodar(self) -> None:
-        for t, key, tipo, dados in sorted(ROTEIRO, key=lambda step: step[0]):
+        passos = [
+            *ROTEIRO,
+            *(
+                (t, "", "rotina", {"ordem": ordem, **extra})
+                for t, ordem, extra in EXPEDIENTE
+            ),
+        ]
+        for t, key, tipo, dados in sorted(passos, key=lambda step: step[0]):
+            if tipo == "rotina":
+                self.rotina(t, dados)
+                continue
             cliente = self.clientes[key]
             if dados.get("depois_do_link") and not cliente.link_aberto:
                 continue
