@@ -351,3 +351,66 @@ def test_export_script_writes_csv_and_report(tmp_path) -> None:
     assert len(output.read_text(encoding="utf-8").splitlines()) == 1 + data["ready"]
     assert not list(tmp_path.rglob("*.parcial"))
     assert "Facebook" in result.stdout
+
+
+def test_readback_is_off_by_default_and_records_what_meta_disagrees_with(
+    tmp_path, monkeypatch
+) -> None:
+    from veratus_agents.marketplace_ops import MarketplaceStore
+    from veratus_agents.meta_catalog import MetaCatalogReadOnlyClient, catalog_readback
+
+    class Session:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        def get(self, url, headers, params, timeout):
+            self.calls.append((url, params))
+            assert "token" not in url and "access_token" not in params
+
+            class Response:
+                ok, status_code = True, 200
+
+                @staticmethod
+                def json():
+                    return {
+                        "data": [
+                            {
+                                "retailer_id": "royal-blue",
+                                "review_status": "rejected",
+                                "errors": [{"title": "Imagem pequena"}],
+                                "availability": "in stock",
+                            },
+                            {"retailer_id": "ocean-blue", "review_status": "approved"},
+                        ]
+                    }
+
+            return Response()
+
+    store = MarketplaceStore(tmp_path / "marketplace.sqlite3")
+    rows = [
+        {"id": "royal-blue", "ready": True, "availability": "in stock"},
+        {"id": "black-gmt", "ready": True, "availability": "in stock"},
+    ]
+    monkeypatch.delenv("META_CATALOG_READBACK_ENABLED", raising=False)
+    session = Session()
+    off = MetaCatalogReadOnlyClient(catalog_id="1", access_token="t", session=session)
+
+    assert catalog_readback(store, off, rows)["reasons"] == [
+        "META_CATALOG_READBACK_DISABLED"
+    ]
+    assert session.calls == [] and store.sync_conflicts() == []
+
+    on = MetaCatalogReadOnlyClient(
+        catalog_id="1", access_token="t", session=session, enabled=True
+    )
+    result = catalog_readback(store, on, rows)
+    assert session.calls[0][0].endswith("/1/products")
+    assert (
+        session.calls[0][1]["fields"] == "retailer_id,review_status,errors,availability"
+    )
+    assert {(item["type"], item["sku"]) for item in result["conflicts"]} == {
+        ("META_ITEM_REJECTED", "royal-blue"),
+        ("META_ITEM_MISSING", "black-gmt"),
+        ("META_ITEM_NOT_IN_FEED", "ocean-blue"),
+    }
+    assert all(item["channel"] == "meta" for item in store.sync_conflicts())

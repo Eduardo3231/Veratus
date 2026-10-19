@@ -210,6 +210,14 @@ def _safe_error(response: requests.Response) -> MarketplaceApiError:
     return MarketplaceApiError("REMOTE_API_ERROR", http_status=response.status_code)
 
 
+def _shipment_id(value: str) -> str:
+    """Id do envio só com dígitos: nada além dele entra no caminho da URL."""
+    text = str(value).strip()
+    if not (text.isascii() and text.isdigit() and len(text) <= 20):
+        raise MarketplaceApiError("INVALID_SHIPMENT_ID")
+    return text
+
+
 class MercadoLivreReadOnlyClient:
     BASE_URL = "https://api.mercadolibre.com"
 
@@ -298,6 +306,56 @@ class MercadoLivreReadOnlyClient:
             "remote_ids": data.get("results", []),
             "total": data.get("paging", {}).get("total", 0),
         }
+
+    def get_shipment(self, shipment_id: str) -> dict[str, Any]:
+        """Envio do Mercado Envios: só status e rastreio, nunca endereço ou comprador.
+
+        Atrás de ``MERCADO_LIVRE_SYNC_ENABLED`` (false): desligada, nada sai.
+        Campos do formato atual de ``GET /shipments/{id}``: a conferir na hora de
+        ligar (cabeçalho ``x-format-new``).
+        """
+        from .meta_webhooks import env_flag
+
+        if not env_flag("MERCADO_LIVRE_SYNC_ENABLED"):
+            raise MarketplaceApiError("SYNC_DISABLED")
+        ref = _shipment_id(shipment_id)
+        data = self._get(f"/shipments/{ref}")
+        return {
+            "shipment_id": ref,
+            "status": data.get("status"),
+            "substatus": data.get("substatus"),
+            "tracking_number": data.get("tracking_number"),
+            "tracking_method": data.get("tracking_method"),
+        }
+
+    def get_shipment_label(
+        self, shipment_id: str, *, response_type: str = "pdf"
+    ) -> bytes:
+        """Etiqueta do envio (``GET /shipment_labels``), atrás de
+        ``MERCADO_LIVRE_LABELS_ENABLED`` (false). Traz nome e endereço do comprador:
+        vai direto ao fundador, nunca para log, evento ou Git. A conferir na hora de
+        ligar (só sai com o envio em ``ready_to_ship``).
+        """
+        from .meta_webhooks import env_flag
+
+        if not env_flag("MERCADO_LIVRE_LABELS_ENABLED"):
+            raise MarketplaceApiError("LABELS_DISABLED")
+        if response_type not in ("pdf", "zpl2"):
+            raise MarketplaceApiError("INVALID_LABEL_FORMAT")
+        manager = getattr(self, "token_manager", None)
+        token = manager.access_token() if manager is not None else self._token
+        response = self.session.get(
+            f"{self.BASE_URL}/shipment_labels",
+            headers={"Authorization": f"Bearer {token}"},
+            params={
+                "shipment_ids": _shipment_id(shipment_id),
+                "response_type": response_type,
+            },
+            timeout=self.timeout,
+        )
+        if not response.ok:
+            raise _safe_error(response)
+        return response.content
 
     @staticmethod
     def exchange_authorization_code(

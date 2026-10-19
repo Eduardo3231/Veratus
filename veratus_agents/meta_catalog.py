@@ -23,6 +23,11 @@ Regras:
 
 Nada é enviado à Meta. ``python scripts/exportar_catalogo_meta.py --saida
 catalogo.csv`` gera o arquivo.
+
+Leitura de volta (``META_CATALOG_READBACK_ENABLED``, nasce ``false``):
+``MetaCatalogReadOnlyClient`` só faz GET nos itens do catálogo e
+``catalog_readback`` registra um ``SyncConflict`` (canal ``meta``) quando a
+Meta recusa um item ou diverge do feed.
 """
 
 from __future__ import annotations
@@ -35,6 +40,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+import requests
+
 from .catalog import BASE_DIR, load_catalog, public_price
 from .listing_content import (
     CHANNEL_LABELS,
@@ -44,7 +51,7 @@ from .listing_content import (
     blocker_text,
     listing_copy,
 )
-from .meta_webhooks import normalize_text
+from .meta_webhooks import env_flag, graph_api_version, normalize_text
 from .policy import hard_review_customer_reply
 
 CHANNEL = "facebook"
@@ -273,6 +280,11 @@ def feed_rows(products: list[dict[str, Any]] | None = None) -> list[dict[str, An
     return [_row(product, base) for product in products]
 
 
+def feed_row(product: dict[str, Any]) -> dict[str, Any]:
+    """A linha do feed de uma peça do catálogo (o rascunho META usa a mesma)."""
+    return _row(product, site_base_url())
+
+
 def feed_csv(rows: list[dict[str, Any]]) -> str:
     """CSV do Commerce Manager (UTF-8, com cabeçalho), só com as linhas prontas."""
     buffer = io.StringIO()
@@ -341,3 +353,182 @@ def write_atomic(path: Path, text: str) -> None:
     partial = path.with_name(path.name + ".parcial")
     partial.write_text(text, encoding="utf-8", newline="")
     partial.replace(path)
+
+
+# -- leitura de volta (só GET) -----------------------------------------------------
+
+READBACK_FLAG = "META_CATALOG_READBACK_ENABLED"
+READBACK_FIELDS = "retailer_id,review_status,errors,availability"
+READBACK_PAGE_LIMIT = 100
+READBACK_MAX_PAGES = 20
+
+
+class MetaCatalogReadbackError(RuntimeError):
+    """Falha da leitura; a mensagem é só o código (sem token nem URL)."""
+
+
+class MetaCatalogReadOnlyClient:
+    """Itens do catálogo na Meta: ``GET /{META_CATALOG_ID}/products``.
+
+    Token ``META_ACCESS_TOKEN`` com ``catalog_management``, no cabeçalho. Sem a
+    chave ``META_CATALOG_READBACK_ENABLED``, nenhuma chamada de rede. Campos e
+    paginação pela documentação da Graph API: a conferir na hora de ligar.
+    """
+
+    def __init__(
+        self,
+        *,
+        catalog_id: str | None,
+        access_token: str | None,
+        session: Any = None,
+        enabled: bool | None = None,
+        timeout: int = 20,
+    ) -> None:
+        self.catalog_id = catalog_id
+        self.access_token = access_token
+        self.session = session
+        self.enabled = enabled
+        self.timeout = timeout
+
+    @classmethod
+    def from_env(cls, session: Any = None) -> MetaCatalogReadOnlyClient:
+        return cls(
+            catalog_id=os.getenv("META_CATALOG_ID", "").strip() or None,
+            access_token=os.getenv("META_ACCESS_TOKEN", "").strip() or None,
+            session=session,
+        )
+
+    def blocked_reasons(self) -> list[str]:
+        enabled = env_flag(READBACK_FLAG) if self.enabled is None else self.enabled
+        reasons = [] if enabled else ["META_CATALOG_READBACK_DISABLED"]
+        if not self.catalog_id or not self.access_token:
+            reasons.append("META_CATALOG_CREDENTIALS_MISSING")
+        return reasons
+
+    def products(self) -> list[dict[str, Any]]:
+        if self.blocked_reasons():
+            raise MetaCatalogReadbackError("META_CATALOG_READBACK_BLOCKED")
+        session = self.session or requests.Session()
+        url = (
+            f"https://graph.facebook.com/{graph_api_version()}/"
+            f"{quote(str(self.catalog_id))}/products"
+        )
+        params: dict[str, Any] = {
+            "fields": READBACK_FIELDS,
+            "limit": READBACK_PAGE_LIMIT,
+        }
+        items: list[dict[str, Any]] = []
+        for _ in range(READBACK_MAX_PAGES):
+            response = session.get(
+                url,
+                headers={"Authorization": f"Bearer {self.access_token}"},
+                params=params,
+                timeout=self.timeout,
+            )
+            if not response.ok:
+                raise MetaCatalogReadbackError(f"META_HTTP_{response.status_code}")
+            data = response.json() or {}
+            items += [_remote_item(item) for item in data.get("data") or []]
+            paging = data.get("paging") or {}
+            after = (paging.get("cursors") or {}).get("after")
+            if not paging.get("next") or not after:
+                break
+            params = {**params, "after": after}
+        return items
+
+
+def _remote_item(item: dict[str, Any]) -> dict[str, Any]:
+    errors = item.get("errors") or []
+    summary = "; ".join(
+        str(error.get("title") or error.get("error_type") or "erro")
+        if isinstance(error, dict)
+        else str(error)
+        for error in errors
+    )
+    return {
+        "retailer_id": str(item.get("retailer_id") or ""),
+        "review_status": str(item.get("review_status") or "").lower(),
+        "errors": summary[:300],
+        "availability": str(item.get("availability") or "").lower(),
+    }
+
+
+def catalog_readback(
+    store: Any,
+    client: MetaCatalogReadOnlyClient | None = None,
+    rows: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Confere o feed contra a Meta; cada diferença vira ``SyncConflict``."""
+    from .marketplace_ops import SyncConflict, _now
+
+    client = client or MetaCatalogReadOnlyClient.from_env()
+    if reasons := client.blocked_reasons():
+        return {"status": "BLOCKED", "reasons": reasons, "external_write": False}
+    try:
+        remote = client.products()
+    except (MetaCatalogReadbackError, requests.RequestException) as exc:
+        error = (
+            str(exc)
+            if isinstance(exc, MetaCatalogReadbackError)
+            else type(exc).__name__
+        )
+        return {"status": "FAILED", "error": error, "external_write": False}
+    rows = feed_rows() if rows is None else rows
+    local = {row["id"]: row for row in rows if row.get("ready")}
+    by_id = {item["retailer_id"]: item for item in remote if item["retailer_id"]}
+    found: list[tuple[str, str, str, str, str]] = []
+    for retailer_id, row in local.items():
+        item = by_id.get(retailer_id)
+        if item is None:
+            found.append(
+                (
+                    "META_ITEM_MISSING",
+                    retailer_id,
+                    "pronto no feed",
+                    "ausente na Meta",
+                    "conferir a carga do feed no Commerce Manager",
+                )
+            )
+            continue
+        if item["review_status"] == "rejected" or item["errors"]:
+            found.append(
+                (
+                    "META_ITEM_REJECTED",
+                    retailer_id,
+                    "pronto no feed",
+                    item["errors"] or item["review_status"],
+                    "corrigir o item no Commerce Manager e recarregar o feed",
+                )
+            )
+        if item["availability"] and item["availability"] != row.get("availability"):
+            found.append(
+                (
+                    "META_AVAILABILITY_CONFLICT",
+                    retailer_id,
+                    str(row.get("availability") or ""),
+                    item["availability"],
+                    "conferir o estoque na ficha e recarregar o feed",
+                )
+            )
+    for retailer_id in sorted(set(by_id) - set(local)):
+        found.append(
+            (
+                "META_ITEM_NOT_IN_FEED",
+                retailer_id,
+                "fora do feed",
+                by_id[retailer_id]["review_status"] or "na Meta",
+                "tirar o item do catálogo ou liberar a peça no feed",
+            )
+        )
+    conflicts = [
+        store.record_sync_conflict(
+            SyncConflict(kind, sku, "meta", local_value, remote_value, _now(), advice)
+        )
+        for kind, sku, local_value, remote_value, advice in found
+    ]
+    return {
+        "status": "OK",
+        "checked": len(remote),
+        "conflicts": conflicts,
+        "external_write": False,
+    }

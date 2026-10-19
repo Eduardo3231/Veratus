@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 
 from veratus_agents import commercial_config as config
@@ -15,16 +16,24 @@ UNVERIFIED_COSTS = ["shipping_cost_paid_by_veratus", "payment_fee", "tax"]
 
 def test_watch_economics_snapshot_is_incomplete_on_exactly_three_costs() -> None:
     fields = config.WATCH_ECONOMICS_SNAPSHOT["fields"]
-    unverified = [name for name, item in fields.items() if item["value"] is None]
+    unverified = [
+        name for name, item in fields.items() if item["status"] == "UNVERIFIED"
+    ]
 
     assert unverified == UNVERIFIED_COSTS
-    assert all(fields[name]["status"] == "UNVERIFIED" for name in unverified)
+    assert all(fields[name]["value"] is None for name in unverified)
     assert fields["price"]["value"] == "289.90"
-    assert fields["unit_cost"]["value"] == "65.00"
+    # O custo não fica no código (repositório público): vem do Product Master.
+    assert fields["unit_cost"] == {"value": None, "status": "PRODUCT_MASTER"}
+    assert config.calculate_official_economics()["gross_profit_brl"] is None
+    fake_cost = Decimal("100.00")  # fictício, injetado na chamada
+    assert config.calculate_official_economics(fake_cost)["gross_profit_brl"] == (
+        "189.90"
+    )
     assert fields["customer_shipping"]["value"] == "0.00"
     assert fields["customer_fees"]["value"] == "0.00"
 
-    for product in discover_products():
+    for product in discover_products(cost_of=lambda sku: fake_cost):
         if product["fields"]["category"]["value"] != config.OFFICIAL_CATEGORY:
             continue
         economics = calculate_economics(product)

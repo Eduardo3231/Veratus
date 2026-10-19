@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 from collections.abc import Callable
@@ -33,6 +34,8 @@ from cryptography.fernet import Fernet
 
 from .meta_webhooks import env_flag, graph_api_version
 from .sqlstore import SqlStore
+
+logger = logging.getLogger(__name__)
 
 SERVICE_WINDOW = timedelta(hours=24)
 HUMAN_AGENT_WINDOW = timedelta(days=7)
@@ -442,6 +445,12 @@ CREATE TABLE IF NOT EXISTS dm_origins (
     origin TEXT NOT NULL,
     at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS dm_products (
+    conv_key TEXT PRIMARY KEY,
+    product_id TEXT NOT NULL,
+    message_id TEXT,
+    at TEXT NOT NULL
+);
 """
 
 
@@ -474,11 +483,14 @@ class DirectInbox(SqlStore):
         self,
         channel: str,
         contact: str,
-        message_id: str,
+        message_id: str | None,
         text: str | None,
         sent_at: datetime,
         origin: str | None = None,
+        product_id: str | None = None,
     ) -> tuple[str, bool]:
+        """Guarda a mensagem. Sem ``message_id`` (referral sem texto), guarda só a
+        origem e a peça, e a janela de 24 h não abre."""
         conversation_id = self.conversation_id(channel, contact)
         key = f"{channel}:{conversation_id}"
         now = _now().isoformat()
@@ -498,15 +510,39 @@ class DirectInbox(SqlStore):
                     now,
                 ],
             )
-            inserted = db.execute(
-                self._sql(
-                    "INSERT INTO dm_messages (message_id, conv_key, direction, body, "
-                    "sent_at, status) VALUES (?, ?, 'IN', ?, ?, 'NEW') "
-                    "ON CONFLICT (message_id) DO NOTHING",
-                    mark,
-                ),
-                [message_id, key, text, sent_at.isoformat()],
-            ).rowcount
+            inserted = 0
+            if message_id:
+                inserted = db.execute(
+                    self._sql(
+                        "INSERT INTO dm_messages (message_id, conv_key, direction, "
+                        "body, sent_at, status) VALUES (?, ?, 'IN', ?, ?, 'NEW') "
+                        "ON CONFLICT (message_id) DO NOTHING",
+                        mark,
+                    ),
+                    [message_id, key, text, sent_at.isoformat()],
+                ).rowcount
+            if product_id:
+                # A peça mais recente vale e fica presa à mensagem que a trouxe
+                # (ou, num referral sem texto, à próxima mensagem).
+                db.execute(
+                    self._sql(
+                        "INSERT INTO dm_products (conv_key, product_id, message_id, "
+                        "at) VALUES (?, ?, ?, ?) ON CONFLICT (conv_key) DO UPDATE "
+                        "SET product_id = excluded.product_id, "
+                        "message_id = excluded.message_id, at = excluded.at",
+                        mark,
+                    ),
+                    [key, product_id[:80], message_id or None, now],
+                )
+            elif inserted:
+                db.execute(
+                    self._sql(
+                        "UPDATE dm_products SET message_id = ? "
+                        "WHERE conv_key = ? AND message_id IS NULL",
+                        mark,
+                    ),
+                    [message_id, key],
+                )
             if origin:
                 # A primeira origem vale (a conversa que começou num Story).
                 db.execute(
@@ -555,7 +591,9 @@ class DirectInbox(SqlStore):
         with self._connect() as (db, mark):
             rows = db.execute(
                 self._sql(
-                    "SELECT m.message_id, m.conv_key, m.body FROM dm_messages m "
+                    "SELECT m.message_id, m.conv_key, m.body, p.product_id "
+                    "FROM dm_messages m LEFT JOIN dm_products p "
+                    "ON p.conv_key = m.conv_key AND p.message_id = m.message_id "
                     "WHERE m.direction = 'IN' AND m.status = 'NEW' "
                     "AND m.conv_key LIKE ? ORDER BY m.sent_at LIMIT ?",
                     mark,
@@ -649,13 +687,77 @@ def parse_instagram_messages(
     return messages
 
 
+def _messenger_referral(*sources: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Peça e origem do botão "Mensagem" da loja (``product``) ou do anúncio
+    click-to-Messenger (``source: ADS``). Formato a conferir na hora de ligar."""
+    referral = next((s["referral"] for s in sources if s.get("referral")), None)
+    if not isinstance(referral, dict):
+        return None, None
+    product = referral.get("product")
+    product = product if isinstance(product, dict) else {}
+    ads = referral.get("ads_context_data")
+    ads = ads if isinstance(ads, dict) else {}
+    # retailer_id é o id do feed (meta_catalog), o mesmo id do catálogo.
+    product_id = (
+        product.get("retailer_id") or product.get("id") or ads.get("product_id")
+    )
+    if str(referral.get("source") or "").upper() == "ADS" or referral.get("ad_id"):
+        origin = "ads"
+    else:
+        origin = "shop" if product else None
+    return (str(product_id)[:80] if product_id else None), origin
+
+
+def _sent_at(item: dict[str, Any]) -> datetime:
+    try:
+        return datetime.fromtimestamp(int(item.get("timestamp")) / 1000, timezone.utc)
+    except (TypeError, ValueError):
+        return _now()
+
+
 def parse_messenger_messages(
     payload: dict[str, Any], page_id: str = ""
 ) -> list[dict[str, Any]]:
-    """Mensagens de texto à Página (``object: page``); ecos da Página ficam fora."""
+    """Mensagens à Página (``object: page``); ecos da Página ficam fora.
+
+    ``referral`` (loja ou anúncio) traz a peça (``product_id``) e a origem;
+    "Começar" e os ice breakers chegam como ``postback``, com o texto do botão.
+    Referral sem mensagem só marca a conversa (``message_id`` vazio).
+    """
     if payload.get("object") != "page":
         return []
-    return parse_instagram_messages({**payload, "object": "instagram"}, page_id)
+    messages = []
+    for entry in payload.get("entry") or []:
+        for item in (entry or {}).get("messaging") or []:
+            item = item or {}
+            message = item.get("message") or {}
+            postback = item.get("postback") or {}
+            sender = str((item.get("sender") or {}).get("id") or "")
+            if not sender or message.get("is_echo") or sender == page_id:
+                continue
+            product_id, origin = _messenger_referral(item, message, postback)
+            if message.get("mid"):
+                message_id, text = str(message["mid"]), message.get("text")
+            elif postback:
+                seed = f"{sender}:{item.get('timestamp')}:{postback.get('payload')}"
+                digest = hashlib.sha256(seed.encode()).hexdigest()[:32]
+                message_id = str(postback.get("mid") or f"pb_{digest}")
+                text = postback.get("title") or postback.get("payload")
+            elif product_id or origin:
+                message_id, text = None, None
+            else:
+                continue
+            messages.append(
+                {
+                    "message_id": message_id[:200] if message_id else None,
+                    "contact": sender[:64],
+                    "text": str(text or "")[:2000] or None,
+                    "sent_at": _sent_at(item),
+                    "origin": origin,
+                    "product_id": product_id,
+                }
+            )
+    return messages
 
 
 class InstagramDirectAdapter:
@@ -716,6 +818,7 @@ class InstagramDirectAdapter:
                 item["text"],
                 item["sent_at"],
                 origin=item.get("origin"),
+                product_id=item.get("product_id"),
             )
             count += inserted
         return count
@@ -798,6 +901,8 @@ class InstagramDirectAdapter:
                     conversation_id=conversation_id,
                     message_id=row["message_id"],
                     text=row["body"],
+                    # Peça do referral (loja ou anúncio), só na mensagem que a trouxe.
+                    product_hint=row.get("product_id"),
                     origin={"source": self.channel, "medium": medium} if medium else {},
                 )
             )
@@ -886,26 +991,66 @@ class MercadoLivreConversationAdapter:
         session: Any = None,
         enabled: bool | None = None,
         timeout: int = 20,
+        token_refresher: Callable[[], Any] | None = None,
     ) -> None:
         self.token_provider = token_provider
         self.seller_id = seller_id
         self.session = session or requests.Session()
         self.enabled = enabled
         self.timeout = timeout
+        self.token_refresher = token_refresher
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token_provider()}"}
 
+    def _get(self, path: str, params: dict[str, Any]) -> Any:
+        """GET de leitura; no 401, renova o token uma vez e repete."""
+        for attempt in range(2):
+            response = self.session.get(
+                f"{ML_API}{path}",
+                headers=self._headers(),
+                params=params,
+                timeout=self.timeout,
+            )
+            if response.status_code != 401 or attempt or not self.token_refresher:
+                return response
+            try:
+                self.token_refresher()
+            except Exception as exc:  # noqa: BLE001 - sem renovação, vale o 401
+                logger.warning(
+                    "mercado_livre_refresh_failed error_type=%s", type(exc).__name__
+                )
+                return response
+        return response
+
+    def item_sku(self, item_id: str) -> str | None:
+        """SELLER_SKU do anúncio (``GET /items/{id}``, só leitura)."""
+        if self.token_provider is None or not re.fullmatch(
+            r"[A-Z]{3}\d{1,15}", item_id
+        ):
+            return None
+        response = self._get(f"/items/{item_id}", {"include_attributes": "all"})
+        if not response.ok:
+            logger.warning("mercado_livre_item_failed status=%s", response.status_code)
+            return None
+        data = response.json() or {}
+        for attribute in data.get("attributes") or []:
+            if attribute.get("id") == "SELLER_SKU" and attribute.get("value_name"):
+                return str(attribute["value_name"])[:80]
+        return str(data.get("seller_custom_field") or "")[:80] or None
+
     def list_unanswered_questions(self, limit: int = 50) -> list[dict[str, Any]]:
         if self.token_provider is None:
             return []
-        response = self.session.get(
-            f"{ML_API}/my/received_questions/search",
-            headers=self._headers(),
-            params={"status": "UNANSWERED", "limit": limit, "api_version": 4},
-            timeout=self.timeout,
+        response = self._get(
+            "/my/received_questions/search",
+            {"status": "UNANSWERED", "limit": limit, "api_version": 4},
         )
         if not response.ok:
+            # Sem log, as perguntas paravam de chegar sem ninguém saber.
+            logger.error(
+                "mercado_livre_questions_failed status=%s", response.status_code
+            )
             return []
         return [
             {

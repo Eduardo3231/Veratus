@@ -468,14 +468,27 @@ def test_distribution_draft_takes_its_text_from_listing_copy(channel) -> None:
     assert draft["external_write"] is False
 
 
-def test_meta_and_products_outside_the_catalog_keep_the_old_text() -> None:
+def test_meta_draft_is_the_feed_item_and_outside_the_catalog_keeps_old_text() -> None:
+    from veratus_agents.marketplace_adapters import DistributionDraftError
+    from veratus_agents.meta_catalog import feed_row
+
     meta = build_distribution_draft(_approved_product(), Marketplace.META)["payload"]
     other = build_distribution_draft(
         _approved_product("Modelo Fora do Catálogo"), Marketplace.SHOPEE
     )["payload"]
 
-    assert meta["title"] == "Royal Blue"
+    # O rascunho META é a linha do feed: mesmo texto e mesmos bloqueios; sem
+    # estoque CONFIRMADO na ficha, nada de "in stock".
+    row = feed_row(BY_ID["royal-blue"])
+    assert (meta["title"], meta["description"]) == (row["title"], row["description"])
+    assert meta["availability"] is None
+    assert "AVAILABILITY_UNCONFIRMED" in meta["feed_blockers"]
+    assert "Consulte disponibilidade" not in meta["description"]
     assert other["title"] == "Modelo Fora do Catálogo"
+    with pytest.raises(DistributionDraftError):
+        build_distribution_draft(
+            _approved_product("Modelo Fora do Catálogo"), Marketplace.META
+        )
 
 
 def test_export_script_writes_valid_json(tmp_path) -> None:

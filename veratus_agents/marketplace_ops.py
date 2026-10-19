@@ -526,6 +526,33 @@ class MarketplaceStore:
             db.commit()
         return data
 
+    def set_remote_ids(
+        self, channel: str, sku: str, remote_ids: list[Any]
+    ) -> dict[str, Any] | None:
+        """Ids do anúncio no canal (leitura de volta) no listing do SKU.
+
+        Anúncio que só existe no canal ganha um listing ``NOT_CREATED``.
+        """
+        ids = [str(item) for item in remote_ids if item]
+        current = self.listing(channel, sku)
+        if current is None:
+            if not ids:
+                return None
+            current = self.upsert_listing(sku, channel, ListingState.NOT_CREATED)
+        data = {
+            **current,
+            "external_listing_id": ids[0] if ids else None,
+            "remote_ids": ids,
+            "last_sync_at": _now(),
+        }
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                "UPDATE marketplace_listings SET data_json=? WHERE sku=? AND channel=?",
+                (json.dumps(data), sku, channel),
+            )
+            db.commit()
+        return data
+
     def listings(self, channel: str | None = None) -> list[dict[str, Any]]:
         query = "SELECT data_json FROM marketplace_listings" + (
             " WHERE channel=?" if channel else ""
@@ -836,9 +863,9 @@ def make_marketplace_store(
     return MarketplaceStore(path)
 
 
+# Sem custo: ele fica no Product Master (banco), nunca no código.
 FOUNDER_CONFIRMED_DEFAULTS: dict[str, Any] = {
     "price_brl": "289.90",
-    "cost_brl": "65.00",
     "material": "stainless_steel",
     "category": "accessories",
     "subcategory": "watches",

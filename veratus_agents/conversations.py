@@ -208,6 +208,12 @@ PAID_NOTICE = (
     "código de rastreio segue por aqui."
 )
 PAID_TEMPLATE = "pedido_confirmado"
+# Aviso de despacho e resposta ao rastreio, com o código guardado cifrado no ledger.
+SHIPPED_NOTICE = (
+    "Seu pedido foi despachado. Código de rastreio: {code}. Qualquer dúvida, é só "
+    "responder."
+)
+SHIPPED_TEMPLATE = "pedido_enviado"
 STALL_LIMIT = 3
 GATE_FAILURES_TO_TRIP = 2
 BREAKER_WINDOW = timedelta(hours=1)
@@ -829,6 +835,8 @@ class DraftRequest:
     origin: dict[str, Any] = field(default_factory=dict)
     # Consulta do CEP no fechamento (``cep.lookup``): só status, cidade e UF.
     delivery: dict[str, Any] | None = None
+    # Rastreio do pedido despachado (decifrado do ledger só para a resposta).
+    tracking_code: str | None = None
 
 
 class DraftModel(Protocol):
@@ -1124,6 +1132,8 @@ class TemplateSalesModel:
             }
             status = labels.get(request.order.get("status", ""), "está em análise")
             reply = f"Seu pedido {status}. Posso ajudar em algo mais?"
+        elif intent == "rastreio" and _shipped(request.order) and request.tracking_code:
+            reply = SHIPPED_NOTICE.format(code=request.tracking_code)
         elif intent == "rastreio" and _shipped(request.order):
             reply = (
                 "Seu pedido já foi despachado. O código de rastreio a equipe envia "
@@ -1968,6 +1978,7 @@ class ConversationEngine:
         order_factory: OrderFactory | None = None,
         payment_linker: PaymentLinker | None = None,
         order_lookup: Callable[[str], dict[str, Any] | None] | None = None,
+        tracking_lookup: Callable[[str], str | None] | None = None,
         knowledge_context: Callable[[], dict[str, Any]] | None = None,
         mode_resolver: Callable[[str], str] = channel_mode,
         cep_lookup: Callable[[str], dict[str, Any]] | None = None,
@@ -1979,6 +1990,8 @@ class ConversationEngine:
         self.order_factory = order_factory
         self.payment_linker = payment_linker
         self.order_lookup = order_lookup
+        # Pedido → rastreio decifrado do ledger (``OrderLedger.tracking_code``).
+        self.tracking_lookup = tracking_lookup
         self.knowledge_context = knowledge_context or _default_knowledge_context
         self.mode_resolver = mode_resolver
         if cep_lookup is None:
@@ -2069,13 +2082,17 @@ class ConversationEngine:
             if not public_price(product):
                 # "A equipe confirma o preço" vira tarefa, não promessa solta.
                 task, topic = "FATO_NAO_CONFIRMADO", f"o preço do {product['name']}"
+        tracking_code = None
         if (
             intent == "rastreio"
             and channel not in MARKETPLACES
             and _shipped(self._order(conversation))
         ):
-            # O ledger não guarda o código: a tarefa lembra quem despachou de enviar.
-            task = "ENVIAR_RASTREIO"
+            # Com o código guardado, o agente responde (risco 1: sai só em AUTO).
+            # Sem ele, a tarefa lembra quem despachou de enviar.
+            tracking_code = self._tracking_code(conversation)
+            if not tracking_code:
+                task = "ENVIAR_RASTREIO"
         changes: dict[str, Any] = {}
         if classification.discount_request:
             changes["discount_requests"] = int(conversation["discount_requests"]) + 1
@@ -2116,6 +2133,7 @@ class ConversationEngine:
             discount_request=classification.discount_request,
             topic_facts=facts_for_topic,
             origin=dict(inbound.origin or stored_origin or {}),
+            tracking_code=tracking_code,
         )
         closes_on_whatsapp = channel in CLOSE_ON_WHATSAPP
         if (
@@ -2412,6 +2430,11 @@ class ConversationEngine:
         if not conversation.get("order_id") or self.order_lookup is None:
             return None
         return self.order_lookup(conversation["order_id"])
+
+    def _tracking_code(self, conversation: dict[str, Any]) -> str | None:
+        if not conversation.get("order_id") or self.tracking_lookup is None:
+            return None
+        return self.tracking_lookup(conversation["order_id"])
 
     def _gate(
         self, draft: dict[str, Any], channel: str, product: dict[str, Any] | None
@@ -2877,6 +2900,128 @@ class ConversationEngine:
                 }
             return {"status": "BLOCKED", "reasons": ["CUSTOMER_SERVICE_WINDOW_CLOSED"]}
         except Exception as exc:  # noqa: BLE001 - o webhook do provedor não cai pelo aviso
+            return {"status": "FAILED", "reasons": [f"SEND_ERROR_{type(exc).__name__}"]}
+
+    def shipped_notice(self, order_id: str) -> list[dict[str, Any]]:
+        """Pedido despachado (SHIPPED no ledger): avisa o cliente com o rastreio.
+
+        Chamado por ``POST /os/orders/<id>/status``. Só a conversa vinculada ao
+        pedido recebe, um aviso por pedido. Sem código guardado, nada sai e nada
+        é reservado: o aviso vai quando o código chegar.
+        """
+        if not _shipped(self.order_lookup(order_id) if self.order_lookup else None):
+            return []
+        code = self.tracking_lookup(order_id) if self.tracking_lookup else None
+        return [
+            self._shipped_notice(conversation, order_id, code)
+            for conversation in self.store.conversations()
+            if conversation["order_id"] == order_id
+        ]
+
+    def _shipped_notice(
+        self, conversation: dict[str, Any], order_id: str, code: str | None
+    ) -> dict[str, Any]:
+        channel, key = conversation["channel"], conversation["conv_key"]
+        mode = self.mode(channel)
+        if not code:
+            return self._result("SKIPPED", mode, reason="TRACKING_CODE_MISSING")
+        # O POST repete e pode chegar em paralelo: a reserva é atômica.
+        if not self.store.claim_message(channel, f"shipped-notice:{order_id}"):
+            return self._result("DUPLICATE", mode)
+        intent, risk = "pedido_enviado", INTENT_RISK["rastreio"]
+        reply, reasons = self._gate(
+            {"customer_reply": SHIPPED_NOTICE.format(code=code)}, channel, None
+        )
+        if conversation["state"] != "BOT":
+            reasons.append(f"STATE_{conversation['state']}")
+        if not reasons and decide(mode, risk) == "SEND":
+            sent = self._send_shipped_notice(
+                channel, conversation["conversation_id"], reply, order_id, code
+            )
+            if sent["status"] == "SENT":
+                self._responded(key, conversation)
+                self.store.event(
+                    channel,
+                    key,
+                    "ORDER_SHIPPED_NOTICE",
+                    intent=intent,
+                    risk=risk,
+                    mode=mode,
+                    action="SEND",
+                    result="SENT",
+                    detail={"order_id": order_id, "via": sent.get("via", "text")},
+                )
+                return self._result("SEND", mode, intent=intent, sent=True)
+            reasons = sent.get("reasons") or [sent.get("error", "SEND_FAILED")]
+        reason = ",".join(reasons) or None
+        status = "SHADOW_DRAFT" if mode == "SHADOW" else "PENDING_APPROVAL"
+        draft_id = self.store.enqueue(
+            key,
+            channel,
+            message_id=None,
+            intent=intent,
+            risk=risk,
+            mode=mode,
+            reply=reply,
+            status=status,
+            reason=reason,
+        )
+        self.store.event(
+            channel,
+            key,
+            "ORDER_SHIPPED_NOTICE",
+            intent=intent,
+            risk=risk,
+            mode=mode,
+            action="QUEUE",
+            result=status,
+            reason=reason,
+            detail={"order_id": order_id, "draft_id": draft_id},
+        )
+        return self._result(
+            "QUEUE", mode, intent=intent, draft_id=draft_id, reason=reason
+        )
+
+    def _send_shipped_notice(
+        self, channel: str, conversation_id: str, text: str, order_id: str, code: str
+    ) -> dict[str, Any]:
+        from .whatsapp import load_templates
+
+        adapter = self.adapters.get(channel)
+        if adapter is None:
+            return {"status": "BLOCKED", "reasons": ["ADAPTER_MISSING"]}
+        idempotency_key = f"shipped:{order_id}"
+        try:
+            if adapter.window_open(conversation_id, _now()):
+                return adapter.send(
+                    conversation_id, text, idempotency_key=idempotency_key
+                )
+            send_template = getattr(adapter, "send_template", None)
+            if channel != "whatsapp" or send_template is None:
+                return {
+                    "status": "BLOCKED",
+                    "reasons": ["CUSTOMER_SERVICE_WINDOW_CLOSED"],
+                }
+            # Fora da janela de 24 h, só o template utilitário aprovado na Meta.
+            template = load_templates().get(SHIPPED_TEMPLATE) or {}
+            if template.get("status") != "APPROVED":
+                return {
+                    "status": "BLOCKED",
+                    "reasons": [
+                        "CUSTOMER_SERVICE_WINDOW_CLOSED",
+                        "TEMPLATE_NOT_APPROVED",
+                    ],
+                }
+            return {
+                **send_template(
+                    conversation_id,
+                    SHIPPED_TEMPLATE,
+                    idempotency_key=idempotency_key,
+                    params=[order_id, code],
+                ),
+                "via": SHIPPED_TEMPLATE,
+            }
+        except Exception as exc:  # noqa: BLE001 - o status do pedido não cai pelo aviso
             return {"status": "FAILED", "reasons": [f"SEND_ERROR_{type(exc).__name__}"]}
 
     # -- prontidão e métricas ----------------------------------------------------

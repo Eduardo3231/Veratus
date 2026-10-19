@@ -4,6 +4,9 @@ A compra acontece fora do site (WhatsApp ou marketplace). Este ledger guarda só
 o necessário para conciliar mídia e economics: SKU, canal, referência da visita,
 UTMs, valores, pagamento, estado e uma referência de evidência. Nome, telefone e
 e-mail do cliente não pertencem a esta tabela.
+
+O envio (transportadora, referência do envio e código de rastreio) fica numa
+tabela à parte, com o código cifrado: nunca aparece na listagem nem em evento.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .sqlstore import SqlStore
@@ -153,11 +157,31 @@ class StatusChange(BaseModel):
     status: OrderStatus
     recorded_by: str = Field(min_length=2, max_length=80)
     evidence_ref: str | None = Field(default=None, min_length=3, max_length=200)
+    # Envio, só com SHIPPED. O código de rastreio é gravado cifrado.
+    tracking_code: str | None = Field(
+        default=None, min_length=4, max_length=40, pattern=r"^[A-Za-z0-9-]+$"
+    )
+    carrier: str | None = Field(
+        default=None, min_length=2, max_length=40, pattern=r"^[a-z][a-z0-9_]+$"
+    )
+    shipment_ref: str | None = Field(
+        default=None, min_length=2, max_length=80, pattern=_TEXT_ID
+    )
 
     @field_validator("recorded_by", "evidence_ref")
     @classmethod
     def no_personal_data(cls, value: str | None) -> str | None:
         return _reject_personal_data(value)
+
+    @model_validator(mode="after")
+    def shipping_only_when_shipped(self) -> StatusChange:
+        if self.has_shipping and self.status != OrderStatus.SHIPPED:
+            raise ValueError("shipping_requires_shipped_status")
+        return self
+
+    @property
+    def has_shipping(self) -> bool:
+        return bool(self.tracking_code or self.carrier or self.shipment_ref)
 
 
 class OrderConflictError(ValueError):
@@ -166,6 +190,10 @@ class OrderConflictError(ValueError):
 
 class OrderTransitionError(ValueError):
     pass
+
+
+class TrackingStorageError(RuntimeError):
+    """Rastreio sem chave de cifra (``VERATUS_TOKEN_ENCRYPTION_KEY``)."""
 
 
 SCHEMA = """
@@ -206,6 +234,13 @@ CREATE TABLE IF NOT EXISTS orders_ledger_events (
 );
 CREATE INDEX IF NOT EXISTS idx_orders_ledger_events_order
     ON orders_ledger_events(order_id, occurred_at);
+CREATE TABLE IF NOT EXISTS orders_ledger_shipping (
+    order_id TEXT PRIMARY KEY REFERENCES orders_ledger(order_id),
+    carrier TEXT,
+    shipment_ref TEXT,
+    tracking_code_encrypted TEXT,
+    updated_at TEXT NOT NULL
+);
 """
 
 _ORDER_COLUMNS = (
@@ -267,10 +302,36 @@ def _public(row: dict[str, Any]) -> dict[str, Any]:
     return item
 
 
+def _shipping_public(row: Any) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "carrier": row["carrier"],
+        "shipment_ref": row["shipment_ref"],
+        "tracking_code_stored": bool(row["tracking_code_encrypted"]),
+    }
+
+
 class OrderLedger(SqlStore):
     """SQLite locally; PostgreSQL whenever ``database_url`` is configured."""
 
     SCHEMA = SCHEMA
+
+    def __init__(
+        self,
+        sqlite_path: str | Path,
+        database_url: str | None = None,
+        *,
+        encryption_key: str | None = None,
+    ) -> None:
+        super().__init__(sqlite_path, database_url)
+        # O rastreio só é gravado cifrado; sem chave válida, o ledger segue sem ele.
+        try:
+            self._cipher = (
+                Fernet(encryption_key.encode("ascii")) if encryption_key else None
+            )
+        except (ValueError, TypeError):
+            self._cipher = None
 
     def record(self, order: OrderRecord) -> tuple[str, dict[str, Any]]:
         """Return ("created" | "duplicate", order). Raise on conflicting reuse."""
@@ -329,7 +390,14 @@ class OrderLedger(SqlStore):
         return ("created" if inserted else "duplicate"), _public(row)
 
     def change_status(self, order_id: str, change: StatusChange) -> tuple[str, dict]:
-        """Apply one audited transition. Replaying the same event_id is a no-op."""
+        """Apply one audited transition. Replaying the same event_id is a no-op.
+
+        Com SHIPPED, grava também o envio (``_save_shipping``). Um SHIPPED sobre um
+        pedido já despachado só completa o envio, por exemplo o rastreio que chegou
+        depois; o que já foi gravado nunca é trocado.
+        """
+        if change.tracking_code and self._cipher is None:
+            raise TrackingStorageError("tracking_storage_not_configured")
         with self._connect() as (db, mark):
             previous = db.execute(
                 self._sql(
@@ -345,11 +413,28 @@ class OrderLedger(SqlStore):
                     change.status.value,
                 ):
                     raise OrderConflictError("event_id_already_used")
+                if change.has_shipping:
+                    self._save_shipping(db, mark, order_id, change)
                 return "duplicate", _public(self._row(db, mark, order_id))
             row = self._row(db, mark, order_id)
             if row is None:
                 raise KeyError(order_id)
             current = OrderStatus(row["status"])
+            if current == change.status == OrderStatus.SHIPPED and change.has_shipping:
+                self._save_shipping(db, mark, order_id, change)
+                self._add_event(
+                    db,
+                    mark,
+                    event_id=change.event_id,
+                    order_id=order_id,
+                    event_type="SHIPPING_RECORDED",
+                    from_status=current.value,
+                    to_status=current.value,
+                    actor=change.recorded_by,
+                    evidence_ref=change.evidence_ref,
+                    occurred_at=_now(),
+                )
+                return "shipping_recorded", _public(row)
             if change.status not in ALLOWED_TRANSITIONS[current]:
                 raise OrderTransitionError(
                     f"transition_not_allowed:{current.value}->{change.status.value}"
@@ -365,6 +450,8 @@ class OrderLedger(SqlStore):
             ).rowcount
             if not updated:
                 raise OrderConflictError("order_changed_concurrently")
+            if change.has_shipping:
+                self._save_shipping(db, mark, order_id, change)
             self._add_event(
                 db,
                 mark,
@@ -380,6 +467,55 @@ class OrderLedger(SqlStore):
             row = self._row(db, mark, order_id)
         return "changed", _public(row)
 
+    def _save_shipping(
+        self, db: Any, mark: str, order_id: str, change: StatusChange
+    ) -> None:
+        """Completa o envio do pedido; valor diferente do já gravado é conflito."""
+        row = self._shipping_row(db, mark, order_id)
+        stored = dict(row) if row is not None else {}
+        code = self._decrypt(stored.get("tracking_code_encrypted"))
+        given = {"carrier": change.carrier, "shipment_ref": change.shipment_ref}
+        if (change.tracking_code and code not in (None, change.tracking_code)) or any(
+            value and stored.get(name) not in (None, value)
+            for name, value in given.items()
+        ):
+            raise OrderConflictError("shipping_already_recorded_with_other_data")
+        encrypted = stored.get("tracking_code_encrypted")
+        if not encrypted and change.tracking_code and self._cipher is not None:
+            encrypted = self._cipher.encrypt(change.tracking_code.encode()).decode()
+        db.execute(
+            self._sql(
+                "INSERT INTO orders_ledger_shipping (order_id, carrier, shipment_ref, "
+                "tracking_code_encrypted, updated_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT (order_id) DO UPDATE SET carrier = excluded.carrier, "
+                "shipment_ref = excluded.shipment_ref, "
+                "tracking_code_encrypted = excluded.tracking_code_encrypted, "
+                "updated_at = excluded.updated_at",
+                mark,
+            ),
+            [
+                order_id,
+                stored.get("carrier") or change.carrier,
+                stored.get("shipment_ref") or change.shipment_ref,
+                encrypted,
+                _now(),
+            ],
+        )
+
+    def _decrypt(self, token: str | None) -> str | None:
+        if not token or self._cipher is None:
+            return None
+        try:
+            return self._cipher.decrypt(token.encode()).decode()
+        except InvalidToken:
+            return None
+
+    def tracking_code(self, order_id: str) -> str | None:
+        """Rastreio decifrado, só para o aviso ao cliente; nunca na listagem."""
+        with self._connect() as (db, mark):
+            row = self._shipping_row(db, mark, order_id)
+        return self._decrypt(row["tracking_code_encrypted"]) if row else None
+
     def get(self, order_id: str) -> dict[str, Any] | None:
         with self._connect() as (db, mark):
             row = self._row(db, mark, order_id)
@@ -394,7 +530,12 @@ class OrderLedger(SqlStore):
                 ),
                 [order_id],
             ).fetchall()
-        return {**_public(row), "events": [dict(event) for event in events]}
+            shipping = self._shipping_row(db, mark, order_id)
+        return {
+            **_public(row),
+            "shipping": _shipping_public(shipping),
+            "events": [dict(event) for event in events],
+        }
 
     @staticmethod
     def _where(
@@ -482,6 +623,17 @@ class OrderLedger(SqlStore):
         return dict(row) if row is not None else None
 
     @staticmethod
+    def _shipping_row(db: Any, mark: str, order_id: str) -> Any:
+        return db.execute(
+            OrderLedger._sql(
+                "SELECT carrier, shipment_ref, tracking_code_encrypted "
+                "FROM orders_ledger_shipping WHERE order_id = ?",
+                mark,
+            ),
+            [order_id],
+        ).fetchone()
+
+    @staticmethod
     def _add_event(db: Any, mark: str, **event: Any) -> None:
         columns = (
             "event_id",
@@ -526,6 +678,81 @@ def local_day_bounds(
 
 
 def make_order_ledger(
-    sqlite_path: str | Path, database_url: str | None = None
+    sqlite_path: str | Path,
+    database_url: str | None = None,
+    encryption_key: str | None = None,
 ) -> OrderLedger:
-    return OrderLedger(sqlite_path, database_url)
+    return OrderLedger(sqlite_path, database_url, encryption_key=encryption_key)
+
+
+# Mercado Envios (GET /shipments/{id}): os status que movem o pedido no ledger.
+_SHIPMENT_STATUS = {"shipped": OrderStatus.SHIPPED, "delivered": OrderStatus.DELIVERED}
+
+
+def shipment_changes(
+    order: dict[str, Any], shipment: dict[str, Any]
+) -> list[StatusChange]:
+    """Leitura do envio no Mercado Livre → mudanças auditadas (SHIPPED, DELIVERED).
+
+    O id do envio fica só no ``event_id`` e no ``shipment_ref``: um número de 11
+    dígitos pode parecer telefone na checagem do ``evidence_ref``.
+    """
+    target = _SHIPMENT_STATUS.get(str(shipment.get("status") or ""))
+    current = OrderStatus(order["status"])
+    if target is None or current not in (OrderStatus.PAID, OrderStatus.SHIPPED):
+        return []
+    ref = str(shipment["shipment_id"])
+    common: dict[str, Any] = {
+        "recorded_by": "mercado-livre-sync",
+        "evidence_ref": "mercado-livre:shipments",
+    }
+    code = shipment.get("tracking_number")
+    changes = [
+        StatusChange(
+            event_id=f"ml-shipment-{ref}-shipped",
+            status=OrderStatus.SHIPPED,
+            tracking_code=str(code) if code else None,
+            carrier="mercado_envios",
+            shipment_ref=ref,
+            **common,
+        )
+    ]
+    if target == OrderStatus.DELIVERED:
+        changes.append(
+            StatusChange(
+                event_id=f"ml-shipment-{ref}-delivered",
+                status=OrderStatus.DELIVERED,
+                **common,
+            )
+        )
+    return changes
+
+
+def sync_mercado_livre_shipment(
+    ledger: OrderLedger, client: Any, order_id: str, shipment_id: str
+) -> dict[str, Any]:
+    """Leitura de volta do Mercado Envios: o pedido anda só pelo que a API diz.
+
+    ``client.get_shipment`` só chama a API com ``MERCADO_LIVRE_SYNC_ENABLED``;
+    desligada, volta ``BLOCKED`` sem rede. Endereço e comprador nunca são lidos.
+    """
+    from .marketplace_clients import MarketplaceApiError
+
+    order = ledger.get(order_id)
+    if order is None:
+        raise KeyError(order_id)
+    if order["channel"] != OrderChannel.MERCADO_LIVRE.value:
+        return {"status": "BLOCKED", "reason": "NOT_MERCADO_LIVRE"}
+    try:
+        shipment = client.get_shipment(shipment_id)
+    except MarketplaceApiError as exc:
+        return {"status": "BLOCKED", "reason": exc.code}
+    results = [
+        ledger.change_status(order_id, change)[0]
+        for change in shipment_changes(order, shipment)
+    ]
+    return {
+        "status": "SYNCED",
+        "shipment_status": shipment.get("status"),
+        "changes": results,
+    }

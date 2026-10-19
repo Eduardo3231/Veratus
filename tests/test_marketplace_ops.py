@@ -25,7 +25,7 @@ def approved_product():
         "status": "APPROVED",
         "material": "confirmar com fornecedor",
         "supplier_ref": "supplier-royal-blue",
-        "cost_brl": "65.00",
+        "cost_brl": "10.00",  # fictício
         "contribution_margin_brl": "150.00",
         "max_cpa_brl": "80.00",
         "price_brl": "289.90",
@@ -152,7 +152,8 @@ def test_founder_defaults_preserve_confirmed_sku_data_and_mark_estimates():
     )
 
     assert merged["price_brl"] == "319.90"
-    assert merged["cost_brl"] == "65.00"
+    # O custo não é padrão compartilhado: fica no Product Master (banco).
+    assert "cost_brl" not in merged
     assert merged["product_length_cm"] == 4.8
     assert merged["dimensions_status"] == "ESTIMATED"
     assert merged["physical_verification_status"] == "NOT_PHYSICALLY_VERIFIED"

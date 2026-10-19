@@ -94,6 +94,62 @@ def test_messenger_parser_keeps_only_text_from_people():
     assert parse_messenger_messages({**_payload(), "object": "instagram"}, PAGE) == []
 
 
+def test_shop_and_ad_referrals_bring_the_piece_and_origin_to_the_engine(tmp_path):
+    other = "2000000000003"
+    page = {"id": PAGE}
+    event = {"recipient": page, "timestamp": 1760000000000}
+    payload = {
+        "object": "page",
+        "entry": [
+            {
+                "id": PAGE,
+                "messaging": [
+                    # Já tinha conversa: botão "Mensagem" da loja, sem texto.
+                    {
+                        **event,
+                        "sender": {"id": PSID},
+                        "referral": {"product": {"retailer_id": "royal-blue"}},
+                    },
+                    {
+                        **event,
+                        "sender": {"id": PSID},
+                        "message": {"mid": "m_10", "text": "Qual o valor?"},
+                    },
+                    # Anúncio click-to-Messenger: ice breaker (postback).
+                    {
+                        **event,
+                        "sender": {"id": other},
+                        "postback": {
+                            "title": "Quero saber o valor",
+                            "payload": "ICE_1",
+                            "referral": {
+                                "source": "ADS",
+                                "ad_id": "1",
+                                "ads_context_data": {"product_id": "ocean-blue"},
+                            },
+                        },
+                    },
+                ],
+            }
+        ],
+    }
+    adapter = FacebookMessengerAdapter(
+        _inbox(tmp_path), access_token="t", page_id=PAGE, session=_Session()
+    )
+
+    assert adapter.receive(payload, PAGE) == 2
+    by_text = {item.text: item for item in adapter.pending()}
+    shop, ad = by_text["Qual o valor?"], by_text["Quero saber o valor"]
+    assert shop.product_hint == "royal-blue"
+    assert shop.origin == {"source": "facebook", "medium": "shop"}
+    assert ad.product_hint == "ocean-blue"
+    assert ad.origin == {"source": "facebook", "medium": "ads"}
+    # A peça vai só na mensagem que veio da loja; a seguinte segue a conversa.
+    adapter.receive(_payload(mid="m_11", text="E o prazo?"), PAGE)
+    later = {item.text: item for item in adapter.pending()}["E o prazo?"]
+    assert later.product_hint is None
+
+
 def test_messenger_only_answers_who_wrote_inside_the_window(tmp_path):
     inbox = _inbox(tmp_path)
     session = _Session()

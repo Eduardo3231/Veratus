@@ -22,7 +22,8 @@ def test_discovery_finds_all_catalog_products_and_sources():
     assert (
         report["products"][0]["source_of_each_field"]["name"] == "catalog/products.json"
     )
-    assert all(item["missing_fields"] == ["images"] for item in watches)
+    # Sem custo do Product Master na chamada, o custo fica vazio (nunca no código).
+    assert all(item["missing_fields"] == ["cost", "images"] for item in watches)
     assert all(not item["fields"]["images"]["value"] for item in watches)
 
 

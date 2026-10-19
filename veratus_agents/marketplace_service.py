@@ -19,6 +19,17 @@ from .marketplace_ops import (
 )
 
 
+def listing_sku(store: MarketplaceStore, channel: str, remote_id: str) -> str | None:
+    """SKU do anúncio remoto pelo id gravado no listing (``set_remote_ids``)."""
+    if not remote_id:
+        return None
+    for listing in store.listings(channel):
+        ids = listing.get("remote_ids") or [listing.get("external_listing_id")]
+        if remote_id in ids:
+            return str(listing["sku"])
+    return None
+
+
 class MarketplaceConnectionService:
     """Read-only orchestration layer used by marketplace agents."""
 
@@ -180,6 +191,10 @@ class MarketplaceConnectionService:
             for product in products:
                 sku = str(product.get("sku") or product.get("id"))
                 remote[sku] = client.lookup_listing(str(account["id"]), sku)
+                # O id do anúncio liga pergunta e pedido do canal ao SKU.
+                self.store.set_remote_ids(
+                    "mercado-livre", sku, remote[sku].get("remote_ids") or []
+                )
             report["api_reads"].append("GET /users/{user_id}/items/search?seller_sku")
             report.update(
                 category_discovery="HEALTHY",

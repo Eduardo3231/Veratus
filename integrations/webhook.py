@@ -77,9 +77,17 @@ def _client_ip():
     return request.remote_addr or "unknown"
 
 
+_ALLOWLIST_WARNED = []  # o aviso da allowlist vazia sai uma vez por processo
+
+
 def _mercado_livre_notification_source_allowed() -> bool:
     configured = os.getenv("MERCADO_LIVRE_NOTIFICATION_IP_ALLOWLIST", "").strip()
     if not configured:
+        # Vazia vale só em dev. No Render (RENDER=true, posto pela plataforma) a
+        # rota aceitaria qualquer origem: fica o aviso no log.
+        if os.getenv("RENDER", "").strip().lower() == "true" and not _ALLOWLIST_WARNED:
+            _ALLOWLIST_WARNED.append(True)
+            app.logger.warning("mercado_livre_notification_ip_allowlist_empty")
         return True
     try:
         source = ipaddress.ip_address(_client_ip())
@@ -266,15 +274,22 @@ def _metrics_store():
 
 
 @lru_cache(maxsize=4)
-def _order_ledger_cached(operations_db: str, database_url: str | None):
+def _order_ledger_cached(
+    operations_db: str, database_url: str | None, encryption_key: str = ""
+):
     from veratus_agents.orders import make_order_ledger
 
-    return make_order_ledger(operations_db, database_url)
+    # A chave cifra o código de rastreio; sem ela, o ledger segue sem rastreio.
+    return make_order_ledger(operations_db, database_url, encryption_key or None)
 
 
 def _order_ledger():
     settings = AgentSettings.from_env()
-    return _order_ledger_cached(str(settings.operations_db), settings.database_url)
+    return _order_ledger_cached(
+        str(settings.operations_db),
+        settings.database_url,
+        os.getenv("VERATUS_TOKEN_ENCRYPTION_KEY", "").strip(),
+    )
 
 
 @lru_cache(maxsize=4)
@@ -894,6 +909,13 @@ def _economics_product(sku: str):
     )
 
 
+def _master_cost(sku: str):
+    """Custo do Product Master (banco); o código e o catálogo não guardam custo."""
+    from veratus_agents.pricing_agent import product_cost
+
+    return product_cost(_product_store().get(sku) or {})
+
+
 def _fee_config_or_error():
     from veratus_agents.channel_economics import FeeConfigError, default_config
 
@@ -1180,6 +1202,7 @@ def os_order_status(order_id):
         OrderConflictError,
         OrderTransitionError,
         StatusChange,
+        TrackingStorageError,
     )
 
     try:
@@ -1198,7 +1221,29 @@ def os_order_status(order_id):
         return jsonify({"status": "error", "message": "order_not_found"}), 404
     except (OrderConflictError, OrderTransitionError) as exc:
         return jsonify({"status": "error", "message": str(exc)}), 409
-    return jsonify({"status": result, "order": stored}), 200
+    except TrackingStorageError:
+        return jsonify(
+            {"status": "blocked", "message": "tracking_storage_not_configured"}
+        ), 503
+    body = {"status": result, "order": stored}
+    if stored["status"] == "SHIPPED":
+        # Repetir o POST é seguro: o aviso sai uma vez por pedido.
+        body["notices"] = _shipped_notices(order_id)
+    return jsonify(body), 200
+
+
+def _shipped_notices(order_id):
+    """Aviso de despacho com o rastreio (engine.shipped_notice), sem derrubar o POST."""
+    try:
+        engine, _ = _engine_or_error()
+        if engine is None:
+            return [{"action": "SKIPPED", "reason": "CONVERSATIONS_NOT_CONFIGURED"}]
+        return engine.shipped_notice(order_id)
+    except Exception as exc:  # noqa: BLE001 - o status já foi gravado
+        app.logger.error(
+            "conversation_shipped_notice_failed error_type=%s", type(exc).__name__
+        )
+        return [{"action": "FAILED", "reason": "NOTICE_ERROR"}]
 
 
 @app.route("/os/products", methods=["GET", "POST"])
@@ -1374,7 +1419,8 @@ def os_distribution_draft(sku):
 
     try:
         channel = Marketplace(data["channel"])
-        draft = build_distribution_draft(product, channel)
+        # A categoria descoberta na API do canal entra no rascunho (PENDING_* sem ela).
+        draft = build_distribution_draft(product, channel, store=_marketplace_store())
         listing = prepare_listing(
             _marketplace_store(), product, channel, draft["payload"]
         )
@@ -1560,7 +1606,7 @@ def os_data_quality():
         return denied
     from veratus_agents.data_discovery import discovery_report
 
-    report = discovery_report()
+    report = discovery_report(_master_cost)
     missing_by_field = {}
     for item in report["missing_business_data"]:
         missing_by_field[item["field"]] = missing_by_field.get(item["field"], 0) + 1
@@ -1839,7 +1885,7 @@ def os_paid_media_plan():
 
     try:
         result = _paid_media_worker().plan(
-            discover_products(),
+            discover_products(_master_cost),
             data.get("creative"),
             idempotency_key=data.get("idempotency_key"),
         )
@@ -2748,6 +2794,9 @@ def facebook_webhook():
             item["message_id"],
             item["text"],
             item["sent_at"],
+            # Loja ou anúncio click-to-Messenger: a peça e a origem vão ao motor.
+            origin=item.get("origin"),
+            product_id=item.get("product_id"),
         )
         stored += inserted
     if stored:
@@ -2955,6 +3004,21 @@ def os_meta_catalog():
     return jsonify(catalog_report()), 200
 
 
+@app.route("/os/meta-catalog/readback", methods=["POST"])
+def os_meta_catalog_readback():
+    """Lê de volta o catálogo na Meta (só GET, META_CATALOG_READBACK_ENABLED).
+
+    Cada item recusado, ausente ou divergente do feed vira conflito de
+    sincronização (canal ``meta``). Desligado, nenhuma chamada sai.
+    """
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.meta_catalog import catalog_readback
+
+    return jsonify(catalog_readback(_marketplace_store())), 200
+
+
 @app.route("/integrations/instagram/replies", methods=["GET"])
 def instagram_replies():
     denied = _admin_required()
@@ -3147,13 +3211,15 @@ def _conversation_engine():
         settings.database_url,
         os.getenv("VERATUS_TOKEN_ENCRYPTION_KEY", "").strip(),
     )
+    ml_token = _mercado_livre_token_provider()
     adapters = {
         "shopee": ManualPasteAdapter("shopee"),
         "tiktok_shop": ManualPasteAdapter("tiktok_shop"),
         "amazon": ManualPasteAdapter("amazon"),
         "mercado_livre": MercadoLivreConversationAdapter(
-            token_provider=_mercado_livre_token_provider(),
+            token_provider=ml_token,
             seller_id=os.getenv("MERCADO_LIVRE_SELLER_ID", "").strip() or None,
+            token_refresher=_mercado_livre_token_refresher(ml_token),
         ),
     }
     try:
@@ -3197,6 +3263,7 @@ def _conversation_engine():
         order_factory=_conversation_order_factory,
         payment_linker=_conversation_payment_linker,
         order_lookup=_order_ledger().get,
+        tracking_lookup=_order_ledger().tracking_code,
     )
 
 
@@ -3238,20 +3305,113 @@ def os_conversations_process():
     return jsonify({"status": "ok", "channel": channel, "results": results}), 200
 
 
+# Canais sem API de mensagem verificada: o fundador cola a pergunta do painel.
+PASTE_CHANNELS = frozenset({"shopee", "tiktok_shop", "amazon"})
+_PASTE_FIELD = re.compile(r"[A-Za-z0-9_.:-]{1,120}")
+
+
+@app.route("/os/conversations/<channel>/inbound", methods=["POST"])
+def os_conversations_paste_inbound(channel):
+    """Pergunta do comprador colada do painel (Shopee, TikTok Shop, Amazon).
+
+    Telefone, e-mail, CPF/CNPJ, CEP e endereço saem do texto antes do motor; os
+    ids do painel viram pseudônimos (HMAC). A resposta fica na fila para colar
+    no painel: o envio segue BLOCKED (API_CONTRACT_UNVERIFIED).
+    """
+    denied = _admin_required()
+    if denied:
+        return denied
+    if channel not in PASTE_CHANNELS:
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    raw_ids = (data.get("conversation_id"), data.get("message_id"))
+    text, hint = data.get("text"), data.get("product_hint")
+    if (
+        set(data) - {"conversation_id", "message_id", "text", "product_hint"}
+        or not all(isinstance(v, str) and _PASTE_FIELD.fullmatch(v) for v in raw_ids)
+        or not isinstance(text, str)
+        or not text.strip()
+        or len(text) > 2000
+        or (
+            hint is not None
+            and not (isinstance(hint, str) and _PASTE_FIELD.fullmatch(hint))
+        )
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    salt = os.getenv("VERATUS_SESSION_SALT", "").strip().encode()
+    if not salt:
+        return _conversations_unavailable(ValueError("VERATUS_SESSION_SALT"))
+    # O id do painel pode ser o apelido do comprador: só o pseudônimo entra.
+    conversation_id, message_id = (
+        f"{kind}_"
+        + hmac.new(salt, f"{channel}:{kind}:{raw}".encode(), "sha256").hexdigest()[:32]
+        for kind, raw in zip(("cv", "msg"), raw_ids, strict=True)
+    )
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.chatwoot import redact
+    from veratus_agents.conversations import InboundText
+
+    result = engine.handle(
+        InboundText(
+            channel=channel,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            text=redact(text)[:2000],
+            product_hint=hint,
+        )
+    )
+    return jsonify(
+        {
+            "status": "ok",
+            "channel": channel,
+            "conversation_id": conversation_id,
+            **{k: v for k, v in result.items() if k != "reply"},
+        }
+    ), 200
+
+
+def _mercado_livre_product_hint(adapter, item_id):
+    """SKU do anúncio da pergunta: o id gravado no listing (leitura de volta) ou,
+    sem ele, o SELLER_SKU do anúncio (GET /items/{id}, só leitura)."""
+    from veratus_agents.marketplace_service import listing_sku
+
+    try:
+        sku = listing_sku(_marketplace_store(), "mercado-livre", item_id)
+    except Exception as exc:  # noqa: BLE001 - sem o store, tenta o anúncio
+        app.logger.error("mercado_livre_listing_lookup_failed %s", type(exc).__name__)
+        sku = None
+    return sku or adapter.item_sku(item_id)
+
+
+def _mercado_livre_token_refresher(token_provider):
+    """``refresh`` do gerente OAuth por trás do provedor: uma nova tentativa no 401."""
+    return getattr(getattr(token_provider, "__self__", None), "refresh", None)
+
+
 def _process_channel(engine, channel, limit=20):
     """Passa as mensagens pendentes do canal pelo motor (rota e processamento contínuo)."""
     from veratus_agents.conversations import InboundText
 
     adapter = engine.adapters.get(channel)
     if channel == "mercado_livre":
+        questions = adapter.list_unanswered_questions(limit)
+        hints = {
+            item_id: _mercado_livre_product_hint(adapter, item_id)
+            for item_id in {item["item_id"] for item in questions if item["item_id"]}
+        }
         inbound = [
             InboundText(
                 channel=channel,
                 conversation_id=f"q-{item['question_id']}",
                 message_id=f"q-{item['question_id']}",
                 text=item["text"],
+                product_hint=hints.get(item["item_id"]),
             )
-            for item in adapter.list_unanswered_questions(limit)
+            for item in questions
         ]
     elif hasattr(adapter, "pending"):
         inbound = adapter.pending(limit)

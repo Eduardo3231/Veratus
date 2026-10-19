@@ -86,6 +86,12 @@ services:
         sync: false
       - key: SHOPEE_SHOP_ID
         sync: false
+      - key: SHOPEE_REDIRECT_URI
+        value: https://veratus.onrender.com/integrations/shopee/oauth/callback
+      - key: SHOPEE_OAUTH_STATE_TTL_SECONDS
+        value: "600"
+      - key: SHOPEE_API_HOST
+        value: https://partner.shopeemobile.com
       - key: TIKTOK_SHOP_ACCESS_TOKEN
         sync: false
       - key: TIKTOK_SHOP_APP_KEY
@@ -106,6 +112,27 @@ services:
         value: A2Q3Y263D00KWC
       - key: AMAZON_SP_ENDPOINT
         value: https://sellingpartnerapi-na.amazon.com
+      # Conta e loja de cada canal no /os/channels (só o marcador PRESENT).
+      - key: MERCADO_LIVRE_ACCOUNT_ID
+        sync: false
+      - key: MERCADO_LIVRE_STORE_ID
+        sync: false
+      - key: SHOPEE_ACCOUNT_ID
+        sync: false
+      - key: SHOPEE_STORE_ID
+        sync: false
+      - key: TIKTOK_SHOP_ACCOUNT_ID
+        sync: false
+      - key: TIKTOK_SHOP_STORE_ID
+        sync: false
+      - key: META_ACCOUNT_ID
+        sync: false
+      - key: META_STORE_ID
+        sync: false
+      - key: AMAZON_ACCOUNT_ID
+        sync: false
+      - key: AMAZON_STORE_ID
+        sync: false
       - key: META_ACCESS_TOKEN
         sync: false
       - key: META_BUSINESS_ID
@@ -268,7 +295,13 @@ services:
         value: "false"
       - key: META_CATALOG_FEED_ENABLED
         value: "false"
+      - key: META_CATALOG_READBACK_ENABLED
+        value: "false"
       - key: MERCADO_LIVRE_ANSWERS_ENABLED
+        value: "false"
+      - key: MERCADO_LIVRE_SYNC_ENABLED
+        value: "false"
+      - key: MERCADO_LIVRE_LABELS_ENABLED
         value: "false"
       - key: MERCADO_LIVRE_SELLER_ID
         sync: false

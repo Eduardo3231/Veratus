@@ -26,33 +26,38 @@ CHANNEL_ATTRIBUTE_MAPPINGS: dict[Marketplace, dict[str, str]] = {
     Marketplace.AMAZON: {"color": "AMAZON_COLOR", "material": "AMAZON_MATERIAL"},
 }
 
+# Chave categoria/subcategoria do Product Master (a mesma do _inspect_* em
+# marketplace_service). "Relógios" é o nome antigo e vale como apelido.
+WATCH_CATEGORY_KEY = "accessories/watches"
+CATEGORY_ALIASES = {"relógios": WATCH_CATEGORY_KEY, "relogios": WATCH_CATEGORY_KEY}
+
 CATEGORY_MAPPINGS: dict[Marketplace, dict[str, str]] = {
     Marketplace.MERCADO_LIVRE: {
-        "Relógios": "PENDING_ML_WATCH_CATEGORY",
+        WATCH_CATEGORY_KEY: "PENDING_ML_WATCH_CATEGORY",
         "jewelry_accessories/necklace": "PENDING_ML_NECKLACE_CATEGORY",
         "jewelry_accessories/bracelet": "PENDING_ML_BRACELET_CATEGORY",
         "jewelry_accessories/anklet": "PENDING_ML_ANKLET_CATEGORY",
     },
     Marketplace.SHOPEE: {
-        "Relógios": "PENDING_SHOPEE_WATCH_CATEGORY",
+        WATCH_CATEGORY_KEY: "PENDING_SHOPEE_WATCH_CATEGORY",
         "jewelry_accessories/necklace": "PENDING_SHOPEE_NECKLACE_CATEGORY",
         "jewelry_accessories/bracelet": "PENDING_SHOPEE_BRACELET_CATEGORY",
         "jewelry_accessories/anklet": "PENDING_SHOPEE_ANKLET_CATEGORY",
     },
     Marketplace.TIKTOK_SHOP: {
-        "Relógios": "PENDING_TIKTOK_WATCH_CATEGORY",
+        WATCH_CATEGORY_KEY: "PENDING_TIKTOK_WATCH_CATEGORY",
         "jewelry_accessories/necklace": "PENDING_TIKTOK_NECKLACE_CATEGORY",
         "jewelry_accessories/bracelet": "PENDING_TIKTOK_BRACELET_CATEGORY",
         "jewelry_accessories/anklet": "PENDING_TIKTOK_ANKLET_CATEGORY",
     },
     Marketplace.META: {
-        "Relógios": "PENDING_META_WATCH_CATEGORY",
+        WATCH_CATEGORY_KEY: "PENDING_META_WATCH_CATEGORY",
         "jewelry_accessories/necklace": "PENDING_META_NECKLACE_CATEGORY",
         "jewelry_accessories/bracelet": "PENDING_META_BRACELET_CATEGORY",
         "jewelry_accessories/anklet": "PENDING_META_ANKLET_CATEGORY",
     },
     Marketplace.AMAZON: {
-        "Relógios": "PENDING_AMAZON_WATCH_PRODUCT_TYPE",
+        WATCH_CATEGORY_KEY: "PENDING_AMAZON_WATCH_PRODUCT_TYPE",
         "jewelry_accessories/necklace": "PENDING_AMAZON_NECKLACE_PRODUCT_TYPE",
         "jewelry_accessories/bracelet": "PENDING_AMAZON_BRACELET_PRODUCT_TYPE",
         "jewelry_accessories/anklet": "PENDING_AMAZON_ANKLET_PRODUCT_TYPE",
@@ -108,10 +113,43 @@ def validate_listing(channel: Marketplace, listing: dict[str, Any]) -> None:
 
 
 def _category_mapping_key(product: dict[str, Any]) -> str:
+    """``categoria/subcategoria`` do Product Master; sem subcategoria, o
+    ``accessories`` é relógio (como em ``data_discovery``)."""
     category = str(product.get("category") or "")
-    if category == "jewelry_accessories":
-        return f"{category}/{product.get('subcategory') or 'other'}"
+    if alias := CATEGORY_ALIASES.get(category.casefold()):
+        return alias
+    if category in ("accessories", "jewelry_accessories"):
+        default = "watches" if category == "accessories" else "other"
+        return f"{category}/{product.get('subcategory') or default}"
     return category
+
+
+def _category_id(
+    channel: Marketplace, product: dict[str, Any], mappings: list[dict[str, Any]]
+) -> str:
+    """Categoria que a API do canal devolveu (DISCOVERED); ``PENDING_*`` só sem ela."""
+    key = _category_mapping_key(product)
+    for item in mappings:
+        if (
+            item.get("internal_category") == key
+            and item.get("status") == "DISCOVERED"
+            and item.get("external_category")
+        ):
+            return str(item["external_category"])
+    return CATEGORY_MAPPINGS[channel][key]
+
+
+def _meta_row(product: dict[str, Any]) -> dict[str, Any]:
+    """Linha do feed da Meta (``meta_catalog``) para a peça do catálogo público."""
+    from .listing_content import find_catalog_entry
+    from .meta_catalog import feed_row
+
+    entry = find_catalog_entry(product)
+    if entry is None:
+        raise DistributionDraftError(
+            "o catálogo da Meta só recebe peça do catálogo público"
+        )
+    return feed_row(entry)
 
 
 def _description(product: dict[str, Any]) -> str:
@@ -128,10 +166,14 @@ def _copy(product: dict[str, Any], channel: Marketplace | None) -> tuple[str, st
     """Título e descrição de listing_content para o marketplace.
 
     Vale para produto do catálogo nos quatro marketplaces e só com texto limpo
-    no gate; a Meta e o produto fora do catálogo seguem com o texto antigo.
+    no gate; o produto fora do catálogo segue com o texto antigo. A Meta usa o
+    texto do feed (``meta_catalog``), com os mesmos bloqueios.
     """
+    if channel is Marketplace.META:
+        row = _meta_row(product)
+        return row["title"], row["description"]
     fallback = product["name"], _description(product)
-    if channel is None or channel is Marketplace.META:
+    if channel is None:
         return fallback
     from .listing_content import find_catalog_entry, listing_copy
 
@@ -158,8 +200,9 @@ def _base_payload(product: dict[str, Any], canonical: dict[str, Any]) -> dict[st
 
 
 def build_distribution_draft(
-    product: dict[str, Any], channel: Marketplace
+    product: dict[str, Any], channel: Marketplace, *, store: Any = None
 ) -> dict[str, Any]:
+    """Rascunho do anúncio; com ``store``, a categoria descoberta na API do canal."""
     if product.get("status") != ProductStatus.APPROVED.value:
         raise DistributionDraftError(
             "somente produtos APPROVED podem gerar rascunho de distribuição"
@@ -174,12 +217,12 @@ def build_distribution_draft(
     base = _base_payload(product, canonical)
     base["canonical"] = canonical
     base["attribute_mapping"] = CHANNEL_ATTRIBUTE_MAPPINGS[channel]
+    mappings = store.category_mappings(channel.value) if store is not None else []
+    category_id = _category_id(channel, product, mappings)
     if channel is Marketplace.MERCADO_LIVRE:
         base.update(
             {
-                "category_id": CATEGORY_MAPPINGS[channel][
-                    _category_mapping_key(product)
-                ],
+                "category_id": category_id,
                 "condition": "new",
                 "listing_type_id": "CONFIRMAR_COM_CONTA",
             }
@@ -187,9 +230,7 @@ def build_distribution_draft(
     elif channel is Marketplace.SHOPEE:
         base.update(
             {
-                "category_id": CATEGORY_MAPPINGS[channel][
-                    _category_mapping_key(product)
-                ],
+                "category_id": category_id,
                 "logistics": "CONFIRMAR_COM_CONTA",
                 "pre_order": False,
             }
@@ -197,29 +238,33 @@ def build_distribution_draft(
     elif channel is Marketplace.TIKTOK_SHOP:
         base.update(
             {
-                "category_id": CATEGORY_MAPPINGS[channel][
-                    _category_mapping_key(product)
-                ],
+                "category_id": category_id,
                 "warehouse": "CONFIRMAR_COM_CONTA",
                 "package": "CONFIRMAR_MEDIDAS_E_PESO",
             }
         )
     elif channel is Marketplace.META:
+        # O mesmo item do feed: disponibilidade só com estoque CONFIRMADO, preço
+        # público, link e foto do site; o que bloqueia o feed fica listado.
+        row = _meta_row(product)
         base.update(
             {
-                "availability": "in stock",
-                "brand": "Veratus",
-                "google_product_category": CATEGORY_MAPPINGS[channel][
-                    _category_mapping_key(product)
-                ],
+                "retailer_id": row["id"],
+                "availability": row["availability"] or None,
+                "price": row["price"] or None,
+                "condition": row["condition"] or "new",
+                "link": row["link"] or None,
+                "image_link": row["image_link"] or None,
+                "brand": row["brand"] or "Veratus",
+                "google_product_category": category_id,
+                "feed_ready": row["ready"],
+                "feed_blockers": [blocker["code"] for blocker in row["blockers"]],
             }
         )
     elif channel is Marketplace.AMAZON:
         base.update(
             {
-                "product_type": CATEGORY_MAPPINGS[channel][
-                    _category_mapping_key(product)
-                ],
+                "product_type": category_id,
                 "marketplace_id": "A2Q3Y263D00KWC",
                 "condition_type": "new_new",
                 "fulfillment": "CONFIRMAR_COM_CONTA",
