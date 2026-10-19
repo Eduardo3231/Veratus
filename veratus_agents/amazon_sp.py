@@ -9,13 +9,22 @@ Nothing here creates, changes or pauses a listing.
 Environment (Render > Environment, never in the repository):
 AMAZON_SP_LWA_CLIENT_ID, AMAZON_SP_LWA_CLIENT_SECRET, AMAZON_SP_REFRESH_TOKEN,
 and optionally AMAZON_SP_MARKETPLACE_ID and AMAZON_SP_ENDPOINT.
+
+Pedidos (getOrders por LastUpdatedAfter e getOrderItems) ficam atrás de
+``AMAZON_SYNC_ENABLED`` (false): desligada, nenhuma chamada sai. Nunca pede o
+token de dados restritos (RDT), então comprador e endereço não vêm; mesmo assim
+só ids, SKU, quantidade, valores e status saem daqui. As notificações da SP-API
+vão por SQS/EventBridge, sem rota HTTP: a leitura é por consulta, disparada pela
+rota de admin (sem cron). Formato da Orders API v0: a conferir na hora de ligar.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import time
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
@@ -28,6 +37,27 @@ DEFAULT_ENDPOINT = "https://sellingpartnerapi-na.amazon.com"
 BRAZIL_MARKETPLACE_ID = "A2Q3Y263D00KWC"
 PARTICIPATIONS_PATH = "/sellers/v1/marketplaceParticipations"
 PRODUCT_TYPES_PATH = "/definitions/2020-09-01/productTypes"
+ORDERS_PATH = "/orders/v0/orders"
+ORDER_FIELDS = (
+    "AmazonOrderId",
+    "PurchaseDate",
+    "LastUpdateDate",
+    "OrderStatus",
+    "OrderTotal",
+    "MarketplaceId",
+    "FulfillmentChannel",
+)
+ITEM_FIELDS = (
+    "SellerSKU",
+    "ASIN",
+    "OrderItemId",
+    "QuantityOrdered",
+    "QuantityShipped",
+    "ItemPrice",
+    "PromotionDiscount",
+    "ShippingPrice",
+)
+_ORDER_ID = re.compile(r"\d{3}-\d{7}-\d{7}")
 REQUIRED_ENV = (
     "AMAZON_SP_LWA_CLIENT_ID",
     "AMAZON_SP_LWA_CLIENT_SECRET",
@@ -180,4 +210,47 @@ class AmazonSellingPartnerClient:
                 "source": "Amazon Product Type Definitions",
             }
             for item in data.get("productTypes", [])
+        ]
+
+    @staticmethod
+    def _require_sync() -> None:
+        from .meta_webhooks import env_flag
+
+        if not env_flag("AMAZON_SYNC_ENABLED"):
+            raise MarketplaceApiError("SYNC_DISABLED")
+
+    def get_orders(
+        self, last_updated_after: datetime, *, max_pages: int = 5
+    ) -> list[dict[str, Any]]:
+        """Pedidos do Brasil alterados desde a data (getOrders), sem RDT."""
+        self._require_sync()
+        params: dict[str, Any] = {
+            "MarketplaceIds": self.marketplace_id,
+            "LastUpdatedAfter": last_updated_after.astimezone(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
+            "MaxResultsPerPage": 100,
+        }
+        orders: list[dict[str, Any]] = []
+        for _ in range(max_pages):
+            payload = self._get(ORDERS_PATH, params).get("payload") or {}
+            orders += [
+                {key: item[key] for key in ORDER_FIELDS if key in item}
+                for item in payload.get("Orders") or []
+            ]
+            token = payload.get("NextToken")
+            if not token:
+                break
+            params = {"MarketplaceIds": self.marketplace_id, "NextToken": token}
+        return orders
+
+    def get_order_items(self, order_id: str) -> list[dict[str, Any]]:
+        """Itens do pedido (getOrderItems): SKU, quantidade e valores."""
+        if not _ORDER_ID.fullmatch(str(order_id)):
+            raise MarketplaceApiError("AMAZON_ORDER_ID_INVALID")
+        self._require_sync()
+        payload = self._get(f"{ORDERS_PATH}/{order_id}/orderItems").get("payload") or {}
+        return [
+            {key: item[key] for key in ITEM_FIELDS if key in item}
+            for item in payload.get("OrderItems") or []
         ]

@@ -1523,12 +1523,15 @@ class MetaSocialPublisher:
 
 
 class TikTokDraftAdapter:
-    """Upload em rascunho no TikTok: ``UNVERIFIED`` até a auditoria do app."""
+    """Mídia na caixa de entrada do TikTok (``tiktok_content``); o fundador conclui
+    o post no app. Sem ``TIKTOK_CONTENT_ENABLED``, nenhuma chamada sai."""
 
     api_status = "UNVERIFIED"
 
     def upload_draft(self, item: dict[str, Any]) -> dict[str, Any]:
-        return {"status": "NEEDS_MANUAL", "reason": "TIKTOK_APP_AUDIT_PENDING"}
+        from .tiktok_content import upload_to_inbox
+
+        return upload_to_inbox(item)
 
 
 # -- palavras-chave por post --------------------------------------------------------

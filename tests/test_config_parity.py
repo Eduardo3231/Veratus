@@ -43,6 +43,10 @@ MUST_BE_FALSE = {
     "CEP_LOOKUP_ENABLED",
     "CHATWOOT_SYNC_ENABLED",
     "TWENTY_SYNC_ENABLED",
+    "SHOPEE_SYNC_ENABLED",
+    "TIKTOK_SHOP_SYNC_ENABLED",
+    "AMAZON_SYNC_ENABLED",
+    "TIKTOK_CONTENT_ENABLED",
     *CHANNEL_FLAGS,
 }
 # Platform/container settings live only in the Blueprint; the MailerLite key is

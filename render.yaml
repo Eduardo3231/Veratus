@@ -102,6 +102,8 @@ services:
         sync: false
       - key: TIKTOK_SHOP_SHOP_CIPHER
         sync: false
+      - key: TIKTOK_SHOP_SERVICE_ID
+        sync: false
       - key: AMAZON_SP_LWA_CLIENT_ID
         sync: false
       - key: AMAZON_SP_LWA_CLIENT_SECRET
@@ -338,4 +340,18 @@ services:
       - key: TWENTY_API_KEY
         sync: false
       - key: JEWELRY_PRICE_RULE
+        sync: false
+      # Pedidos, push e webhook de Shopee, TikTok Shop e Amazon (só leitura).
+      - key: SHOPEE_SYNC_ENABLED
+        value: "false"
+      - key: TIKTOK_SHOP_SYNC_ENABLED
+        value: "false"
+      - key: AMAZON_SYNC_ENABLED
+        value: "false"
+      # TikTok: mídia só na caixa de entrada do criador; o fundador conclui no app.
+      - key: TIKTOK_CONTENT_ENABLED
+        value: "false"
+      - key: TIKTOK_CLIENT_KEY
+        sync: false
+      - key: TIKTOK_CLIENT_SECRET
         sync: false
