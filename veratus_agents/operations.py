@@ -2322,6 +2322,9 @@ class OperationalRuntime:
                         if env_flag("SOCIAL_PUBLISH_ENABLED")
                         else "PREVIEW_ONLY"
                     ),
+                    # Contagem por status, próximos, bloqueios, aprovações,
+                    # tarefas manuais e a última métrica (só leitura local).
+                    **_social_snapshot(),
                     "external_write": False,
                 },
                 parent_task_id=manager.task_id,
@@ -2374,6 +2377,13 @@ class OperationalRuntime:
             ],
             "external_writes": "BLOCKED",
         }
+
+
+def _social_snapshot() -> dict[str, Any]:
+    """Resumo do agendador social para o painel (nunca derruba a auditoria)."""
+    from .social_scheduler import audit_snapshot_from_env
+
+    return audit_snapshot_from_env()
 
 
 def runtime_persistence() -> str:

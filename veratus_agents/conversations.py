@@ -103,6 +103,8 @@ INTENT_RISK = {
     "pergunta_ia": 0,
     # Aviso de pagamento confirmado pelo provedor (payment_confirmed).
     "pagamento_confirmado": 0,
+    # Áudio, foto ou localização no WhatsApp: texto fixo pedindo a mensagem escrita.
+    "midia_recebida": 0,
     # Assunto que o modelo não reconhece: risco 1 com o revisor aprovando, 9 sem.
     "outro": 9,
 }
@@ -118,6 +120,7 @@ TASK_REASONS = (
     "RECLAMACAO",
     "FATO_NAO_CONFIRMADO",
     "ENVIAR_RASTREIO",
+    "ERRO_ENVIO",
 )
 # O que o fundador faz com cada tarefa ({topic}: o assunto do fato pendente).
 _TASK_SUGGESTIONS = {
@@ -128,6 +131,7 @@ _TASK_SUGGESTIONS = {
     "RECLAMACAO": "Cliente insatisfeito: leia a conversa e acompanhe.",
     "FATO_NAO_CONFIRMADO": "Confirmar {topic} e responder.",
     "ENVIAR_RASTREIO": "Envie ao cliente o código de rastreio do pedido despachado.",
+    "ERRO_ENVIO": "Responda pelo canal: a mensagem não foi entregue ({topic}).",
 }
 # Resumo do alerta e da tarefa: só o motivo, nunca o texto do cliente (CPF, nome e
 # endereço não saem por WhatsApp, e-mail nem painel). A conversa fica no motor.
@@ -144,6 +148,7 @@ _TASK_SUMMARIES = {
     "FATO_NAO_CONFIRMADO": "O cliente perguntou sobre {topic}.",
     "ENVIAR_RASTREIO": "O cliente pediu o rastreio de um pedido despachado.",
     "ERRO_INTERNO": "Uma mensagem não foi processada por erro interno.",
+    "ERRO_ENVIO": "A Meta recusou a entrega de uma mensagem enviada.",
 }
 
 
@@ -187,6 +192,7 @@ POLICY_INTENTS = frozenset(
         "consultar_alguem",
         "sem_interesse",
         "pergunta_ia",
+        "midia_recebida",
     }
 )
 # Marca da oferta de chamar o responsável, guardada em ``last_intent``: um "sim"
@@ -741,6 +747,28 @@ def classify(text: str, conversation: dict[str, Any]) -> Classification:
     return Classification("outro")
 
 
+_MEDIA_REPLIES = {
+    "audio": "Recebi seu áudio. Por aqui eu respondo por escrito: pode me contar em "
+    "texto?",
+    "location": "Recebi sua localização. Para o pedido, me mande o endereço por "
+    "escrito, com rua, número e CEP.",
+    "midia": "Recebi sua mensagem. Por aqui eu respondo por escrito: pode me contar "
+    "em texto?",
+}
+
+
+def classify_media(kind: str, conversation: dict[str, Any]) -> Classification:
+    """Mídia sem texto: resposta fixa; foto depois do link segue o comprovante."""
+    if (
+        kind == "image"
+        and conversation.get("order_id")
+        and not conversation.get("paid")
+    ):
+        return Classification("pagamento_informado")
+    topic = kind if kind in _MEDIA_REPLIES else "midia"
+    return Classification("midia_recebida", topic=topic)
+
+
 def _product_in(text: str) -> dict[str, Any] | None:
     from .catalog import load_catalog
 
@@ -1171,6 +1199,8 @@ class TemplateSalesModel:
             )
         elif intent == "hesitacao_final":
             reply = "Tudo bem. Quando quiser retomar, é só me chamar por aqui."
+        elif intent == "midia_recebida":
+            reply = _MEDIA_REPLIES.get(request.topic or "", _MEDIA_REPLIES["midia"])
         elif intent == "sem_interesse":
             reply = "Tudo bem, obrigado por avisar. Se mudar de ideia, é só me chamar."
         elif intent == "pergunta_ia":
@@ -1326,6 +1356,8 @@ class InboundText:
     product_hint: str | None = None
     origin: dict[str, Any] = field(default_factory=dict)
     received_at: datetime | None = None
+    # "text" ou o tipo da mídia sem texto (audio, image, location...).
+    kind: str = "text"
 
 
 class ConversationAdapter(Protocol):
@@ -2011,7 +2043,11 @@ class ConversationEngine:
             )
             return self._result("SKIPPED", mode, reason=conversation["state"])
 
-        classification = classify(inbound.text, conversation)
+        classification = (
+            classify(inbound.text, conversation)
+            if inbound.kind == "text"
+            else classify_media(inbound.kind, conversation)
+        )
         product = _product_in(inbound.text) or (
             _catalog_product(inbound.product_hint or conversation["product_id"])
         )
@@ -2184,6 +2220,18 @@ class ConversationEngine:
                 reason=request.origin.get("medium") or "direct",
             )
         return result
+
+    def delivery_failed(self, channel: str, conversation_id: str, codes: str) -> None:
+        """Status ``failed`` da Meta depois do envio: tarefa no painel, sem ping."""
+        key = self.store.key(channel, conversation_id)
+        self.store.event(channel, key, "DELIVERY_FAILED", result=codes[:60])
+        self._task(
+            channel,
+            key,
+            "ERRO_ENVIO",
+            task_summary("ERRO_ENVIO"),
+            _TASK_SUGGESTIONS["ERRO_ENVIO"].format(topic=f"código {codes[:60]}"),
+        )
 
     def message_failed(self, inbound: InboundText, exc: Exception) -> None:
         """Erro inesperado numa mensagem: tarefa no painel, sem o texto do cliente."""

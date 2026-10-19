@@ -72,6 +72,18 @@ def synthetic_calendar() -> list[dict]:
     return items
 
 
+class _AllApproved(dict):
+    """Manifesto de mídia que aprova tudo (o teste do manifesto usa o real)."""
+
+    def get(self, key, default=None):
+        return "aprovado"
+
+
+@pytest.fixture(autouse=True)
+def approved_media(monkeypatch):
+    monkeypatch.setattr(social, "load_approved_media", lambda path=None: _AllApproved())
+
+
 @pytest.fixture
 def store(tmp_path):
     return social.SocialScheduleStore(tmp_path / "social.sqlite3")
@@ -379,7 +391,22 @@ def test_meta_publisher_handles_carousel_story_page_and_tiktok():
         {**carousel, "format": "STORY", "media": ["https://x/s.jpg"]}
     )
     assert any(data.get("media_type") == "STORIES" for _, data in graph.posts)
-    assert story["facebook"] == {"status": "NEEDS_MANUAL"}
+    assert story["facebook"]["status"] == "NEEDS_MANUAL"
+
+    # Reel: MP4 com capa no Instagram e vídeo na Página.
+    reel = publisher.publish(
+        {
+            **carousel,
+            "format": "REEL",
+            "media": ["https://x/r.mp4", "https://x/capa.jpg"],
+            "channels": ["facebook", "instagram"],
+        }
+    )
+    reels = [data for _, data in graph.posts if data.get("media_type") == "REELS"]
+    assert reels[0]["video_url"] == "https://x/r.mp4"
+    assert reels[0]["cover_url"] == "https://x/capa.jpg"
+    assert any(url.endswith("/PAGE/videos") for url, _ in graph.posts)
+    assert reel["instagram"]["id"] and reel["facebook"]["id"]
 
 
 # -- relógios: foto real libera a arte nova -----------------------------------------
@@ -526,7 +553,7 @@ def test_insights_at_24h_and_7d_and_weekly_report(store, calendar, engine):
     )
     metrics = {"reach": 1200, "saved": 30, "comments": 8, "shares": 5}
 
-    def fetch(media_id):
+    def fetch(media_id, fmt):
         return metrics
 
     assert (
@@ -549,3 +576,266 @@ def test_cli_reports_missing_calendar(tmp_path, monkeypatch, capsys):
 
     assert social.main(["import", str(tmp_path / "x.json")]) == 2
     assert "pacote do fundador" in capsys.readouterr().out
+
+
+# -- rodada social: gate, falha parcial, canais manuais, mídia e rotas -------------
+
+
+def one_item_calendar(tmp_path, **fields):
+    item = {
+        "id": "solo",
+        "data": "2026-10-19 08:00",
+        "formato": "feed",
+        "midias": ["solo.jpg"],
+        "legenda": "Tom dourado para o dia a dia.",
+        "canais": ["instagram", "facebook"],
+        "produtos": ["noir-clover"],
+        **fields,
+    }
+    path = tmp_path / "solo.json"
+    path.write_text(json.dumps([item]), encoding="utf-8")
+    return path
+
+
+def approve_and_run(store, engine, publisher, now, **kwargs):
+    approve_all(store, engine)
+    return social.run_due(
+        store,
+        publisher=publisher,
+        approval_status=lambda rid: approval_status(engine, rid),
+        enabled=True,
+        media_check=ok_media,
+        now=now,
+        **kwargs,
+    )
+
+
+@pytest.mark.parametrize(
+    ("caption", "issue"),
+    [
+        ("Colar por R$ 289,90.", "valor monetário"),
+        ("Peça com garantia de procedência.", "selo ou material"),
+        ("Tom dourado. #a #b #c #d #e #f", "mais de 5 hashtags"),
+    ],
+)
+def test_caption_claims_block_the_item(store, tmp_path, caption, issue):
+    social.import_calendar(store, one_item_calendar(tmp_path, legenda=caption))
+
+    item = store.get("solo")
+    assert item["status"] == "BLOCKED"
+    assert f"CAPTION_CLAIM:{issue}" in item["block_reason"]
+
+
+class FlakyPageGraph(FakeGraph):
+    """A Página falha na primeira foto (ex.: 403 sem pages_manage_posts)."""
+
+    def __init__(self):
+        super().__init__()
+        self.page_failures = 1
+
+    def post(self, url, data=None, timeout=None, **kwargs):
+        if url.endswith("/PAGE/photos") and self.page_failures:
+            self.page_failures -= 1
+            raise RuntimeError("403")
+        return super().post(url, data=data, timeout=timeout, **kwargs)
+
+
+def test_partial_failure_never_republishes_instagram(store, engine, tmp_path):
+    social.import_calendar(store, one_item_calendar(tmp_path))
+    graph = FlakyPageGraph()
+    publisher = social.MetaSocialPublisher(
+        graph, access_token="t", ig_user_id="IG", page_id="PAGE"
+    )
+    first = approve_and_run(store, engine, publisher, START)
+    assert first["failed"][0]["error"] == "RuntimeError"
+    assert store.get("solo")["published"]["instagram"]["id"]
+
+    second = social.run_due(
+        store,
+        publisher=publisher,
+        approval_status=lambda rid: approval_status(engine, rid),
+        enabled=True,
+        media_check=ok_media,
+        now=START + timedelta(hours=2),
+    )
+
+    ig_publishes = [url for url, _ in graph.posts if url.endswith("/media_publish")]
+    assert second["published"] == ["solo"] and len(ig_publishes) == 1
+    item = store.get("solo")
+    assert item["status"] == "PUBLISHED" and item["published"]["facebook"]["id"]
+
+
+def test_unconfigured_page_waits_and_manual_channels_become_tasks(
+    store, engine, tmp_path
+):
+    path = tmp_path / "c.json"
+    base = {"data": "2026-10-19 08:00", "legenda": "Tom dourado.", "midias": ["a.jpg"]}
+    path.write_text(
+        json.dumps(
+            [
+                {**base, "id": "pagina", "formato": "feed", "canais": ["facebook"]},
+                {
+                    **base,
+                    "id": "enquete",
+                    "formato": "story",
+                    "canais": ["instagram"],
+                    "figurinha": "Enquete: tom dourado ou prateado?",
+                },
+                {
+                    **base,
+                    "id": "tiktok",
+                    "formato": "feed",
+                    "canais": ["instagram", "tiktok"],
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    social.import_calendar(store, path)
+    publisher = social.MetaSocialPublisher(
+        FakeGraph(), access_token="t", ig_user_id="IG"
+    )
+    tasks = []
+
+    result = approve_and_run(store, engine, publisher, START, task=tasks.append)
+
+    assert result["skipped"] == [
+        {"id": "pagina", "reasons": ["FACEBOOK_PAGE_ID_MISSING"]}
+    ]
+    assert store.get("pagina")["status"] == "APPROVED"
+    assert store.get("enquete")["status"] == "NEEDS_MANUAL"
+    assert store.get("tiktok")["status"] == "PUBLISHED_PARTIAL"
+    assert {(t["item_id"], t["channel"]) for t in tasks} == {
+        ("enquete", "instagram"),
+        ("tiktok", "tiktok"),
+    }
+    assert all(t["delivery"] == "PAINEL" and t["media"] for t in tasks)
+    snapshot = social.audit_snapshot(store)
+    assert len(snapshot["manual_tasks"]) == 2
+    assert snapshot["by_status"]["PUBLISHED_PARTIAL"] == 1
+
+
+def test_reject_one_item_keeps_the_rest_of_the_week(store, calendar, engine):
+    social.import_calendar(store, calendar)
+    requests = social.request_weekly_approvals(store, engine)
+    payload = engine.approvals.requests[requests[0]["approval_id"]].payload
+    assert payload["items"][0]["caption"] and payload["items"][0]["media"]
+
+    social.reject_item(store, "out-02", actor="fundador", reason="trocar a arte")
+    for request in requests:
+        engine.approvals.resolve(request["approval_id"], ApprovalStatus.APPROVED)
+    social.sync_approvals(store, lambda rid: approval_status(engine, rid))
+
+    assert store.get("out-01")["status"] == "APPROVED"
+    assert store.get("out-02")["status"] == "DRAFT"
+
+
+def test_only_media_from_the_manifest_with_the_same_hash(tmp_path):
+    item = {"format": "IMAGE", "media": ["https://veratus.onrender.com/social/a.jpg"]}
+    jpeg = lambda url: (200, "image/jpeg", "abc")
+
+    assert social.media_problems(item, jpeg, {}) == [
+        "MEDIA_NOT_APPROVED: /social/a.jpg"
+    ]
+    assert social.media_problems(item, jpeg, {"/social/a.jpg": "zzz"}) == [
+        "MEDIA_HASH_MISMATCH: /social/a.jpg"
+    ]
+    assert social.media_problems(item, jpeg, {"/social/a.jpg": "abc"}) == []
+    from PIL import Image
+
+    good, small = tmp_path / "ok.jpg", tmp_path / "small.jpg"
+    Image.new("RGB", (1080, 1350)).save(good, "JPEG")
+    Image.new("RGB", (600, 600)).save(small, "JPEG")
+    assert social.media_qa(good, "IMAGE")["problems"] == []
+    assert social.media_qa(small, "STORY")["problems"] == [
+        "PROPORCAO_600x600",
+        "RESOLUCAO_ABAIXO_DE_1080",
+    ]
+
+
+def test_metrics_by_format_survive_one_error_and_become_records(
+    store, engine, tmp_path
+):
+    path = tmp_path / "c.json"
+    base = {
+        "data": "2026-10-19 08:00",
+        "legenda": "Tom dourado.",
+        "canais": ["instagram"],
+    }
+    path.write_text(
+        json.dumps(
+            [
+                {**base, "id": "feed", "formato": "feed", "midias": ["f.jpg"]},
+                {**base, "id": "story", "formato": "story", "midias": ["s.jpg"]},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    social.import_calendar(store, path)
+    approve_and_run(store, engine, FakePublisher(), START)
+    asked = []
+
+    def fetch(media_id, fmt):
+        asked.append(fmt)
+        if fmt == "IMAGE":
+            raise RuntimeError("400")
+        return {"reach": 300, "views": 900, "replies": 2}
+
+    story = social.collect_insights(store, fetch, now=START + timedelta(hours=21))
+    feed = social.collect_insights(store, fetch, now=START + timedelta(hours=25))
+
+    assert [(c["id"], c["checkpoint"]) for c in story] == [("story", "20h")]
+    assert feed == [] and asked == ["STORY", "IMAGE"]
+    assert store.events("INSIGHT_FAILED")[0]["item_id"] == "feed"
+    records = social.performance_records(store)
+    assert records[0]["channel"] == "instagram_organico"
+    assert records[0]["impressions"] == 900 and records[0]["spend_brl"] == "0"
+
+
+def test_skill_draft_is_added_with_gate_and_pt_br_lint(store):
+    added = social.add_items(
+        store,
+        {
+            "id": "rascunho",
+            "data": "2026-10-25 10:00",
+            "formato": "feed",
+            "midias": ["r.jpg"],
+            "legenda": "Uma peça incrível para a sua jornada.",
+        },
+        actor="ig-caption",
+    )
+
+    assert added[0]["status"] == "PENDING_APPROVAL"
+    assert {"SLOP:incrível", "SLOP:jornada"} <= set(added[0]["lint"])
+
+
+def test_old_cli_and_admin_routes_never_publish_with_flags_off(tmp_path, monkeypatch):
+    from integrations import meta_content_publisher as meta
+    from integrations import webhook
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("chamada externa com as flags desligadas")
+
+    monkeypatch.setattr("requests.Session.request", no_network)
+    assert meta.main(["--publish", "--order", "1"]) == 2
+
+    for name in ("SOCIAL_PUBLISH_ENABLED", "SOCIAL_INSIGHTS_ENABLED"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("VERATUS_ADMIN_TOKEN", "admin-test-key")
+    monkeypatch.setenv("VERATUS_AGENT_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setenv("DATABASE_URL", "")
+    monkeypatch.setenv("META_PAGE_ACCESS_TOKEN", "t")
+    monkeypatch.setenv("META_IG_BUSINESS_ACCOUNT_ID", "IG")
+    monkeypatch.setattr(webhook, "_runtime", CommandEngine)
+    webhook.rate_store.clear()
+    client = webhook.app.test_client()
+    headers = {"X-Veratus-Admin-Token": "admin-test-key"}
+
+    run = client.post("/os/social/run-due", json={}, headers=headers)
+    insights = client.post("/os/social/insights", json={}, headers=headers)
+
+    assert run.status_code == 200 and run.json["status"] == "PREVIEW"
+    assert run.json["reasons"] == ["SOCIAL_PUBLISH_DISABLED"]
+    assert (
+        insights.json["status"] == "PREVIEW" and insights.json["external_read"] is False
+    )

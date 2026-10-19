@@ -1,0 +1,32 @@
+{
+  "_leia": "Templates de utilidade do WhatsApp. Envie cada um no WhatsApp Manager como UTILITY, pt_BR, com o exemplo. Troque status para APPROVED só depois da aprovação da Meta. Se a Meta reclassificar como MARKETING, não use.",
+  "templates": [
+    {
+      "name": "pedido_confirmado",
+      "language": "pt_BR",
+      "category": "UTILITY",
+      "body": "O pagamento do pedido {{1}} foi confirmado pelo Mercado Pago. Seu pedido entra em preparação e o rastreio segue por aqui.",
+      "params": ["pedido"],
+      "example": ["VT-1001"],
+      "status": "DRAFT"
+    },
+    {
+      "name": "pedido_enviado",
+      "language": "pt_BR",
+      "category": "UTILITY",
+      "body": "Seu pedido {{1}} foi despachado. Código de rastreio: {{2}}. Qualquer dúvida, é só responder.",
+      "params": ["pedido", "rastreio"],
+      "example": ["VT-1001", "AA123456789BR"],
+      "status": "DRAFT"
+    },
+    {
+      "name": "alerta_fundador",
+      "language": "pt_BR",
+      "category": "UTILITY",
+      "body": "Atendimento Veratus: {{1}}. {{2}} Sugestão: {{3}}. Veja no painel.",
+      "params": ["motivo", "resumo", "sugestao"],
+      "example": ["RECLAMACAO", "O cliente pediu para falar com uma pessoa.", "Leia a conversa e responda"],
+      "status": "DRAFT"
+    }
+  ]
+}

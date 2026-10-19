@@ -1,0 +1,513 @@
+{
+  "version": "1.0",
+  "note": "Léxico pt-BR para o detect.py do ig-human (--lexicon social/instagram/slop-ptbr.json) e para os avisos de legenda do agendador. Mesmo formato do slop.json; invisíveis e tipografia copiados de lá.",
+  "invisible": [
+    {
+      "cp": "U+200B",
+      "name": "ZERO WIDTH SPACE",
+      "action": "delete"
+    },
+    {
+      "cp": "U+200C",
+      "name": "ZERO WIDTH NON-JOINER",
+      "action": "delete"
+    },
+    {
+      "cp": "U+200D",
+      "name": "ZERO WIDTH JOINER",
+      "action": "delete"
+    },
+    {
+      "cp": "U+2060",
+      "name": "WORD JOINER",
+      "action": "delete"
+    },
+    {
+      "cp": "U+FEFF",
+      "name": "ZERO WIDTH NO-BREAK SPACE / BOM",
+      "action": "delete"
+    },
+    {
+      "cp": "U+00AD",
+      "name": "SOFT HYPHEN",
+      "action": "delete"
+    },
+    {
+      "cp": "U+180E",
+      "name": "MONGOLIAN VOWEL SEPARATOR",
+      "action": "delete"
+    },
+    {
+      "cp": "U+061C",
+      "name": "ARABIC LETTER MARK",
+      "action": "delete"
+    },
+    {
+      "cp": "U+200E",
+      "name": "LEFT-TO-RIGHT MARK",
+      "action": "delete"
+    },
+    {
+      "cp": "U+200F",
+      "name": "RIGHT-TO-LEFT MARK",
+      "action": "delete"
+    },
+    {
+      "cp": "U+E0000-U+E007F",
+      "name": "TAG CHARACTERS (invisible ASCII smuggling)",
+      "action": "delete"
+    },
+    {
+      "cp": "U+00A0",
+      "name": "NO-BREAK SPACE",
+      "action": "space"
+    },
+    {
+      "cp": "U+202F",
+      "name": "NARROW NO-BREAK SPACE",
+      "action": "space"
+    },
+    {
+      "cp": "U+2009",
+      "name": "THIN SPACE",
+      "action": "space"
+    },
+    {
+      "cp": "U+2007",
+      "name": "FIGURE SPACE",
+      "action": "space"
+    },
+    {
+      "cp": "U+2003",
+      "name": "EM SPACE",
+      "action": "space"
+    },
+    {
+      "cp": "U+2002",
+      "name": "EN SPACE",
+      "action": "space"
+    },
+    {
+      "cp": "U+2063",
+      "name": "INVISIBLE SEPARATOR",
+      "action": "delete"
+    }
+  ],
+  "typographic": [
+    {
+      "from": "—",
+      "name": "EM DASH",
+      "to": ", "
+    },
+    {
+      "from": "–",
+      "name": "EN DASH",
+      "to": "-"
+    },
+    {
+      "from": "‘",
+      "name": "LEFT SINGLE QUOTE",
+      "to": "'"
+    },
+    {
+      "from": "’",
+      "name": "RIGHT SINGLE QUOTE",
+      "to": "'"
+    },
+    {
+      "from": "“",
+      "name": "LEFT DOUBLE QUOTE",
+      "to": "\""
+    },
+    {
+      "from": "”",
+      "name": "RIGHT DOUBLE QUOTE",
+      "to": "\""
+    },
+    {
+      "from": "…",
+      "name": "HORIZONTAL ELLIPSIS",
+      "to": "..."
+    },
+    {
+      "from": "′",
+      "name": "PRIME",
+      "to": "'"
+    },
+    {
+      "from": "·",
+      "name": "MIDDLE DOT",
+      "to": "-"
+    },
+    {
+      "from": "•",
+      "name": "BULLET",
+      "to": "-"
+    },
+    {
+      "from": "→",
+      "name": "RIGHTWARDS ARROW",
+      "to": "->"
+    }
+  ],
+  "words": [
+    {
+      "find": "incrível",
+      "replace": "bonito",
+      "family": "adjetivos"
+    },
+    {
+      "find": "surpreendente",
+      "replace": "bonito",
+      "family": "adjetivos"
+    },
+    {
+      "find": "impressionante",
+      "replace": "bonito",
+      "family": "adjetivos"
+    },
+    {
+      "find": "espetacular",
+      "replace": "bonito",
+      "family": "adjetivos"
+    },
+    {
+      "find": "perfeito",
+      "replace": "certo",
+      "family": "adjetivos"
+    },
+    {
+      "find": "essencial",
+      "replace": "útil",
+      "family": "adjetivos"
+    },
+    {
+      "find": "imperdível",
+      "replace": "",
+      "family": "adjetivos"
+    },
+    {
+      "find": "exclusivo",
+      "replace": "",
+      "family": "adjetivos"
+    },
+    {
+      "find": "sofisticado",
+      "replace": "elegante",
+      "family": "adjetivos"
+    },
+    {
+      "find": "deslumbrante",
+      "replace": "bonito",
+      "family": "adjetivos"
+    },
+    {
+      "find": "transformador",
+      "replace": "",
+      "family": "adjetivos"
+    },
+    {
+      "find": "revolucionário",
+      "replace": "",
+      "family": "adjetivos"
+    },
+    {
+      "find": "inovador",
+      "replace": "",
+      "family": "adjetivos"
+    },
+    {
+      "find": "único",
+      "replace": "",
+      "family": "adjetivos"
+    },
+    {
+      "find": "elevar",
+      "replace": "melhorar",
+      "family": "verbos"
+    },
+    {
+      "find": "potencializar",
+      "replace": "ajudar",
+      "family": "verbos"
+    },
+    {
+      "find": "desbloquear",
+      "replace": "abrir",
+      "family": "verbos"
+    },
+    {
+      "find": "mergulhar",
+      "replace": "ver",
+      "family": "verbos"
+    },
+    {
+      "find": "explorar",
+      "replace": "ver",
+      "family": "verbos"
+    },
+    {
+      "find": "descubra",
+      "replace": "veja",
+      "family": "verbos"
+    },
+    {
+      "find": "transforme",
+      "replace": "mude",
+      "family": "verbos"
+    },
+    {
+      "find": "eleve",
+      "replace": "melhore",
+      "family": "verbos"
+    },
+    {
+      "find": "jornada",
+      "replace": "caminho",
+      "family": "substantivos"
+    },
+    {
+      "find": "universo",
+      "replace": "linha",
+      "family": "substantivos"
+    },
+    {
+      "find": "essência",
+      "replace": "",
+      "family": "substantivos"
+    },
+    {
+      "find": "sinergia",
+      "replace": "",
+      "family": "substantivos"
+    },
+    {
+      "find": "experiência única",
+      "replace": "",
+      "family": "substantivos"
+    },
+    {
+      "find": "toque de magia",
+      "replace": "",
+      "family": "substantivos"
+    },
+    {
+      "find": "vibe",
+      "replace": "",
+      "family": "substantivos"
+    },
+    {
+      "find": "must-have",
+      "replace": "",
+      "family": "substantivos"
+    },
+    {
+      "find": "game changer",
+      "replace": "",
+      "family": "substantivos"
+    },
+    {
+      "find": "simplesmente",
+      "replace": "",
+      "family": "muletas"
+    },
+    {
+      "find": "literalmente",
+      "replace": "",
+      "family": "muletas"
+    },
+    {
+      "find": "absolutamente",
+      "replace": "",
+      "family": "muletas"
+    },
+    {
+      "find": "verdadeiramente",
+      "replace": "",
+      "family": "muletas"
+    },
+    {
+      "find": "certamente",
+      "replace": "",
+      "family": "muletas"
+    },
+    {
+      "find": "sem dúvida",
+      "replace": "",
+      "family": "muletas"
+    },
+    {
+      "find": "de fato",
+      "replace": "",
+      "family": "muletas"
+    }
+  ],
+  "phrases": [
+    {
+      "find": "no mundo de hoje",
+      "replace": "hoje",
+      "family": "aberturas"
+    },
+    {
+      "find": "nos dias de hoje",
+      "replace": "hoje",
+      "family": "aberturas"
+    },
+    {
+      "find": "você já se perguntou",
+      "replace": "",
+      "family": "aberturas"
+    },
+    {
+      "find": "imagine só",
+      "replace": "",
+      "family": "aberturas"
+    },
+    {
+      "find": "prepare-se para",
+      "replace": "",
+      "family": "aberturas"
+    },
+    {
+      "find": "chegou a hora de",
+      "replace": "",
+      "family": "aberturas"
+    },
+    {
+      "find": "não é apenas",
+      "replace": "",
+      "family": "estruturas"
+    },
+    {
+      "find": "muito mais do que",
+      "replace": "",
+      "family": "estruturas"
+    },
+    {
+      "find": "mais do que um acessório",
+      "replace": "",
+      "family": "estruturas"
+    },
+    {
+      "find": "eleve seu estilo",
+      "replace": "",
+      "family": "moda"
+    },
+    {
+      "find": "eleve o seu look",
+      "replace": "",
+      "family": "moda"
+    },
+    {
+      "find": "para todas as ocasiões",
+      "replace": "",
+      "family": "moda"
+    },
+    {
+      "find": "do dia à noite",
+      "replace": "",
+      "family": "moda"
+    },
+    {
+      "find": "peça-chave",
+      "replace": "",
+      "family": "moda"
+    },
+    {
+      "find": "faz toda a diferença",
+      "replace": "",
+      "family": "moda"
+    },
+    {
+      "find": "vai amar",
+      "replace": "",
+      "family": "moda"
+    },
+    {
+      "find": "você merece",
+      "replace": "",
+      "family": "moda"
+    },
+    {
+      "find": "feito para você",
+      "replace": "",
+      "family": "moda"
+    },
+    {
+      "find": "em resumo",
+      "replace": "",
+      "family": "fechamentos"
+    },
+    {
+      "find": "vale a pena conferir",
+      "replace": "",
+      "family": "fechamentos"
+    },
+    {
+      "find": "não perca",
+      "replace": "",
+      "family": "fechamentos"
+    },
+    {
+      "find": "corre que",
+      "replace": "",
+      "family": "fechamentos"
+    },
+    {
+      "find": "link na bio",
+      "replace": "",
+      "family": "instagram"
+    },
+    {
+      "find": "arrasta pra cima",
+      "replace": "",
+      "family": "instagram"
+    },
+    {
+      "find": "marque quem",
+      "replace": "",
+      "family": "instagram"
+    },
+    {
+      "find": "salve este post",
+      "replace": "",
+      "family": "instagram"
+    },
+    {
+      "find": "comenta aqui embaixo",
+      "replace": "",
+      "family": "instagram"
+    },
+    {
+      "find": "deixe seu like",
+      "replace": "",
+      "family": "instagram"
+    }
+  ],
+  "structures": [
+    {
+      "id": "nao-e-so",
+      "regex": "(?i)\\bn[ãa]o [ée] (?:s[óo]|apenas) [^.!?\\n]{2,60}[,.] [ée]\\b",
+      "name": "\"Não é só X, é Y\"",
+      "fix": "Diga a coisa que você quer dizer. Corte a metade de preparação."
+    },
+    {
+      "id": "mais-que",
+      "regex": "(?i)\\bmais (?:do )?que (?:um|uma) [^.!?\\n]{2,40}[,.:] (?:[ée] )?(?:um|uma)\\b",
+      "name": "\"Mais que um X, um Y\"",
+      "fix": "Fale do objeto como ele é."
+    },
+    {
+      "id": "trio",
+      "regex": "(?i)\\b\\w+, \\w+ e \\w+\\.",
+      "name": "Trio de adjetivos",
+      "fix": "Fique com o adjetivo mais concreto."
+    },
+    {
+      "id": "pergunta-retorica",
+      "regex": "(?m)^(?:Sabe|Já pensou|Você sabia)[^?\\n]{0,80}\\?",
+      "name": "Pergunta retórica de abertura",
+      "fix": "Comece pelo fato ou pela peça."
+    }
+  ]
+}

@@ -2135,6 +2135,8 @@ def _meta_signed_payload(app_secret_env):
     """Return (payload, None) for a genuine Meta POST, or (None, response)."""
     from veratus_agents.meta_webhooks import verify_signature
 
+    # O limite geral do app (8 KB) recusaria lotes normais da Meta com 413.
+    request.max_content_length = _META_WEBHOOK_MAX_BYTES
     if (request.content_length or 0) > _META_WEBHOOK_MAX_BYTES:
         return None, (jsonify({"status": "error", "message": "payload_too_large"}), 413)
     raw = request.get_data(cache=True)
@@ -2187,6 +2189,10 @@ def _whatsapp_unavailable(exc):
 def whatsapp_webhook():
     if request.method == "GET":
         return _meta_subscription("WHATSAPP_VERIFY_TOKEN")
+    if (request.content_length or 0) > _META_WEBHOOK_MAX_BYTES:
+        # Lote grande da importação de histórico (coexistência): 200 sem ler, senão
+        # a Meta reenvia. Mensagem de cliente não chega a esse tamanho.
+        return jsonify({"status": "ignored", "message": "payload_too_large"}), 200
     payload, error = _meta_signed_payload("WHATSAPP_APP_SECRET")
     if error:
         return error
@@ -2194,7 +2200,11 @@ def whatsapp_webhook():
 
     try:
         counts = _whatsapp_channel().receive(
-            payload, on_handoff=_whatsapp_person_requested
+            payload,
+            on_handoff=_whatsapp_person_requested,
+            on_founder_reply=_whatsapp_founder_replied,
+            on_send_failed=_whatsapp_delivery_failed,
+            on_opt_out=_whatsapp_opted_out,
         )
     except WhatsAppConfigurationError as exc:
         # 503 makes Meta retry for up to 7 days instead of losing the message.
@@ -2220,25 +2230,79 @@ def _whatsapp_person_requested(conversation_id, message_id, text):
         )
 
 
+def _whatsapp_founder_replied(conversation_id):
+    """Resposta do fundador pelo app (coexistência): o motor também para."""
+    try:
+        engine, _ = _engine_or_error()
+        if engine is not None:
+            conversation = engine.store.conversation("whatsapp", conversation_id)
+            if conversation["state"] == "BOT":
+                engine.set_state(
+                    "whatsapp", conversation_id, "HUMAN", actor="founder-app"
+                )
+    except Exception as exc:  # noqa: BLE001 - o webhook da Meta não cai pelo motor
+        app.logger.error(
+            "whatsapp_founder_reply_failed error_type=%s", type(exc).__name__
+        )
+
+
+def _whatsapp_delivery_failed(conversation_id, codes):
+    """Status failed da Meta: tarefa ERRO_ENVIO no painel, sem ping."""
+    try:
+        engine, _ = _engine_or_error()
+        if engine is not None:
+            engine.delivery_failed("whatsapp", conversation_id, codes)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error(
+            "whatsapp_delivery_failed_task error_type=%s", type(exc).__name__
+        )
+
+
+def _whatsapp_opted_out(conversation_id, message_id):
+    """Pedido de saída do marketing: confirmação pelas travas de sempre."""
+    from veratus_agents.whatsapp import WhatsAppCloudClient, confirm_opt_out
+
+    try:
+        confirm_opt_out(
+            _whatsapp_channel(),
+            conversation_id,
+            message_id,
+            client=WhatsAppCloudClient.from_env(),
+        )
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("whatsapp_opt_out_failed error_type=%s", type(exc).__name__)
+
+
 @app.route("/integrations/whatsapp/drafts/process", methods=["POST"])
 def whatsapp_process_drafts():
+    """Aposentada: consumia as mesmas mensagens NEW do motor de atendimento."""
     denied = _admin_required()
     if denied:
         return denied
-    data, error = _agent_json()
-    if error:
-        return jsonify({"status": "error", "message": error[0]}), error[1]
-    limit = data.get("limit", 20)
-    if set(data) - {"limit"} or not isinstance(limit, int):
-        return jsonify({"status": "error", "message": "invalid_request"}), 400
-    from veratus_agents import run_sales_workflow
-    from veratus_agents.whatsapp import WhatsAppConfigurationError
+    return jsonify(
+        {
+            "status": "gone",
+            "message": "use_/os/conversations/process",
+            "external_message_sent": False,
+        }
+    ), 410
 
-    try:
-        result = _whatsapp_channel().draft_pending(run_sales_workflow, limit=limit)
-    except WhatsAppConfigurationError as exc:
-        return _whatsapp_unavailable(exc)
-    return jsonify({"status": "ok", **result, "external_message_sent": False}), 200
+
+@app.route("/os/whatsapp/health", methods=["GET"])
+def os_whatsapp_health():
+    """Só leitura na Meta: número, nome, qualidade, app assinado e templates."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.harvey import WHATSAPP_NUMBER
+    from veratus_agents.whatsapp import WhatsAppCloudClient, account_health
+
+    report = account_health(
+        WhatsAppCloudClient.from_env(),
+        os.getenv("WHATSAPP_BUSINESS_ACCOUNT_ID", "").strip() or None,
+        expected_number=WHATSAPP_NUMBER,
+    )
+    return jsonify(report), 200
 
 
 @app.route("/integrations/whatsapp/conversations", methods=["GET"])
@@ -2441,6 +2505,135 @@ def os_social_posts():
     ), 200
 
 
+def _social_admin_json():
+    """Admin + corpo JSON (pode ser {}): devolve (data, resposta de erro)."""
+    denied = _admin_required()
+    if denied:
+        return None, denied
+    data, error = _agent_json()
+    if error:
+        return None, (jsonify({"status": "error", "message": error[0]}), error[1])
+    return data, None
+
+
+@app.route("/os/social/posts/<item_id>/reject", methods=["POST"])
+def os_social_reject(item_id):
+    data, denied = _social_admin_json()
+    if denied:
+        return denied
+    from veratus_agents.social_scheduler import reject_item
+
+    try:
+        item = reject_item(
+            _social_store(),
+            item_id,
+            actor="fundador",
+            reason=str(data.get("reason") or "")[:300],
+        )
+    except KeyError:
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 409
+    return jsonify({"post": item}), 200
+
+
+@app.route("/os/social/posts/<item_id>/edit", methods=["POST"])
+def os_social_edit(item_id):
+    data, denied = _social_admin_json()
+    if denied:
+        return denied
+    from veratus_agents.social_scheduler import CalendarError, edit_item
+
+    try:
+        item = edit_item(_social_store(), item_id, actor="fundador", **data)
+    except KeyError:
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    except (CalendarError, ValueError, TypeError) as exc:
+        return jsonify({"status": "error", "message": str(exc)[:200]}), 400
+    return jsonify({"post": item}), 200
+
+
+@app.route("/os/social/request-approval", methods=["POST"])
+def os_social_request_approval():
+    data, denied = _social_admin_json()
+    if denied:
+        return denied
+    from veratus_agents.social_scheduler import request_weekly_approvals
+
+    week = str(data.get("week") or "") or None
+    return jsonify(
+        {"approvals": request_weekly_approvals(_social_store(), _runtime(), week=week)}
+    ), 200
+
+
+@app.route("/os/social/run-due", methods=["POST"])
+def os_social_run_due():
+    """Para o cron do Render; com SOCIAL_PUBLISH_ENABLED desligada, só a prévia."""
+    _data, denied = _social_admin_json()
+    if denied:
+        return denied
+    from veratus_agents.social_scheduler import run_due_from_env
+
+    return jsonify(run_due_from_env(_social_store(), _runtime())), 200
+
+
+@app.route("/os/social/insights", methods=["POST"])
+def os_social_insights():
+    """Com SOCIAL_INSIGHTS_ENABLED desligada, só a prévia (sem chamar a Meta)."""
+    _data, denied = _social_admin_json()
+    if denied:
+        return denied
+    from veratus_agents.social_scheduler import run_insights
+
+    return jsonify(run_insights(_social_store())), 200
+
+
+@app.route("/os/social/comments", methods=["GET"])
+def os_social_comments():
+    denied = _admin_required()
+    if denied:
+        return denied
+    status = request.args.get("status") or None
+    return jsonify({"actions": _instagram_queue().list_actions(status=status)}), 200
+
+
+@app.route("/os/social/comments/<comment_id>/<action>/<decision>", methods=["POST"])
+def os_social_comment_decision(comment_id, action, decision):
+    """O fundador aprova ou rejeita a resposta pública ou o ocultar."""
+    data, denied = _social_admin_json()
+    if denied:
+        return denied
+    if decision not in ("approve", "reject"):
+        return jsonify({"status": "error", "message": "invalid_decision"}), 400
+    from veratus_agents.instagram_comments import FacebookCommentClient, InstagramClient
+
+    queue = _instagram_queue()
+    platform = next(
+        (
+            row["platform"]
+            for row in queue.list_actions(status="DRAFT", limit=500)
+            if row["comment_id"] == comment_id
+        ),
+        None,
+    )
+    client = (
+        FacebookCommentClient.from_env()
+        if platform == "facebook"
+        else InstagramClient.from_env(token=_instagram_token_store().current())
+    )
+    try:
+        result = queue.resolve_action(
+            comment_id,
+            action.upper(),
+            approve=decision == "approve",
+            client=client,
+            text=str(data.get("text") or "") or None,
+        )
+    except KeyError:
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    return jsonify(result), 200
+
+
 @app.route("/integrations/instagram/token/status", methods=["GET"])
 def instagram_token_status():
     denied = _admin_required()
@@ -2469,9 +2662,22 @@ def instagram_webhook():
 
     _, rules = load_rules()
     own_account = os.getenv("INSTAGRAM_USER_ID", "").strip()
+    post_rules = _post_keyword_rules()
     counts = _instagram_queue().enqueue(
-        payload, rules, own_account_id=own_account, media_rules=_post_keyword_rules()
+        payload, rules, own_account_id=own_account, media_rules=post_rules
     )
+    # Triagem do resto (SOCIAL_COMMENTS_MODE): rascunhos e tarefas, sem o texto.
+    from veratus_agents.instagram_comments import parse_comments
+
+    triage = _instagram_queue().triage(
+        parse_comments(payload),
+        rules,
+        own_account_id=own_account,
+        media_rules=post_rules,
+    )
+    counts = {**counts, "triage": triage}
+    if counts["queued"] or triage["private_replies"]:
+        _autoprocess_comment_replies()
     # Direct (campo messages): guarda a conversa; responder segue o nível do canal.
     from veratus_agents.channel_adapters import parse_instagram_messages
 
@@ -2510,10 +2716,22 @@ def facebook_webhook():
     if error:
         return error
     from veratus_agents.channel_adapters import parse_messenger_messages
+    from veratus_agents.meta_webhooks import env_flag
 
-    messages = parse_messenger_messages(payload, os.getenv("META_PAGE_ID", "").strip())
+    page_id = os.getenv("META_PAGE_ID", "").strip()
+    comments = {}
+    # Comentários na Página (campo feed): só com FACEBOOK_COMMENTS_ENABLED.
+    if env_flag("FACEBOOK_COMMENTS_ENABLED"):
+        from veratus_agents.instagram_comments import parse_facebook_comments
+
+        events = parse_facebook_comments(payload, page_id)
+        if events:
+            comments = {
+                "comments": _instagram_queue().triage(events, [], platform="facebook")
+            }
+    messages = parse_messenger_messages(payload, page_id)
     if not messages:
-        return jsonify({"status": "received", "messages": 0}), 200
+        return jsonify({"status": "received", "messages": 0, **comments}), 200
     try:
         inbox = _direct_inbox()
     except ValueError as exc:
@@ -2758,6 +2976,10 @@ def instagram_process_replies():
         return jsonify({"status": "error", "message": error[0]}), error[1]
     if data:
         return jsonify({"status": "error", "message": "body_must_be_empty"}), 400
+    return jsonify({"status": "ok", **_process_comment_replies()}), 200
+
+
+def _process_comment_replies():
     from veratus_agents.instagram_comments import (
         InstagramClient,
         dm_enabled,
@@ -2769,13 +2991,45 @@ def instagram_process_replies():
         *rules,
         *(rule for items in _post_keyword_rules().values() for rule in items),
     ]
-    result = _instagram_queue().process(
+    return _instagram_queue().process(
         client=InstagramClient.from_env(token=_instagram_token_store().current()),
         enabled=dm_enabled(),
         landing_url=landing_url,
         rules=rules,
     )
-    return jsonify({"status": "ok", **result}), 200
+
+
+def _start_comment_replies_thread():
+    import threading
+
+    def work():
+        try:
+            with app.app_context():
+                _process_comment_replies()
+        except Exception as exc:  # noqa: BLE001 - o erro fica no log, sem texto
+            app.logger.error(
+                "comment_replies_autoprocess_failed error_type=%s", type(exc).__name__
+            )
+
+    threading.Thread(target=work, name="comment-replies", daemon=True).start()
+
+
+def _autoprocess_comment_replies():
+    """Com CONVERSATION_AUTOPROCESS_ENABLED e INSTAGRAM_DM_ENABLED, responde já."""
+    from veratus_agents.instagram_comments import dm_enabled
+    from veratus_agents.meta_webhooks import env_flag
+
+    if not (env_flag("CONVERSATION_AUTOPROCESS_ENABLED") and dm_enabled()):
+        return False
+    try:
+        _start_comment_replies_thread()
+    except Exception as exc:  # noqa: BLE001 - o webhook responde mesmo sem a thread
+        app.logger.error(
+            "comment_replies_autoprocess_not_started error_type=%s",
+            type(exc).__name__,
+        )
+        return False
+    return True
 
 
 # -- Atendimento autônomo (Fase 3) --------------------------------------------
@@ -2904,7 +3158,10 @@ def _conversation_engine():
     }
     try:
         adapters["whatsapp"] = WhatsAppAdapter(
-            _whatsapp_channel(), client=WhatsAppCloudClient.from_env()
+            _whatsapp_channel(),
+            client=WhatsAppCloudClient.from_env(),
+            # Template fora da janela só com o pedido vinculado à conversa.
+            order_lookup=lambda cid: (store.get("whatsapp", cid) or {}).get("order_id"),
         )
     except Exception as exc:  # noqa: BLE001 - canal sem segredo fica sem adaptador
         app.logger.error("conversation_adapter_unavailable channel=whatsapp %s", exc)

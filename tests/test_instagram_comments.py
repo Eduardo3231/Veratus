@@ -168,3 +168,88 @@ def test_instagram_webhook_requires_signature_and_queues(tmp_path):
     assert signed.status_code == 200 and signed.json["queued"] == 1
     assert processed.json["external_messages_sent"] == 0
     assert "INSTAGRAM_DM_DISABLED" in processed.json["blocked_reasons"]
+
+
+class ModerationClient(FakeClient):
+    def reply_public(self, comment_id, text):
+        self.calls.append(("public", comment_id, text))
+        return "r1"
+
+    def hide(self, comment_id):
+        self.calls.append(("hide", comment_id))
+        return "true"
+
+
+def test_comment_triage_drafts_tasks_and_never_stores_the_text(tmp_path):
+    from veratus_agents.instagram_comments import (
+        PUBLIC_REPLIES,
+        parse_comments,
+        parse_facebook_comments,
+    )
+    from veratus_agents.policy import hard_review_customer_reply
+
+    queue = CommentReplyQueue(tmp_path / "ops.sqlite3")
+    phone = "11 9" + "8765-4321"  # montado em tempo de execução
+    payload = comments(
+        ("c1", "quanto custa esse colar?", "u1"),
+        ("c2", "péssimo, nunca chegou meu pedido", "u2"),
+        ("c3", f"me chama no {phone}", "u3"),
+        ("c4", "lindo!", "u4"),
+        ("c5", "ganhe seguidores em www.exemplo.com", "u5"),
+    )
+
+    counts = queue.triage(parse_comments(payload), RULES, mode="SUPERVISED")
+
+    actions = {(a["comment_id"], a["action"]): a for a in queue.list_actions()}
+    assert set(actions) == {
+        ("c1", "PUBLIC_REPLY"),
+        ("c2", "TASK"),
+        ("c3", "HIDE"),
+        ("c5", "HIDE"),
+    }
+    assert counts == {"drafts": 3, "tasks": 1, "private_replies": 1}
+    stored = json.dumps([queue.list_actions(), queue.list_replies()])
+    assert phone not in stored and "quanto custa" not in stored and "u1" not in stored
+    assert all(
+        hard_review_customer_reply(text) == [] for text in PUBLIC_REPLIES.values()
+    )
+
+    client = ModerationClient()
+    early = queue.resolve_action("c1", "PUBLIC_REPLY", approve=True, client=client)
+    assert early["reasons"] == ["PRIVATE_REPLY_NOT_SENT"]
+    queue.process(client=client, enabled=True, landing_url=LANDING_URL, rules=RULES)
+    done = queue.resolve_action(
+        "c1", "PUBLIC_REPLY", approve=True, client=client, mode="SUPERVISED"
+    )
+    assert done["status"] == "DONE"
+    assert client.calls[0][0] == "c1"  # a resposta privada só a quem comentou
+    assert client.calls[1] == ("public", "c1", PUBLIC_REPLIES["instagram"])
+
+    page = {
+        "object": "page",
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "field": "feed",
+                        "value": {
+                            "item": "comment",
+                            "verb": verb,
+                            "comment_id": comment_id,
+                            "post_id": "PAGE_1",
+                            "message": "tem disponível?",
+                            "from": {"id": author},
+                        },
+                    }
+                    for comment_id, verb, author in (
+                        ("f1", "add", "fan"),
+                        ("f2", "add", "PAGE"),
+                        ("f3", "remove", "fan"),
+                    )
+                ]
+            }
+        ],
+    }
+    events = parse_facebook_comments(page, "PAGE")
+    assert [event.comment_id for event in events] == ["f1"]
+    assert queue.triage(events, [], platform="facebook")["private_replies"] == 0

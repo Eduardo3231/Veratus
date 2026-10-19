@@ -136,6 +136,18 @@ services:
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false
+      - key: WHATSAPP_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: WHATSAPP_TEMPLATES_ENABLED
+        value: "false"
+      - key: WHATSAPP_READ_RECEIPTS_ENABLED
+        value: "false"
+      - key: WHATSAPP_INTERACTIVE_ENABLED
+        value: "false"
+      - key: WHATSAPP_MEDIA_ENABLED
+        value: "false"
+      - key: FOUNDER_ALERT_WHATSAPP_ENABLED
+        value: "false"
       - key: INSTAGRAM_DM_ENABLED
         value: "false"
       - key: INSTAGRAM_ACCESS_TOKEN
@@ -261,6 +273,12 @@ services:
       - key: MERCADO_LIVRE_SELLER_ID
         sync: false
       - key: SOCIAL_PUBLISH_ENABLED
+        value: "false"
+      - key: SOCIAL_INSIGHTS_ENABLED
+        value: "false"
+      - key: SOCIAL_COMMENTS_MODE
+        value: "SHADOW"
+      - key: FACEBOOK_COMMENTS_ENABLED
         value: "false"
       - key: META_PAGE_ID
         sync: false

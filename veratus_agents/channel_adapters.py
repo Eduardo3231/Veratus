@@ -21,6 +21,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -64,10 +65,18 @@ class WhatsAppAdapter:
         *,
         client: Any,
         enabled: bool | None = None,
+        order_lookup: Callable[[str], str | None] | None = None,
     ) -> None:
         self.wa = whatsapp_channel
         self.client = client
         self.enabled = enabled
+        # conversation_id → pedido vinculado no motor (template só com pedido).
+        self.order_lookup = order_lookup
+
+    def _send_enabled(self) -> bool:
+        from .whatsapp import send_enabled
+
+        return send_enabled() if self.enabled is None else self.enabled
 
     def window_open(self, conversation_id: str, now: datetime) -> bool:
         conversation = self.wa.get(conversation_id)
@@ -81,39 +90,278 @@ class WhatsAppAdapter:
         idempotency_key: str,
         human_written: bool = False,
     ) -> dict[str, Any]:
-        from .whatsapp import send_enabled
-
         actor = "founder" if human_written else "sales-agent"
+        link = _MERCADO_PAGO_LINK.search(text or "")
+        if link and env_flag("WHATSAPP_INTERACTIVE_ENABLED") and len(text) <= 1024:
+            # O link de pagamento vai também como botão; desligado, só texto.
+            from .whatsapp import cta_url
+
+            return self._deliver(
+                conversation_id,
+                cta_url(text, "Abrir o pagamento", link.group(0)),
+                text,
+                "interactive",
+                idempotency_key,
+                actor=actor,
+            )
         return self.wa.send(
             conversation_id,
             actor=actor,
             run_lookup=lambda _run_id: None,
             client=self.client,
-            enabled=send_enabled() if self.enabled is None else self.enabled,
+            enabled=self._send_enabled(),
             text=text,
             idempotency_key=idempotency_key,
         )
 
+    def send_template(
+        self,
+        conversation_id: str,
+        name: str,
+        *,
+        idempotency_key: str,
+        params: list[Any] | None = None,
+    ) -> dict[str, Any]:
+        """Fora da janela de 24 h: template aprovado, só para conversa com pedido.
+
+        Sem ``params``, o único parâmetro é o pedido vinculado (``pedido_confirmado``).
+        """
+        from .whatsapp import templates_enabled
+
+        order_id = self.order_lookup(conversation_id) if self.order_lookup else None
+        if not order_id:
+            return {
+                "status": "BLOCKED",
+                "reasons": ["ORDER_NOT_LINKED"],
+                "external_message_sent": False,
+            }
+        return self.wa.send_template(
+            conversation_id,
+            name,
+            [order_id] if params is None else list(params),
+            actor="sales-agent",
+            client=self.client,
+            enabled=self._send_enabled(),
+            templates_enabled=templates_enabled(),
+            idempotency_key=idempotency_key,
+        )
+
+    def send_buttons(
+        self, conversation_id: str, body: str, *, idempotency_key: str
+    ) -> dict[str, Any]:
+        """Botões de venda (Quero pedir, Ver outros, Chamar o responsável)."""
+        from .whatsapp import SALES_BUTTONS, reply_buttons
+
+        titles = [title for _, title in SALES_BUTTONS]
+        return self._interactive(
+            conversation_id,
+            body,
+            titles,
+            lambda: reply_buttons(body, SALES_BUTTONS),
+            idempotency_key,
+        )
+
+    def send_collections(
+        self, conversation_id: str, body: str, *, idempotency_key: str
+    ) -> dict[str, Any]:
+        """Lista das linhas da coleção (Clássicos, Esportivos, Marcantes)."""
+        from .whatsapp import COLLECTION_ROWS, list_message
+
+        titles = [title for _, title in COLLECTION_ROWS]
+        return self._interactive(
+            conversation_id,
+            body,
+            titles,
+            lambda: list_message(body, "Ver coleção", COLLECTION_ROWS),
+            idempotency_key,
+        )
+
+    def send_image(
+        self, conversation_id: str, asset: str, caption: str, *, idempotency_key: str
+    ) -> dict[str, Any]:
+        """Foto de ``landing/assets`` fora da quarentena, legenda pelo gate."""
+        from .meta_catalog import _image_link, site_base_url
+
+        base = site_base_url()
+        link = _image_link([asset], base) if base else None
+        reasons = [] if env_flag("WHATSAPP_MEDIA_ENABLED") else ["MEDIA_DISABLED"]
+        if not link:
+            reasons.append("IMAGE_NOT_RELEASED")
+        reasons += _gate_reasons([caption])
+        content = {"type": "image", "image": {"link": link or "", "caption": caption}}
+        return self._deliver(
+            conversation_id, content, caption, "image", idempotency_key, reasons=reasons
+        )
+
+    def send_products(
+        self,
+        conversation_id: str,
+        retailer_ids: list[str],
+        body: str,
+        *,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Produto ou lista de produtos do catálogo, só com peça elegível no feed.
+
+        Forma de ``product_list`` a conferir na hora de ligar o catálogo ao número.
+        """
+        from .meta_catalog import feed_rows
+
+        catalog_id = os.getenv("META_CATALOG_ID", "").strip()
+        ready = {row["id"] for row in feed_rows() if row.get("ready")}
+        reasons = [] if env_flag("WHATSAPP_MEDIA_ENABLED") else ["MEDIA_DISABLED"]
+        if not catalog_id:
+            reasons.append("CATALOG_NOT_CONFIGURED")
+        if not retailer_ids or len(retailer_ids) > 30:
+            reasons.append("PRODUCTS_INVALID")
+        if any(item not in ready for item in retailer_ids):
+            reasons.append("PRODUCT_NOT_IN_FEED")
+        reasons += _gate_reasons([body])
+        if len(retailer_ids) == 1:
+            action: dict[str, Any] = {
+                "catalog_id": catalog_id,
+                "product_retailer_id": retailer_ids[0],
+            }
+            interactive = {"type": "product", "body": {"text": body}}
+        else:
+            action = {
+                "catalog_id": catalog_id,
+                "sections": [
+                    {
+                        "title": "Relógios",
+                        "product_items": [
+                            {"product_retailer_id": item} for item in retailer_ids
+                        ],
+                    }
+                ],
+            }
+            interactive = {
+                "type": "product_list",
+                "header": {"type": "text", "text": "Veratus"},
+                "body": {"text": body},
+            }
+        content = {
+            "type": "interactive",
+            "interactive": {**interactive, "action": action},
+        }
+        return self._deliver(
+            conversation_id,
+            content,
+            body,
+            "interactive",
+            idempotency_key,
+            reasons=reasons,
+        )
+
+    def marketing_allowed(self, conversation_id: str) -> bool:
+        """Marketing só com o opt-in guardado e sem pedido de saída."""
+        return marketing_allowed(self.wa.opt_in(conversation_id))
+
+    def _interactive(
+        self,
+        conversation_id: str,
+        body: str,
+        titles: list[str],
+        build: Callable[[], dict[str, Any]],
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        if not env_flag("WHATSAPP_INTERACTIVE_ENABLED"):
+            # Desligado: o mesmo texto, sem os botões.
+            return self.send(conversation_id, body, idempotency_key=idempotency_key)
+        return self._deliver(
+            conversation_id,
+            build(),
+            body,
+            "interactive",
+            idempotency_key,
+            reasons=_gate_reasons([body, *titles]),
+        )
+
+    def _deliver(
+        self,
+        conversation_id: str,
+        content: dict[str, Any],
+        body: str,
+        kind: str,
+        idempotency_key: str,
+        *,
+        actor: str = "sales-agent",
+        reasons: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return self.wa.deliver(
+            conversation_id,
+            content,
+            body=body,
+            kind=kind,
+            actor=actor,
+            client=self.client,
+            enabled=self._send_enabled(),
+            idempotency_key=idempotency_key,
+            reasons=reasons,
+        )
+
     def pending(self, limit: int = 20) -> list[Any]:
         from .conversations import InboundText
+        from .whatsapp import MEDIA_KINDS
 
+        rows = self.wa.pending_inbound(limit=limit)
+        self._read_receipts(rows)
         return [
             InboundText(
                 channel="whatsapp",
                 conversation_id=row["conversation_id"],
                 message_id=row["message_id"],
-                text=row["body"],
+                text=row["body"] or "",
                 product_hint=row["product_id"],
                 origin={"utm": row.get("utm") or {}},
+                kind=row["kind"] if row.get("kind") in MEDIA_KINDS else "text",
             )
-            for row in self.wa.pending_inbound(limit=limit)
+            for row in rows
         ]
+
+    def _read_receipts(self, rows: list[dict[str, Any]]) -> None:
+        """Recibo de leitura e "digitando…" ao pegar a mensagem, só nos níveis
+        que respondem sozinhos (AUTO_SAFE e AUTO; nunca em SHADOW)."""
+        from .conversations import channel_mode
+
+        if (
+            self.client is None
+            or not rows
+            or not env_flag("WHATSAPP_READ_RECEIPTS_ENABLED")
+            or not self._send_enabled()
+            or channel_mode("whatsapp") not in ("AUTO_SAFE", "AUTO")
+        ):
+            return
+        for row in rows:
+            if self.wa.claim_read_receipt(row["message_id"]):
+                try:
+                    self.client.mark_read(row["message_id"], typing=True)
+                except Exception as exc:  # noqa: BLE001 - recibo não para o atendimento
+                    self.wa.record_audit(
+                        row["conversation_id"],
+                        "READ_RECEIPT_FAILED",
+                        "sales-agent",
+                        {"error": type(exc).__name__},
+                    )
 
     def mark(self, message_id: str, status: str) -> None:
         self.wa.mark_inbound(message_id, status)
 
     def redact(self, message_id: str) -> None:
         self.wa.redact_inbound(message_id)
+
+
+_MERCADO_PAGO_LINK = re.compile(r"https://[\w.-]*mercadopago\.com(?:\.br)?/\S+")
+
+
+def _gate_reasons(texts: list[str]) -> list[str]:
+    """Títulos, legendas e corpos passam pela mesma checagem do texto ao cliente."""
+    from .policy import hard_review_customer_reply
+
+    issues = []
+    for text in texts:
+        issues += hard_review_customer_reply(text, channel="whatsapp")
+    return [f"GATE: {issue}" for issue in dict.fromkeys(issues)]
 
 
 def send_whatsapp_template(
@@ -124,20 +372,22 @@ def send_whatsapp_template(
     *,
     language: str = "pt_BR",
 ) -> str:
-    """Template aprovado na Meta (fora da janela de 24 h).
+    """Template ``alerta_fundador`` para o número do fundador.
 
-    Só templates de utilidade são aceitos aqui; marketing exige opt-in e passa
+    Template a cliente vai só por ``WhatsAppAdapter.send_template`` (conversa
+    existente, pedido vinculado e histórico). Marketing exige opt-in e passa
     por ``marketing_allowed``.
     """
-    if template not in UTILITY_TEMPLATES:
+    from .whatsapp import CUSTOMER_TEMPLATES, clean_template_param, load_templates
+
+    if template not in UTILITY_TEMPLATES or template in CUSTOMER_TEMPLATES:
         raise ValueError("template_nao_permitido")
-    response = client.session.post(
-        f"https://graph.facebook.com/{graph_api_version()}/"
-        f"{client.phone_number_id}/messages",
-        headers={"Authorization": f"Bearer {client.access_token}"},
-        json={
-            "messaging_product": "whatsapp",
-            "to": to,
+    expected = load_templates().get(template, {}).get("params") or []
+    if len(parameters) != len(expected):
+        raise ValueError("parametros_do_template")
+    return client.send_message(
+        to,
+        {
             "type": "template",
             "template": {
                 "name": template,
@@ -146,27 +396,24 @@ def send_whatsapp_template(
                     {
                         "type": "body",
                         "parameters": [
-                            {"type": "text", "text": value[:1000]}
+                            {"type": "text", "text": clean_template_param(value)}
                             for value in parameters
                         ],
                     }
                 ],
             },
         },
-        timeout=client.timeout,
     )
-    if not response.ok:
-        from .whatsapp import WhatsAppApiError
-
-        raise WhatsAppApiError(
-            f"META_ERROR_{_api_error_code(response)}", response.status_code
-        )
-    return str(response.json()["messages"][0]["id"])
 
 
 def marketing_allowed(opt_in: dict[str, Any] | None) -> bool:
     """Marketing só para quem deu opt-in registrado (com data e origem)."""
-    return bool(opt_in and opt_in.get("granted_at") and opt_in.get("source"))
+    return bool(
+        opt_in
+        and opt_in.get("granted_at")
+        and opt_in.get("source")
+        and not opt_in.get("revoked_at")
+    )
 
 
 # -- Instagram Direct --------------------------------------------------------------
@@ -755,9 +1002,11 @@ class ManualPasteAdapter:
 class FounderAlertSender:
     """Template de utilidade ``alerta_fundador`` para ``FOUNDER_ALERT_WHATSAPP``.
 
-    Sem envio liberado ou sem número, tenta o e-mail (``FOUNDER_ALERT_EMAIL`` e
-    ``SMTP_*``); sem nada configurado, o alerta fica registrado em
-    ``/os/conversations/alerts``.
+    Chave própria (``FOUNDER_ALERT_WHATSAPP_ENABLED``), independente do envio a
+    clientes: em SHADOW o fundador também recebe. O número comercial da Veratus
+    não manda mensagem para si mesmo. Sem chave ou sem número, tenta o e-mail
+    (``FOUNDER_ALERT_EMAIL`` e ``SMTP_*``); sem nada configurado, o alerta fica
+    registrado em ``/os/conversations/alerts``.
     """
 
     def __init__(
@@ -768,8 +1017,11 @@ class FounderAlertSender:
         whatsapp_enabled: bool | None = None,
         email_sender: Callable[[str, str], None] | None = None,
     ) -> None:
+        from .harvey import WHATSAPP_NUMBER
+
         self.client = whatsapp_client
-        self.number = (founder_number or "").strip()
+        number = re.sub(r"\D", "", founder_number or "")
+        self.number = "" if number == WHATSAPP_NUMBER else number
         self.whatsapp_enabled = whatsapp_enabled
         self.email_sender = email_sender
 
@@ -785,7 +1037,7 @@ class FounderAlertSender:
 
     def __call__(self, alert: dict[str, Any]) -> str | None:
         enabled = (
-            env_flag("WHATSAPP_SEND_ENABLED")
+            env_flag("FOUNDER_ALERT_WHATSAPP_ENABLED")
             if self.whatsapp_enabled is None
             else self.whatsapp_enabled
         )

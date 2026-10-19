@@ -643,6 +643,7 @@ class Dia:
         # O runtime operacional fica em cache no processo: cada rodada abre o seu.
         webhook._runtime_engine = None
         webhook._operational_runtime_instance = None
+        webhook._paid_media_worker_instance = None
         self.client = webhook.app.test_client()
         self.router = FakeRouter()
         self.clientes = clientes()
