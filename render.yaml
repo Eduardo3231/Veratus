@@ -337,3 +337,5 @@ services:
         sync: false
       - key: TWENTY_API_KEY
         sync: false
+      - key: JEWELRY_PRICE_RULE
+        sync: false

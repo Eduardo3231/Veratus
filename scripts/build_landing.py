@@ -31,11 +31,17 @@ WATCH_GROUPS = (
 PRIMARY_STYLE = {"bronze-heritage": "marcante"}
 
 JEWELRY_GROUPS = (
+    ("chain", "Correntes"),
     ("necklace", "Colares"),
     ("bracelet", "Pulseiras"),
     ("anklet", "Tornozeleiras"),
 )
-JEWELRY_TYPE = {"necklace": "Colar", "bracelet": "Pulseira", "anklet": "Tornozeleira"}
+JEWELRY_TYPE = {
+    "chain": "Corrente",
+    "necklace": "Colar",
+    "bracelet": "Pulseira",
+    "anklet": "Tornozeleira",
+}
 JEWELRY_TONE = {"silver_tone": "tom prateado", "gold_tone": "tom dourado"}
 # Off the storefront while its resemblance alert is open (docs/HANDOFF.md).
 ON_HOLD = {"noir-clover"}
@@ -337,7 +343,7 @@ PAGE = """<!doctype html>
       <div class="shell">
         <div class="capitulo__topo">
           <h2 id="joias-titulo">Joias</h2>
-          <p class="joias__intro">Colares, pulseiras e tornozeleiras da coleção Veratus Feminino, em tom dourado e tom prateado. Disponibilidade e valor de cada peça são confirmados na conversa.</p>
+          <p class="joias__intro">Correntes, colares, pulseiras e tornozeleiras em tom dourado e tom prateado. Disponibilidade e valor de cada peça são confirmados na conversa.</p>
         </div>
         <div class="joias__grupos">{jewel_groups}
         </div>

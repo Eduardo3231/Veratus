@@ -23,6 +23,7 @@ Leia o topo de `docs/HANDOFF.md` antes de editar: é o diário das rodadas e das
 - Canais do perfil (`branding/profile-kit.md`): Instagram e Stories levam ao WhatsApp; o WhatsApp fecha; o TikTok é descoberta.
 - O fundador só entra quando o cliente pede uma pessoa ou ameaça ação jurídica.
 - WhatsApp comercial: +55 11 95832-3612 (`harvey.WHATSAPP_NUMBER`, `scripts/build_landing.py`).
+- Foco em correntes e joias de revenda (19/10): fotos do fornecedor com autorização de uso declarada pelo fundador; preço por multiplicador sobre o custo, definido pelo fundador em `JEWELRY_PRICE_RULE` (fora do Git). Importação: `scripts/importar_joias.py`; o fornecedor nunca aparece no que é público.
 - Poucos testes: só os que provam a regra. Economize token.
 
 ## Mapa do código

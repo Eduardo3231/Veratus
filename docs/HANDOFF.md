@@ -3,6 +3,19 @@
 **Última atualização:** 19/10/2026 (madrugada), Claude Code: escritório virtual ao vivo, API do WhatsApp do 11 95832-3612, gestão das redes sociais, CEP, Chatwoot, Twenty e skills novas; marketplaces em andamento (rodadas 2 e 3). Nada foi ligado, publicado ou mandado para a `main`. PR #1 aberto pelo fundador a partir desta branch.
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
 
+## Correntes e joias de revenda (19/10)
+
+Pedido do fundador: focar em correntes e joias; usar as fotos de um fornecedor que, segundo o fundador, autoriza o uso para revenda; preço = custo × 5 quando o custo é baixo e × 4 quando é mais alto; subir no perfil, no anúncio, no site e nos marketplaces; depois revisar a empresa e seguir o trabalho. **O fornecedor é privado**: o nome e o endereço dele não entram aqui, no código, no site nem nos anúncios.
+
+- **Modelo de joias** (`veratus_agents/jewelry_import.py`, `scripts/importar_joias.py`): lê os produtos da página do fornecedor (schema.org) ou de uma planilha com fotos; o nome e o texto Veratus saem só do tipo de elo, do tom e do fecho ("Corrente elo grumet, tom prateado, ref. 0001"); "prata 925", "banho", marca de terceiros (inclusive "cartier") e o texto do fornecedor nunca chegam ao cliente; fotos em WebP 4:5 sem metadados, a foto inteira centrada, nada recortado ou apagado.
+- **Preço**: regra em `JEWELRY_PRICE_RULE` (`limite:baixo:alto`, segredo no Render, fora do Git), termina em ,90 e uma peça mais cara nunca sai mais barata. O custo, a referência e o endereço do fornecedor ficam no Product Master (banco) e no relatório privado `runtime/joias/importacao.json`; em `catalog/products.json` só o preço público.
+- **Medidas** (comprimento, espessura, peso) ficam em `listing_attributes` e fora do texto: o filtro de afirmações barra medida não confirmada. Pendente: o fundador decidir se as medidas da ficha de origem valem como fato confirmado.
+- **Site**: grupo "Correntes" na seção de joias; peça importada entra como PREVIEW (rascunho), com "Tenho interesse" no WhatsApp.
+- **Redes**: um post por peça em `runtime/joias/calendario-correntes.json`, para `social_scheduler add --from`; nada publica sem aprovação e sem `approve-media`.
+- **Marketplaces**: depois da importação, a ordem "Prepare as joias femininas para os marketplaces" gera os rascunhos; publicar segue a aprovação, as chaves e as contas conectadas.
+- **Bloqueio**: a rede desta sessão recusa o domínio do fornecedor (proxy 403). O fundador libera em "Allowed domains" ou manda as fotos e a planilha; aí roda `JEWELRY_PRICE_RULE=... python scripts/importar_joias.py --url <categoria> --aplicar`.
+- **Autorização das fotos**: declarada pelo fundador em 19/10; guardar a autorização por escrito (e-mail ou print). Foto com logo ou marca d'água do fornecedor fica de fora (não se apaga marca).
+
 ## Escritório virtual, WhatsApp, redes e integrações (18 e 19/10)
 
 Pedidos do fundador: aplicar as skills enviadas (find-skills, superpowers, claude-mem, graphify, Open-Generative-AI, higgsfield, public-apis, twenty, chatwoot); "o modelo ao vivo [...] semelhante a esse, realmente uma empresa virtual funcionando"; "concluir a automação de todas as redes de marketplace, foque na gestão das redes sociais, e api de WhatsApp do numero 11958323612".
