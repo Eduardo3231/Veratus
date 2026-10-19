@@ -1062,6 +1062,73 @@ class MercadoLivreConversationAdapter:
             if item.get("id")
         ]
 
+    def list_unread_post_sale(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Mensagens pós-venda não lidas, só as que o comprador escreveu.
+
+        ``GET /messages/unread?role=seller&tag=post_sale`` e, por pack,
+        ``GET /messages/packs/{pack}/sellers/{seller}`` sem marcar como lida (o
+        motor deduplica pelo id). Sem mensagem do comprador, nada entra: o canal
+        não puxa conversa. Atrás de ``MERCADO_LIVRE_SYNC_ENABLED``: desligada,
+        nada sai. Formato das respostas: a conferir na hora de ligar.
+        """
+        seller = str(self.seller_id or "")
+        if (
+            self.token_provider is None
+            or not seller.isdigit()
+            or not env_flag("MERCADO_LIVRE_SYNC_ENABLED")
+        ):
+            return []
+        response = self._get("/messages/unread", {"role": "seller", "tag": "post_sale"})
+        if not response.ok:
+            logger.error("mercado_livre_unread_failed status=%s", response.status_code)
+            return []
+        packs: list[str] = []
+        for row in (response.json() or {}).get("results") or []:
+            found = re.search(r"packs/(\d{1,20})/sellers/", str(row.get("resource")))
+            if found and found.group(1) not in packs:
+                packs.append(found.group(1))
+        messages: list[dict[str, Any]] = []
+        for pack_id in packs[:limit]:
+            response = self._get(
+                f"/messages/packs/{pack_id}/sellers/{seller}",
+                {"tag": "post_sale", "mark_as_read": "false"},
+            )
+            if not response.ok:
+                logger.error(
+                    "mercado_livre_pack_failed status=%s", response.status_code
+                )
+                continue
+            rows = (response.json() or {}).get("messages") or []
+            for item in sorted(
+                rows,
+                key=lambda row: str((row.get("message_date") or {}).get("created")),
+            ):
+                sender = str((item.get("from") or {}).get("user_id") or "")
+                message_id = str(item.get("id") or "")
+                if (
+                    not sender
+                    or sender == seller
+                    or (item.get("message_date") or {}).get("read")
+                    or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", message_id)
+                ):
+                    continue
+                text = item.get("text")
+                text = str(
+                    (text.get("plain") if isinstance(text, dict) else text) or ""
+                ).strip()
+                if not text and not item.get("message_attachments"):
+                    continue
+                messages.append(
+                    {
+                        "pack_id": pack_id,
+                        "message_id": message_id,
+                        "text": text[:2000],
+                        # Só anexo (foto do pacote, nota): resposta fixa de mídia.
+                        "kind": "text" if text else "document",
+                    }
+                )
+        return messages[:limit]
+
     def window_open(self, conversation_id: str, now: datetime) -> bool:
         return True
 

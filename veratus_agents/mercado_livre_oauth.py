@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,6 +18,11 @@ from cryptography.fernet import Fernet, InvalidToken
 from .sqlstore import lock_schema
 
 CHANNEL = "mercado-livre"
+# Notificação na fila esperando o consumidor (dispatch_notifications).
+NOTIFICATION_PENDING = "PENDING_SYNC_MONITOR"
+# Topic "messages": o resource vem só com o id da mensagem, sem barra (a conferir
+# na hora de ligar).
+_MESSAGE_RESOURCE = re.compile(r"[A-Za-z0-9_-]{1,100}")
 
 
 class OAuthConfigurationError(RuntimeError):
@@ -348,7 +355,7 @@ class MercadoLivreOAuthStore:
             str(payload["application_id"]),
             str(payload["user_id"]),
             json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str),
-            "PENDING_SYNC_MONITOR",
+            NOTIFICATION_PENDING,
             _utcnow(),
         )
         if self.database_url:
@@ -383,6 +390,91 @@ class MercadoLivreOAuthStore:
         with sqlite3.connect(self.sqlite_path) as connection:
             return int(connection.execute(query + "?", (self.channel,)).fetchone()[0])
 
+    def pending_notifications(self, limit: int = 50) -> list[dict[str, str]]:
+        """Notificações ainda não consumidas, da mais antiga para a mais nova."""
+        query = (
+            "SELECT event_id,topic,resource FROM marketplace_notification_queue "
+            "WHERE channel={0} AND status={0} ORDER BY created_at LIMIT {0}"
+        )
+        params = (self.channel, NOTIFICATION_PENDING, max(1, min(int(limit), 200)))
+        if self.database_url:
+            with self._connect_postgres() as connection:
+                rows = connection.execute(query.format("%s"), params).fetchall()
+        else:
+            with sqlite3.connect(self.sqlite_path) as connection:
+                rows = connection.execute(query.format("?"), params).fetchall()
+        return [
+            {"event_id": row[0], "topic": row[1], "resource": row[2]} for row in rows
+        ]
+
+    def mark_processed(self, event_id: str, status: str) -> bool:
+        """Desfecho da notificação, uma vez só: a primeira marca vence."""
+        query = (
+            "UPDATE marketplace_notification_queue SET status={0},processed_at={0} "
+            "WHERE event_id={0} AND channel={0} AND status={0}"
+        )
+        now = _utcnow()
+        if self.database_url:
+            with self._connect_postgres() as connection:
+                cursor = connection.execute(
+                    query.format("%s"),
+                    (status, now, event_id, self.channel, NOTIFICATION_PENDING),
+                )
+                return cursor.rowcount == 1
+        with sqlite3.connect(self.sqlite_path) as connection:
+            cursor = connection.execute(
+                query.format("?"),
+                (status, _iso(now), event_id, self.channel, NOTIFICATION_PENDING),
+            )
+            return cursor.rowcount == 1
+
+
+def _transient(exc: Exception) -> bool:
+    """Falha passageira (rede, 401, 429, 5xx, conta desconectada): fica na fila."""
+    from .marketplace_clients import MarketplaceApiError
+
+    if not isinstance(exc, MarketplaceApiError):
+        import requests
+
+        return isinstance(exc, requests.RequestException)
+    if exc.code.startswith("INVALID_"):
+        return False
+    return exc.http_status in (None, 401, 429) or exc.http_status >= 500
+
+
+def dispatch_notifications(
+    store: MercadoLivreOAuthStore,
+    handlers: dict[str, Callable[[dict[str, str]], str]],
+    *,
+    limit: int = 50,
+) -> list[dict[str, str]]:
+    """Consome a fila: um handler por topic, só leitura de volta (GET) e um desfecho.
+
+    Atrás de ``MERCADO_LIVRE_SYNC_ENABLED``: desligada, a fila espera intacta e nada
+    sai. O handler devolve o status final (PROCESSED, SYNCED, IGNORED, BLOCKED...);
+    topic sem handler vira IGNORED; falha passageira deixa a notificação na fila e
+    qualquer outra vira FAILED. O corpo da notificação nunca vale como fato: o
+    handler lê o recurso na API.
+    """
+    from .meta_webhooks import env_flag
+
+    if not env_flag("MERCADO_LIVRE_SYNC_ENABLED"):
+        return []
+    results = []
+    for item in store.pending_notifications(limit):
+        handler = handlers.get(item["topic"])
+        try:
+            status = handler(item) if handler else "IGNORED"
+        except Exception as exc:  # noqa: BLE001 - uma notificação não para as outras
+            if _transient(exc):
+                results.append({**item, "status": "RETRY"})
+                continue
+            code = getattr(exc, "code", None) or type(exc).__name__
+            status = f"FAILED:{code}"
+        store.mark_processed(item["event_id"], str(status)[:60])
+        results.append({**item, "status": str(status)[:60]})
+    return results
+
 
 def validate_notification_payload(
     payload: Any,
@@ -399,7 +491,10 @@ def validate_notification_payload(
     topic = payload.get("topic")
     if (
         not isinstance(resource, str)
-        or not resource.startswith("/")
+        or not (
+            resource.startswith("/")
+            or (topic == "messages" and _MESSAGE_RESOURCE.fullmatch(resource))
+        )
         or len(resource) > 500
         or not isinstance(topic, str)
         or not topic

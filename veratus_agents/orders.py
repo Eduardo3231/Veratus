@@ -100,9 +100,10 @@ class OrderRecord(BaseModel):
     channel: OrderChannel
     visit_ref: str | None = Field(default=None, pattern=r"^VT-[A-Z0-9]{1,13}$")
     # Pseudonymous conversation id (HMAC: wa_ WhatsApp, ig_ Instagram, fb_
-    # Facebook Messenger), never the phone number or the account id.
+    # Facebook Messenger, ml_ Mercado Livre), never the phone number or the
+    # account id. pack-<id>: the Mercado Livre post-sale conversation of the order.
     conversation_ref: str | None = Field(
-        default=None, pattern=r"^(?:wa|ig|fb)_[a-f0-9]{32}$"
+        default=None, pattern=r"^(?:(?:wa|ig|fb|ml)_[a-f0-9]{32}|pack-\d{1,20})$"
     )
     utm_source: str | None = Field(default=None, max_length=80)
     utm_medium: str | None = Field(default=None, max_length=80)
@@ -755,4 +756,93 @@ def sync_mercado_livre_shipment(
         "status": "SYNCED",
         "shipment_status": shipment.get("status"),
         "changes": results,
+    }
+
+
+# Mercado Livre (GET /orders/{id}): os status que movem o pedido no ledger.
+_ML_ORDER_STATUS = {"paid": OrderStatus.PAID, "cancelled": OrderStatus.CANCELED}
+
+
+def _ml_datetime(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else None
+
+
+def import_mercado_livre_order(
+    ledger: OrderLedger,
+    order: dict[str, Any],
+    *,
+    event_id: str,
+    sku_for_item: Any = None,
+) -> dict[str, Any]:
+    """Pedido do Mercado Livre no ledger, pela leitura de volta (``get_order``).
+
+    Um pedido por venda (``ml-<id>``; repetir não duplica) e uma mudança de status
+    por notificação (``event_id``): paid → PAID, cancelled → CANCELED. Só ids, SKU,
+    valores e status: comprador, CPF e endereço nem chegam aqui. O SKU vem do
+    SELLER_SKU do anúncio ou, sem ele, de ``sku_for_item(item_id)``.
+    """
+    skus = set()
+    for item in order.get("items") or []:
+        sku = item.get("seller_sku")
+        if not sku and sku_for_item and item.get("item_id"):
+            sku = sku_for_item(item["item_id"])
+        skus.add(sku)
+    if not skus or None in skus:
+        return {"status": "BLOCKED", "reason": "SKU_UNKNOWN"}
+    if len(skus) > 1:
+        return {"status": "BLOCKED", "reason": "MULTI_SKU_ORDER"}
+    if order.get("currency_id") not in (None, "BRL"):
+        return {"status": "BLOCKED", "reason": "CURRENCY_NOT_BRL"}
+    try:
+        record = OrderRecord(
+            order_id=f"ml-{order['order_id']}",
+            created_at=_ml_datetime(order.get("date_created")),
+            sku=skus.pop(),
+            channel=OrderChannel.MERCADO_LIVRE,
+            # Pedido sem pack: a conversa pós-venda usa o id do pedido.
+            conversation_ref=f"pack-{order.get('pack_id') or order['order_id']}",
+            sale_price=Decimal(str(order.get("total_amount"))).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            ),
+            payment_method=PaymentMethod.MARKETPLACE,
+            evidence_ref="mercado-livre:orders",
+            recorded_by="mercado-livre-sync",
+        )
+        outcome, current = ledger.record(record)
+    except OrderConflictError:
+        # O canal mudou um valor do pedido: ele segue um só e o status ainda anda.
+        outcome, current = "data_changed", ledger.get(record.order_id)
+    except (ValueError, ArithmeticError):
+        return {"status": "BLOCKED", "reason": "INVALID_ORDER"}
+    result = {
+        "status": "IMPORTED" if outcome == "created" else "UNCHANGED",
+        "order_id": record.order_id,
+        "order_status": current["status"],
+        "data_changed": outcome == "data_changed",
+    }
+    target = _ML_ORDER_STATUS.get(str(order.get("status") or ""))
+    status = OrderStatus(current["status"])
+    if target is None or target not in ALLOWED_TRANSITIONS[status]:
+        return result
+    try:
+        change, row = ledger.change_status(
+            record.order_id,
+            StatusChange(
+                event_id=event_id,
+                status=target,
+                recorded_by="mercado-livre-sync",
+                evidence_ref="mercado-livre:orders",
+            ),
+        )
+    except (OrderConflictError, OrderTransitionError):
+        return {**result, "status": "BLOCKED", "reason": "STATUS_CONFLICT"}
+    return {
+        **result,
+        "status": "SYNCED",
+        "order_status": row["status"],
+        "change": change,
     }

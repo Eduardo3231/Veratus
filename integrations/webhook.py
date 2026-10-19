@@ -833,8 +833,14 @@ def mercado_livre_notifications():
         ), 503
     except Exception as exc:  # noqa: BLE001 - public boundary sanitizes storage errors
         return _oauth_persistence_unavailable("notification", exc)
-    if inserted and payload.get("topic") == "questions":
-        # Pergunta nova no anúncio: o motor busca as não respondidas na API.
+    from veratus_agents.meta_webhooks import env_flag
+
+    if inserted and (
+        payload.get("topic") == "questions" or env_flag("MERCADO_LIVRE_SYNC_ENABLED")
+    ):
+        # Pergunta nova: o motor busca as não respondidas na API. Com a sincronia
+        # ligada, todo topic dispara o canal, que antes consome a fila
+        # (_mercado_livre_sync).
         _autoprocess("mercado_livre")
     return jsonify(
         {
@@ -1545,6 +1551,17 @@ def os_listing_publish(channel, sku):
         return jsonify(
             {"status": "blocked", "reasons": reasons, "external_write": False}
         ), 409
+    if channel == "mercado-livre":
+        from veratus_agents.marketplace_ops import write_mercado_livre_listing
+
+        return _mercado_livre_write(
+            lambda store, writer: write_mercado_livre_listing(
+                store,
+                writer,
+                product,
+                base_url=os.getenv("PUBLIC_BASE_URL", "").strip(),
+            )
+        )
     return jsonify(
         {
             "status": "blocked",
@@ -1552,6 +1569,34 @@ def os_listing_publish(channel, sku):
             "external_write": False,
         }
     ), 409
+
+
+def _mercado_livre_write(action):
+    """Escrita no Mercado Livre, já aprovada pelo guard: 200 com a leitura de volta,
+    409 bloqueada antes da rede, 502 quando o canal recusa ou cai."""
+    from veratus_agents.marketplace_clients import (
+        MarketplaceApiError,
+        MercadoLivreWriteClient,
+    )
+
+    try:
+        writer = MercadoLivreWriteClient(_mercado_livre_reader())
+    except MarketplaceApiError as exc:
+        return jsonify(
+            {"status": "blocked", "reasons": [exc.code], "external_write": False}
+        ), 409
+    try:
+        result = action(_marketplace_store(), writer)
+    except MarketplaceApiError as exc:
+        reason = exc.code
+    except Exception as exc:  # noqa: BLE001 - resposta sem detalhe do canal
+        app.logger.error("mercado_livre_write_failed error_type=%s", type(exc).__name__)
+        reason = "WRITE_FAILED"
+    else:
+        return jsonify(result), 409 if result["status"] == "BLOCKED" else 200
+    return jsonify(
+        {"status": "failed", "reasons": [reason], "external_write": "UNCONFIRMED"}
+    ), 502
 
 
 @app.route("/os/listings/<channel>/<sku>/pause", methods=["POST"])
@@ -1564,6 +1609,22 @@ def os_listing_pause(channel, sku):
         return jsonify({"status": "error", "message": "listing_not_found"}), 404
     from veratus_agents.marketplace_ops import ListingState
 
+    if channel == "mercado-livre" and listing.get("external_listing_id"):
+        # O anúncio existe no canal: pausar só aqui criaria divergência. A pausa
+        # remota passa pelo mesmo guard do publish (aprovação, flags, papel).
+        from veratus_agents.marketplace_ops import (
+            mercado_livre_guard_reasons,
+            pause_mercado_livre_listing,
+        )
+
+        product = _product_store().get(sku) or {"sku": sku}
+        if reasons := mercado_livre_guard_reasons(_marketplace_store(), product):
+            return jsonify(
+                {"status": "blocked", "reasons": reasons, "external_write": False}
+            ), 409
+        return _mercado_livre_write(
+            lambda store, writer: pause_mercado_livre_listing(store, writer, product)
+        )
     return jsonify(
         {
             "listing": _marketplace_store().upsert_listing(
@@ -1572,6 +1633,21 @@ def os_listing_pause(channel, sku):
             "external_write": False,
         }
     ), 200
+
+
+@app.route("/os/sync/mercado-livre/plan", methods=["POST"])
+def os_mercado_livre_sync_plan():
+    """Dry-run: preço e estoque dos anúncios vs. Product Master, só leitura.
+
+    Diferença vira conflito e UPDATE_PENDING; aplicar é o publish, atrás do guard.
+    """
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.marketplace_service import MarketplaceConnectionService
+
+    service = MarketplaceConnectionService(_marketplace_store())
+    return jsonify(service.sync_plan(_economics_product)), 200
 
 
 @app.route("/os/sync", methods=["POST"])
@@ -3401,12 +3477,174 @@ def _mercado_livre_token_refresher(token_provider):
     return getattr(getattr(token_provider, "__self__", None), "refresh", None)
 
 
+def _mercado_livre_reader():
+    """Leitura com a conta conectada (OAuth); sem ela, a notificação espera na fila."""
+    from veratus_agents.marketplace_clients import (
+        MarketplaceApiError,
+        MercadoLivreOAuthTokenManager,
+    )
+
+    try:
+        return MercadoLivreOAuthTokenManager.from_env(_mercado_oauth_store()).client()
+    except Exception as exc:  # conta desconectada é passageira: a fila espera
+        raise MarketplaceApiError("NOT_CONNECTED") from exc
+
+
+def _ml_resource(item, kind):
+    prefix = f"/{kind}/"
+    resource = item["resource"]
+    return resource[len(prefix) :] if resource.startswith(prefix) else None
+
+
+def _ml_outcome(result):
+    if result["status"] != "BLOCKED":
+        return result["status"]
+    app.logger.warning("mercado_livre_sync_blocked reason=%s", result["reason"])
+    return f"BLOCKED:{result['reason']}"
+
+
+def _ml_order_notification(client, item):
+    """orders_v2: o pedido lido de volta (GET /orders/{id}) entra no ledger."""
+    from veratus_agents.marketplace_service import listing_sku
+    from veratus_agents.orders import import_mercado_livre_order
+
+    order_id = _ml_resource(item, "orders")
+    if not order_id:
+        return "IGNORED"
+    return _ml_outcome(
+        import_mercado_livre_order(
+            _order_ledger(),
+            client.get_order(order_id),
+            event_id=item["event_id"],
+            sku_for_item=lambda ref: listing_sku(
+                _marketplace_store(), "mercado-livre", ref
+            ),
+        )
+    )
+
+
+def _ml_shipment_notification(client, item):
+    """shipments: rastreio pelo Mercado Envios; o pedido entra antes, se faltar."""
+    from types import SimpleNamespace
+
+    from veratus_agents.orders import sync_mercado_livre_shipment
+
+    shipment_id = _ml_resource(item, "shipments")
+    if not shipment_id:
+        return "IGNORED"
+    shipment = client.get_shipment(shipment_id)
+    if not shipment.get("order_id"):
+        return "IGNORED"
+    order_id = f"ml-{shipment['order_id']}"
+    ledger = _order_ledger()
+    if ledger.get(order_id) is None:
+        imported = _ml_order_notification(
+            client, {**item, "resource": f"/orders/{shipment['order_id']}"}
+        )
+        if ledger.get(order_id) is None:
+            return imported
+    # O envio já foi lido: o sync não repete o GET.
+    reader = SimpleNamespace(get_shipment=lambda _: shipment)
+    return _ml_outcome(
+        sync_mercado_livre_shipment(ledger, reader, order_id, shipment_id)
+    )
+
+
+def _ml_item_notification(client, item):
+    """items: anúncio lido de volta vs. preço público e estoque confirmado."""
+    from veratus_agents.marketplace_ops import MERCADO_LIVRE, plan_mercado_livre_item
+    from veratus_agents.marketplace_service import listing_sku
+
+    item_id = _ml_resource(item, "items")
+    store = _marketplace_store()
+    sku = listing_sku(store, MERCADO_LIVRE, item_id) if item_id else None
+    listing = store.listing(MERCADO_LIVRE, sku) if sku else None
+    product = _economics_product(sku) if listing else None
+    if product is None:
+        return "IGNORED"
+    plan = plan_mercado_livre_item(store, listing, product, client.get_item(item_id))
+    return plan["status"]
+
+
+def _mercado_livre_sync():
+    """Fila de notificações do Mercado Livre, atrás de MERCADO_LIVRE_SYNC_ENABLED.
+
+    questions e messages: o motor lê as perguntas e mensagens logo em seguida
+    (_process_channel); orders_v2: pedido no ledger; shipments: rastreio; items:
+    conflito de preço e estoque. No canal, só leitura (GET).
+    """
+    from veratus_agents.meta_webhooks import env_flag
+
+    if not env_flag("MERCADO_LIVRE_SYNC_ENABLED"):
+        return []
+    from veratus_agents.mercado_livre_oauth import dispatch_notifications
+
+    readers = []
+
+    def reader():
+        if not readers:
+            readers.append(_mercado_livre_reader())
+        return readers[0]
+
+    return dispatch_notifications(
+        _mercado_oauth_store(),
+        {
+            "questions": lambda item: "PROCESSED",
+            "messages": lambda item: "PROCESSED",
+            "orders_v2": lambda item: _ml_order_notification(reader(), item),
+            "shipments": lambda item: _ml_shipment_notification(reader(), item),
+            "items": lambda item: _ml_item_notification(reader(), item),
+        },
+    )
+
+
+def _mercado_livre_post_sale(adapter, limit):
+    """Pós-venda (pack-<id>): só o que o comprador escreveu, com o SKU do pedido
+    importado quando a conversa já está no ledger (conversation_ref)."""
+    from veratus_agents.conversations import InboundText
+    from veratus_agents.orders import OrderChannel
+
+    reader = getattr(adapter, "list_unread_post_sale", None)
+    try:
+        messages = reader(limit) if reader else []
+    except Exception as exc:  # noqa: BLE001 - pós-venda fora não para as perguntas
+        app.logger.error("mercado_livre_post_sale_failed %s", type(exc).__name__)
+        return []
+    if not messages:
+        return []
+    try:
+        orders = _order_ledger().list_orders(
+            channel=OrderChannel.MERCADO_LIVRE, limit=500
+        )
+    except Exception as exc:  # noqa: BLE001 - sem o ledger, entra sem SKU
+        app.logger.error("mercado_livre_order_lookup_failed %s", type(exc).__name__)
+        orders = []
+    skus = {row["conversation_ref"]: row["sku"] for row in orders}
+    return [
+        InboundText(
+            channel="mercado_livre",
+            conversation_id=f"pack-{item['pack_id']}",
+            message_id=f"pm-{item['message_id']}",
+            text=item["text"],
+            product_hint=skus.get(f"pack-{item['pack_id']}"),
+            kind=item["kind"],
+        )
+        for item in messages
+    ]
+
+
 def _process_channel(engine, channel, limit=20):
     """Passa as mensagens pendentes do canal pelo motor (rota e processamento contínuo)."""
     from veratus_agents.conversations import InboundText
 
     adapter = engine.adapters.get(channel)
     if channel == "mercado_livre":
+        try:
+            _mercado_livre_sync()
+        except Exception as exc:  # noqa: BLE001 - a fila não para as perguntas
+            app.logger.error(
+                "mercado_livre_sync_failed error_type=%s", type(exc).__name__
+            )
         questions = adapter.list_unanswered_questions(limit)
         hints = {
             item_id: _mercado_livre_product_hint(adapter, item_id)
@@ -3422,6 +3660,7 @@ def _process_channel(engine, channel, limit=20):
             )
             for item in questions
         ]
+        inbound += _mercado_livre_post_sale(adapter, limit)
     elif hasattr(adapter, "pending"):
         inbound = adapter.pending(limit)
     else:
