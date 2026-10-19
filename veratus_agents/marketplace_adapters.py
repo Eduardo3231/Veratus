@@ -34,30 +34,35 @@ CATEGORY_ALIASES = {"relógios": WATCH_CATEGORY_KEY, "relogios": WATCH_CATEGORY_
 CATEGORY_MAPPINGS: dict[Marketplace, dict[str, str]] = {
     Marketplace.MERCADO_LIVRE: {
         WATCH_CATEGORY_KEY: "PENDING_ML_WATCH_CATEGORY",
+        "jewelry_accessories/chain": "PENDING_ML_CHAIN_CATEGORY",
         "jewelry_accessories/necklace": "PENDING_ML_NECKLACE_CATEGORY",
         "jewelry_accessories/bracelet": "PENDING_ML_BRACELET_CATEGORY",
         "jewelry_accessories/anklet": "PENDING_ML_ANKLET_CATEGORY",
     },
     Marketplace.SHOPEE: {
         WATCH_CATEGORY_KEY: "PENDING_SHOPEE_WATCH_CATEGORY",
+        "jewelry_accessories/chain": "PENDING_SHOPEE_CHAIN_CATEGORY",
         "jewelry_accessories/necklace": "PENDING_SHOPEE_NECKLACE_CATEGORY",
         "jewelry_accessories/bracelet": "PENDING_SHOPEE_BRACELET_CATEGORY",
         "jewelry_accessories/anklet": "PENDING_SHOPEE_ANKLET_CATEGORY",
     },
     Marketplace.TIKTOK_SHOP: {
         WATCH_CATEGORY_KEY: "PENDING_TIKTOK_WATCH_CATEGORY",
+        "jewelry_accessories/chain": "PENDING_TIKTOK_CHAIN_CATEGORY",
         "jewelry_accessories/necklace": "PENDING_TIKTOK_NECKLACE_CATEGORY",
         "jewelry_accessories/bracelet": "PENDING_TIKTOK_BRACELET_CATEGORY",
         "jewelry_accessories/anklet": "PENDING_TIKTOK_ANKLET_CATEGORY",
     },
     Marketplace.META: {
         WATCH_CATEGORY_KEY: "PENDING_META_WATCH_CATEGORY",
+        "jewelry_accessories/chain": "PENDING_META_CHAIN_CATEGORY",
         "jewelry_accessories/necklace": "PENDING_META_NECKLACE_CATEGORY",
         "jewelry_accessories/bracelet": "PENDING_META_BRACELET_CATEGORY",
         "jewelry_accessories/anklet": "PENDING_META_ANKLET_CATEGORY",
     },
     Marketplace.AMAZON: {
         WATCH_CATEGORY_KEY: "PENDING_AMAZON_WATCH_PRODUCT_TYPE",
+        "jewelry_accessories/chain": "PENDING_AMAZON_CHAIN_PRODUCT_TYPE",
         "jewelry_accessories/necklace": "PENDING_AMAZON_NECKLACE_PRODUCT_TYPE",
         "jewelry_accessories/bracelet": "PENDING_AMAZON_BRACELET_PRODUCT_TYPE",
         "jewelry_accessories/anklet": "PENDING_AMAZON_ANKLET_PRODUCT_TYPE",

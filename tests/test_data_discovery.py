@@ -13,6 +13,7 @@ def test_discovery_finds_all_catalog_products_and_sources():
     assert report["segments"] == {
         "watches_total": 9,
         "feminine_total": 9,
+        "chains": 0,
         "necklaces": 5,
         "bracelets": 2,
         "anklets": 2,

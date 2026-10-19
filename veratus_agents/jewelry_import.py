@@ -284,6 +284,8 @@ def veratus_copy(attrs: dict[str, Any], ref: str) -> dict[str, Any]:
     )
     return {
         "name": name,
+        # Modelo para o título do anúncio (o tipo e o tom entram à parte).
+        "model_name": f"{link} ref. {ref}" if link else f"ref. {ref}",
         "editorial_name": name,
         "product_type": f"{kind} em {attrs['tom']}",
         "eyebrow": f"Veratus Joias / {kind}",

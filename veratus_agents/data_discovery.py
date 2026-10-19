@@ -325,6 +325,7 @@ def discovery_report(cost_of: CostLookup | None = None) -> dict[str, Any]:
             item["category"] == OFFICIAL_CATEGORY for item in products
         ),
         "feminine_total": sum(item["collection"] == "feminine" for item in products),
+        "chains": sum(item["subcategory"] == "chain" for item in products),
         "necklaces": sum(item["subcategory"] == "necklace" for item in products),
         "bracelets": sum(item["subcategory"] == "bracelet" for item in products),
         "anklets": sum(item["subcategory"] == "anklet" for item in products),

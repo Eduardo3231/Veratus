@@ -14,6 +14,8 @@ from veratus_agents.jewelry_import import (
     build_draft,
     extract_products,
 )
+from veratus_agents.listing_content import listing_copy
+from veratus_agents.marketplace_adapters import CATEGORY_MAPPINGS
 
 # Regra e custos fictícios: a regra real fica em JEWELRY_PRICE_RULE, fora do Git.
 RULE = PriceRule.parse("30:3:2")
@@ -86,6 +88,39 @@ def test_supplier_page_becomes_a_veratus_draft_without_the_supplier():
         and draft.private["supplier_ref"] == "FX-123"
     )
 
+    # No marketplace o título leva o modelo, sem repetir tipo e tom.
+    listing = listing_copy(draft.public, "mercado_livre")
+    assert listing["title"] == "Corrente Veratus Ref. 0001 em Tom Prateado"
+    assert all("jewelry_accessories/chain" in m for m in CATEGORY_MAPPINGS.values())
+
     [path] = draft.images
     with Image.open(io.BytesIO(draft.images[path])) as image:
         assert image.size == (1122, 1402) and not image.getexif()
+
+
+def test_approved_chain_becomes_a_draft_in_each_marketplace(tmp_path, monkeypatch):
+    from veratus_agents import listing_content
+    from veratus_agents.marketplace_ops import MarketplaceStore
+    from veratus_agents.operations import OperationalRuntime
+
+    [item], _ = extract_products(PAGE.format(data=json.dumps(ITEM)), "https://f.test/")
+    draft = build_draft(item, RULE, lambda url: _photo(), sku="VRT-JWL-CHN-0001")
+    chain = {**draft.public, "status": "APPROVED"}
+    monkeypatch.setattr(listing_content, "load_catalog", lambda: [chain])
+    store = MarketplaceStore(tmp_path / "marketplace.sqlite3")
+    runtime = OperationalRuntime(
+        str(tmp_path / "runtime.sqlite3"),
+        product_source=lambda: [chain],
+        marketplace_store=store,
+    )
+    runtime.execute(
+        "Gerente, prepare os produtos femininos aprovados para os marketplaces.",
+        idempotency_key="joias-marketplaces",
+    )
+    listings = store.listings()
+    assert len(listings) == 5
+    for listing in listings:
+        payload = listing["payload"]
+        # Texto revisado do anúncio; sob encomenda, o canal não recebe estoque.
+        assert "Corrente" in payload["title"] and "Ref. 0001" in payload["title"]
+        assert payload["channel_stock_cap"] == 0 and payload["external_write"] is False

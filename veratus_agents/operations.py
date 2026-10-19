@@ -1302,11 +1302,13 @@ class OperationalRuntime:
             and not any(query in normalized for query in ("quais", "pendente"))
         ):
             raise CommandRoutedElsewhere("/os/paid-media/plan")
-        if "cadastre" in normalized and "feminin" in normalized:
+        # Joias e correntes de revenda seguem o caminho da coleção feminina.
+        jewelry = any(word in normalized for word in ("feminin", "joia", "corrente"))
+        if "cadastre" in normalized and jewelry:
             return ParsedCommand("intake_feminine", collection="feminine")
         if (
             "prepare" in normalized
-            and "feminin" in normalized
+            and jewelry
             and any(token in normalized for token in ("marketplace", "mercado livre"))
         ):
             return ParsedCommand(
@@ -1719,6 +1721,37 @@ class OperationalRuntime:
             "status": "APPROVED",
         }
 
+    def _feminine_draft(self, product: dict[str, Any], channel: str) -> dict[str, Any]:
+        """Joia aprovada vira rascunho com o texto revisado do anúncio; nada sai."""
+        from .listing_content import find_catalog_entry, listing_copy
+
+        sku = str(product.get("sku") or product.get("id"))
+        entry = find_catalog_entry(product)
+        if entry is None:
+            return {"product": sku, "state": "BLOCKED", "reason": "NOT_IN_CATALOG"}
+        copy = listing_copy(entry, "facebook" if channel == "meta" else channel)
+        draft = {"product": sku, "state": "DRAFT", "ready": copy["ready"]}
+        if self.marketplace_store is not None:
+            from .marketplace_adapters import Marketplace
+            from .marketplace_ops import prepare_listing
+
+            payload = {
+                **self._draft_payload(product, sku, channel),
+                "title": copy["title"],
+                "description": copy["description"],
+                "attributes": copy["attributes"],
+                # Sob encomenda: o canal só recebe o teto do produto (0 até o
+                # fundador definir estoque e prazo).
+                "channel_stock_cap": int(entry.get("channel_stock_cap") or 0),
+            }
+            draft["listing_id"] = prepare_listing(
+                self.marketplace_store,
+                self._draft_product(product, sku),
+                Marketplace(channel),
+                payload,
+            )["id"]
+        return draft
+
     def _draft_payload(
         self, product: dict[str, Any], sku: str, channel: str
     ) -> dict[str, Any]:
@@ -1870,7 +1903,11 @@ class OperationalRuntime:
         blocked = [
             {
                 "product": str(item.get("sku") or item.get("id")),
-                "reason": "BLOCKED_NEEDS_PRICING",
+                # Com preço, a peça só espera a aprovação do fundador.
+                "reason": "BLOCKED_AWAITING_APPROVAL"
+                if self._field_value(item, "price_brl")
+                or self._field_value(item, "sale_price")
+                else "BLOCKED_NEEDS_PRICING",
             }
             for item in products
             if item not in approved
@@ -1896,7 +1933,10 @@ class OperationalRuntime:
             depends_on=[manager.task_id],
         )
         channel_tasks = []
+        made = 0
         for channel in channels:
+            drafts = [self._feminine_draft(item, channel) for item in approved]
+            made += sum(draft["state"] == "DRAFT" for draft in drafts)
             channel_tasks.append(
                 self._run_task(
                     command,
@@ -1904,9 +1944,10 @@ class OperationalRuntime:
                     "PREPARE_FEMININE_DRAFTS",
                     channel,
                     {
-                        "drafts": [],
+                        "drafts": drafts,
                         "blocked": blocked,
                         "category_discovery": [
+                            "chain",
                             "necklace",
                             "bracelet",
                             "anklet",
@@ -1922,7 +1963,7 @@ class OperationalRuntime:
             "sync-monitor-agent",
             "SYNC_FEMININE_DRAFT_STATUS",
             "feminine",
-            {"drafts": 0, "blocked": len(blocked), "external_write": False},
+            {"drafts": made, "blocked": len(blocked), "external_write": False},
             parent_task_id=distribution.task_id,
             depends_on=[task.task_id for task in channel_tasks],
         )

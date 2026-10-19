@@ -1776,6 +1776,7 @@ def _operational_runtime():
         for channel in OperationalRuntime.CHANNEL_AGENTS:
             for canonical_category in (
                 "Relógios",
+                "jewelry_accessories/chain",
                 "jewelry_accessories/necklace",
                 "jewelry_accessories/bracelet",
                 "jewelry_accessories/anklet",

@@ -104,6 +104,13 @@ _SHEET_ATTRIBUTES = (
 _JEWEL_TONE = {"silver_tone": "tom prateado", "gold_tone": "tom dourado"}
 # subcategoria → (tipo, gênero, frase de uso, destaque de uso)
 _JEWEL_KIND = {
+    # Corrente sem gênero: a peça de revenda serve a qualquer cliente.
+    "chain": (
+        "Corrente",
+        "",
+        "Usada sozinha, é discreta; em camadas, acompanha colares e pingentes.",
+        "Para usar sozinha ou em camadas",
+    ),
     "necklace": (
         "Colar",
         "feminino",
@@ -582,10 +589,12 @@ def _watch_copy(item: dict[str, Any], writer: _Writer) -> dict[str, Any]:
 
 
 def _jewel_copy(item: dict[str, Any], writer: _Writer) -> dict[str, Any]:
-    name, channel = item["name"], writer.channel
+    # Peça importada tem nome descritivo; o anúncio usa só o modelo.
+    name, channel = item.get("model_name") or item["name"], writer.channel
     kind, gender, usage, usage_short = _JEWEL_KIND.get(
         item.get("subcategory"), ("Peça", "feminina", None, None)
     )
+    line = "da coleção Veratus Feminino" if gender else "da coleção Veratus"
     # Só "tom dourado" ou "tom prateado"; outro acabamento fica sem nome.
     tone = _JEWEL_TONE.get(item.get("finish_color"))
     match = _JEWEL_TYPE.match(str(item.get("product_type") or "").strip())
@@ -597,16 +606,17 @@ def _jewel_copy(item: dict[str, Any], writer: _Writer) -> dict[str, Any]:
     short = writer.ok(_sentence(item.get("short_description") or ""))
     story = writer.ok(_sentence(item.get("description") or ""))
     in_tone = (
-        f"Peça em {tone}, da coleção Veratus Feminino."
+        f"Peça em {tone}, {line}."
         if tone and tone not in (story or "")
-        else "Peça da coleção Veratus Feminino."
+        else f"Peça {line}."
     )
     facts = [fact for fact in _confirmed_facts("feminine") if writer.fact_ok(fact)]
     gift = "Uma escolha delicada para presentear."
 
     description = _paragraphs(
         [
-            [short, story],
+            # A descrição importada já começa pelo resumo: não repete.
+            [None if short and (story or "").startswith(short) else short, story],
             [writer.ok(usage), writer.ok(in_tone)],
             facts,
             [writer.ok(gift)],
@@ -622,7 +632,7 @@ def _jewel_copy(item: dict[str, Any], writer: _Writer) -> dict[str, Any]:
     if channel == "amazon":
         parts = [
             (f"Veratus {head}", 0),
-            (f" {gender_title}", 2),
+            (f" {gender_title}" if gender else "", 2),
             (f" {name}", 0),
             (f",{tone_part}" if tone else "", 1),
             (f" {tail}" if tail else "", 3),
@@ -630,7 +640,7 @@ def _jewel_copy(item: dict[str, Any], writer: _Writer) -> dict[str, Any]:
     else:
         parts = [
             (head, 0),
-            (f" {gender_title}", 2),
+            (f" {gender_title}" if gender else "", 2),
             (f" Veratus {name}", 0),
             (tone_part, 1),
             (f" {tail}" if tail and channel != "mercado_livre" else "", 3),
@@ -639,7 +649,7 @@ def _jewel_copy(item: dict[str, Any], writer: _Writer) -> dict[str, Any]:
 
     detail = ", ".join(filter(None, [f"Em {tone}" if tone else "", tail]))
     highlights = [
-        writer.ok(f"{kind} {gender} {name}, da coleção Veratus Feminino"),
+        writer.ok(f"{' '.join(filter(None, [kind, gender, name]))}, {line}"),
         writer.ok(detail),
         _bullet(short) if short else None,
         *(_bullet(fact) for fact in facts[:2]),
@@ -650,7 +660,7 @@ def _jewel_copy(item: dict[str, Any], writer: _Writer) -> dict[str, Any]:
         "marca": "Veratus",
         "modelo": name,
         "tipo": kind.lower(),
-        "genero": "feminino",
+        "genero": "feminino" if gender else None,
         "cor": item.get("color"),
         "tom": tone,
         "condicao": "novo",
