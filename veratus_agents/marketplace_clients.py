@@ -708,11 +708,13 @@ CLIENT_CAPABILITIES = {
             "listing_create",
             "listing_update",
             "listing_pause",
-            "read_back",
             "error_normalization",
             "rate_limits",
         )
-    },
+    }
+    # Leitura de volta do catálogo (meta_catalog.MetaCatalogReadOnlyClient), atrás
+    # de META_CATALOG_READBACK_ENABLED; formato a conferir na hora de ligar.
+    | {"read_back": "PARTIAL"},
 }
 
 

@@ -3355,15 +3355,23 @@ def os_conversations_paste_inbound(channel):
     from veratus_agents.chatwoot import redact
     from veratus_agents.conversations import InboundText
 
-    result = engine.handle(
-        InboundText(
-            channel=channel,
-            conversation_id=conversation_id,
-            message_id=message_id,
-            text=redact(text)[:2000],
-            product_hint=hint,
-        )
+    item = InboundText(
+        channel=channel,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        text=redact(text)[:2000],
+        product_hint=hint,
     )
+    try:
+        result = engine.handle(item)
+    except Exception as exc:  # noqa: BLE001 - vira tarefa no painel, como no process
+        app.logger.error(
+            "conversation_message_failed channel=%s error_type=%s",
+            channel,
+            type(exc).__name__,
+        )
+        engine.message_failed(item, exc)
+        return jsonify({"status": "error", "message": "conversation_failed"}), 500
     return jsonify(
         {
             "status": "ok",

@@ -1414,14 +1414,20 @@ def _rodada(nome: str) -> dict[str, Any]:
                 "user_id": 999,
             }
         )
-        dia.rodar()
-        resumo = dia.resumo()
-        if nome == "alvo":
-            from veratus_agents.sales_flow import flow_report
+        try:
+            dia.rodar()
+            resumo = dia.resumo()
+            if nome == "alvo":
+                from veratus_agents.sales_flow import flow_report
 
-            resumo["fluxo"] = flow_report(
-                dia.webhook._conversation_engine(), dia.webhook._order_ledger()
-            )
+                resumo["fluxo"] = flow_report(
+                    dia.webhook._conversation_engine(), dia.webhook._order_ledger()
+                )
+        finally:
+            # O diretório da rodada some ao sair: nada fica apontando para ele.
+            dia.webhook._runtime_engine = None
+            dia.webhook._operational_runtime_instance = None
+            dia.webhook._paid_media_worker_instance = None
         return resumo
 
 
