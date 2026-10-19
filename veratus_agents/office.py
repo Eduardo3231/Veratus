@@ -62,10 +62,10 @@ MISSIONS: dict[str, str] = {
     "social-media-worker": "Monta o calendário, pede sua aprovação e publica só o aprovado.",
     "paid-acquisition-worker": "Planeja campanhas em rascunho pausado, sem gastar sem você.",
     "product-supervisor": "Coordena cadastro, textos, fotos, preço e qualidade.",
-    "product-intake": "Confere a ficha de cada produto no Product Master.",
+    "product-intake": "Confere a ficha de cada produto e importa as correntes e joias de revenda.",
     "copy-agent": "Escreve títulos e descrições só com fatos confirmados.",
     "creative-agent": "Confere fotos e criativos, fora da quarentena.",
-    "pricing-agent": "Calcula o preço por canal com as taxas de cada um.",
+    "pricing-agent": "Calcula o preço por canal com as taxas de cada um e a regra das joias.",
     "quality-agent": "Aprova ou barra o anúncio antes de ir para o canal.",
     "fundador": "Decide, aprova e entra quando o cliente pede uma pessoa.",
 }
@@ -74,13 +74,13 @@ MISSIONS: dict[str, str] = {
 KEYS: dict[str, tuple[str, ...]] = {
     "sales-agent": ("CONVERSATION_MODE_WHATSAPP", "WHATSAPP_SEND_ENABLED", "PAYMENT_LINKS_ENABLED"),
     "aftersales-agent": ("WHATSAPP_SEND_ENABLED",),
-    "social-media-worker": ("SOCIAL_PUBLISH_ENABLED",),
+    "social-media-worker": ("SOCIAL_PUBLISH_ENABLED", "SOCIAL_INSIGHTS_ENABLED", "FACEBOOK_COMMENTS_ENABLED", "TIKTOK_CONTENT_ENABLED"),
     "paid-acquisition-worker": ("PAID_MEDIA_LIVE_WRITES",),
     "meta-agent": ("META_CATALOG_FEED_ENABLED", "FACEBOOK_MESSAGING_ENABLED", "META_PUBLISH_ENABLED"),
-    "mercado-livre-agent": ("MERCADO_LIVRE_ANSWERS_ENABLED", "MERCADO_LIVRE_PUBLISH_ENABLED"),
-    "shopee-agent": ("SHOPEE_PUBLISH_ENABLED",),
-    "tiktok-shop-agent": ("TIKTOK_SHOP_PUBLISH_ENABLED",),
-    "amazon-agent": ("AMAZON_PUBLISH_ENABLED",),
+    "mercado-livre-agent": ("MERCADO_LIVRE_ANSWERS_ENABLED", "MERCADO_LIVRE_SYNC_ENABLED", "MERCADO_LIVRE_PUBLISH_ENABLED"),
+    "shopee-agent": ("SHOPEE_SYNC_ENABLED", "SHOPEE_PUBLISH_ENABLED"),
+    "tiktok-shop-agent": ("TIKTOK_SHOP_SYNC_ENABLED", "TIKTOK_SHOP_PUBLISH_ENABLED"),
+    "amazon-agent": ("AMAZON_SYNC_ENABLED", "AMAZON_PUBLISH_ENABLED"),
 }  # fmt: skip
 
 _CHANNEL = {
