@@ -1,9 +1,10 @@
-"""Vídeo das correntes: todo texto que aparece na tela passa no filtro do cliente."""
+"""Vídeo e criativos das correntes: todo texto que aparece passa no filtro do cliente."""
 
 from __future__ import annotations
 
 import json
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 from veratus_agents.policy import hard_review_customer_reply
@@ -43,3 +44,32 @@ def test_video_text_passes_the_customer_gate_and_the_timeline_is_continuous():
     for atual, proxima in zip(cenas, [*cenas[1:], roteiro["final"]], strict=True):
         assert atual["t1"] == proxima["t0"]
     assert roteiro["final"]["t0"] < roteiro["duracao"]
+
+
+class _Visivel(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.textos, self._oculto = [], 0
+
+    def handle_starttag(self, tag, attrs):
+        self._oculto += tag in ("style", "script", "svg")
+
+    def handle_endtag(self, tag):
+        self._oculto -= tag in ("style", "script", "svg")
+
+    def handle_data(self, data):
+        if not self._oculto and data.strip():
+            self.textos.append(" ".join(data.split()))
+
+
+def test_static_creatives_text_passes_the_customer_gate():
+    parser = _Visivel()
+    parser.feed(
+        (ROTEIRO.parents[2] / "criativos/correntes/modelos.html").read_text("utf-8")
+    )
+    assert "Frete grátis" in " ".join(parser.textos)
+    for texto in parser.textos:
+        assert not PROIBIDO.search(texto), texto
+        assert not hard_review_customer_reply(
+            texto, [], product_collection="feminine"
+        ), texto

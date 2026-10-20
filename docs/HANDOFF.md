@@ -16,6 +16,10 @@ Pedido do fundador: focar em correntes e joias; usar as fotos de um fornecedor q
 - **Bloqueio**: a rede desta sessão recusa o domínio do fornecedor (proxy 403; o leitor de páginas também não resolve o endereço). O fundador libera em "Allowed domains" ou manda as fotos e a planilha; aí roda `JEWELRY_PRICE_RULE=... python scripts/importar_joias.py --url <categoria> --aplicar`.
 - **Autorização das fotos**: declarada pelo fundador em 19/10; guardar a autorização por escrito (e-mail ou print). Foto com logo ou marca d'água do fornecedor fica de fora (não se apaga marca).
 
+## Criativos estáticos das correntes (20/10)
+
+`criativos/correntes/` (`modelos.html`, `render.py`, README): quatro peças de feed 4:5 (Clássico, Símbolo, Presença, Elo a elo) e um story 9:16 com o botão do WhatsApp, na família da arte de referência do fundador, com as fotos de produto (saída em `runtime/criativos/correntes/`, fora do Git). A arte de referência trazia "prata 925", "qualidade comprovada", "brilho duradouro", "alta durabilidade" e "embalagem premium": nada disso entrou; as vantagens são só fatos CONFIRMED. O teste `tests/test_video_correntes.py` cobre também os textos dos criativos. As duas fotos novas (crucifixo no busto e na mão) têm só 320x427 px: entram como quadros pequenos; para usá-las grandes, o fundador precisa mandar o original.
+
 ## Vídeo das correntes (20/10)
 
 Pedido do fundador: vídeo propaganda novo, com gancho de tensão (como o balão que está para estourar) sem nada da Veratus no começo, depois interesse pelo produto e pela diferença, depois a resposta ao cliente e a chamada, com foco em design. O vídeo antigo está na quarentena (marca de terceiros) e não foi reaproveitado.
