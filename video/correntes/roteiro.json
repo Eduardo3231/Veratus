@@ -1,0 +1,62 @@
+{
+  "largura": 1080,
+  "altura": 1920,
+  "fps": 30,
+  "duracao": 25.5,
+  "gancho": {
+    "estouro": 4.8,
+    "contagem": [
+      {"n": "5", "t0": 0.0, "t1": 1.1},
+      {"n": "4", "t0": 1.1, "t1": 2.1},
+      {"n": "3", "t0": 2.1, "t1": 3.0},
+      {"n": "2", "t0": 3.0, "t1": 3.8},
+      {"n": "1", "t0": 3.8, "t1": 4.5}
+    ],
+    "frases": [
+      {"texto": "NÃO PISQUE.", "t0": 0.0, "t1": 1.7},
+      {"texto": "ESTÁ QUASE…", "t0": 1.7, "t1": 3.4},
+      {"texto": "AGORA.", "t0": 3.4, "t1": 4.7}
+    ],
+    "rachaduras": [0.8, 1.8, 2.7, 3.4, 4.0]
+  },
+  "tomadas": [
+    {"foto": "corrente-busto-frente", "t0": 4.9, "t1": 7.5, "titulo": "Elo a elo.", "sub": "Correntes em tom prateado."},
+    {"foto": "crucifixo", "t0": 7.5, "t1": 9.4, "titulo": "Pingentes que completam.", "sub": "Para usar sozinho ou combinar."},
+    {"foto": "corrente-plana", "t0": 9.4, "t1": 11.3, "titulo": "Cada detalhe, de perto.", "sub": ""},
+    {"foto": "rosto", "t0": 11.3, "t1": 13.0, "titulo": "Peças com presença.", "sub": ""}
+  ],
+  "diferenciais": {
+    "t0": 13.0,
+    "t1": 16.2,
+    "foto": "corrente-busto-angulo",
+    "titulo": "Na Veratus",
+    "itens": [
+      {"texto": "Frete grátis", "t": 13.5},
+      {"texto": "Nenhuma taxa extra", "t": 14.1},
+      {"texto": "Entrega em até 7 dias", "t": 14.7},
+      {"texto": "Desistência em até 7 dias após o recebimento", "t": 15.3}
+    ],
+    "rodape": "Pix ou link do Mercado Pago."
+  },
+  "chat": {
+    "t0": 16.2,
+    "t1": 21.0,
+    "nome": "Veratus",
+    "papel": "Harvey · assistente virtual",
+    "mensagens": [
+      {"de": "cliente", "t": 16.5, "foto": "corrente-busto-frente", "texto": "Oi! Quero essa. Como compro?"},
+      {"de": "harvey", "digitando": 17.2, "t": 17.9, "texto": "Olá! Aqui é o Harvey, assistente virtual da Veratus."},
+      {"de": "harvey", "digitando": 19.0, "t": 19.6, "texto": "Qual peça você viu? Eu confirmo valor e disponibilidade por aqui."}
+    ]
+  },
+  "final": {
+    "t0": 21.0,
+    "marca": "VERATUS",
+    "linha": "Qual elo é o seu?",
+    "botao": "Chame no WhatsApp",
+    "numero": "(11) 95832-3612",
+    "t_marca": 21.5,
+    "t_linha": 22.3,
+    "t_botao": 23.0
+  }
+}
