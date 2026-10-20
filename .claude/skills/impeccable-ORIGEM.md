@@ -1,0 +1,7 @@
+# Impeccable (cópia só de texto)
+
+- Origem: https://github.com/pbakaus/impeccable, commit `374a0e1`, skill 4.7.0, licença Apache 2.0 (`impeccable-LICENSE`).
+- Copiados em 20/10/2026 de `.claude/skills/impeccable/` do repositório: `SKILL.md` e `reference/` (guias `critique`, `audit`, `polish`, `typeset`, `layout` e outros). A pasta `skill/` do link é o código-fonte com marcadores `{{...}}`; a versão montada é a copiada.
+- **Não instalados:** `scripts/` (lançador que baixa e executa um binário do GitHub Releases, e o servidor do modo `live`), `agents/` e os hooks (rodariam o binário a cada edição e ao final de cada resposta). Para ligar, só com a confirmação do fundador no momento: `npx impeccable install` e a rede liberada para `github.com/pbakaus/impeccable/releases`.
+- Mudanças em `SKILL.md`: o passo 1 do Setup manda ler `PRODUCT.md`, `DESIGN.md` e `AGENTS.md` direto (sem lançador); saíram as linhas de `pin` e `hooks`. Os guias em `reference/` ainda citam o lançador; sem ele, siga a parte de leitura e ignore os comandos `scripts/impeccable`.
+- Regras da Veratus prevalecem sobre o skill: marca e paleta do `AGENTS.md`, só fatos `CONFIRMED` no texto ao cliente, joia só em "tom dourado" ou "tom prateado", nada de urgência ou escassez falsa, site fora do ar até a confirmação do fundador. O `init` e o `document` gravam `PRODUCT.md` e `DESIGN.md` na raiz: rode só com o pedido do fundador.
