@@ -335,9 +335,9 @@ function drawChat(c, t) {
     if (mine) { ctx.fillStyle = CHAR; ctx.fill(); }
     else { const g = ctx.createLinearGradient(x, y, x, y + bh); g.addColorStop(0, "rgba(200,165,106,0.30)"); g.addColorStop(1, "rgba(200,165,106,0.14)"); ctx.fillStyle = g; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(200,165,106,0.7)"; ctx.stroke(); }
     if (m.foto) {
-      const fw = bw - 2 * PAD, im = IMG[m.foto], sc = Math.max(fw / im.width, FH / im.height);
-      ctx.save(); rrect(x + PAD, y + PAD - 12, fw, FH, 22); ctx.clip();
-      ctx.drawImage(im, x + PAD + (fw - im.width * sc) / 2, y + PAD - 12 + (FH - im.height * sc) * 0.3, im.width * sc, im.height * sc); ctx.restore();
+      const fw = FW, fx = x + PAD + (bw - 2 * PAD - fw) / 2, im = IMG[m.foto], sc = Math.max(fw / im.width, FH / im.height);
+      ctx.save(); rrect(fx, y + PAD - 12, fw, FH, 22); ctx.clip();
+      ctx.drawImage(im, fx + (fw - im.width * sc) / 2, y + PAD - 12 + (FH - im.height * sc) * 0.3, im.width * sc, im.height * sc); ctx.restore();
     }
     lines.forEach((ln, j) => text(ln, x + PAD, y + PAD + 48 + fotoH + j * LH - 8, { font: FONT, align: "left" }));
     ctx.restore(); y += bh + 32;

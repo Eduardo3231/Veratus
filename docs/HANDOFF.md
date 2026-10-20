@@ -16,6 +16,15 @@ Pedido do fundador: focar em correntes e joias; usar as fotos de um fornecedor q
 - **Bloqueio**: a rede desta sessão recusa o domínio do fornecedor (proxy 403; o leitor de páginas também não resolve o endereço). O fundador libera em "Allowed domains" ou manda as fotos e a planilha; aí roda `JEWELRY_PRICE_RULE=... python scripts/importar_joias.py --url <categoria> --aplicar`.
 - **Autorização das fotos**: declarada pelo fundador em 19/10; guardar a autorização por escrito (e-mail ou print). Foto com logo ou marca d'água do fornecedor fica de fora (não se apaga marca).
 
+## Vídeo das correntes (20/10)
+
+Pedido do fundador: vídeo propaganda novo, com gancho de tensão (como o balão que está para estourar) sem nada da Veratus no começo, depois interesse pelo produto e pela diferença, depois a resposta ao cliente e a chamada, com foco em design. O vídeo antigo está na quarentena (marca de terceiros) e não foi reaproveitado.
+
+- **Onde**: `video/correntes/` (`roteiro.json` com textos e tempos, `cena.html` animada, `render.py`, `audio.py`, README) e `tests/test_video_correntes.py` (todo texto da tela passa no filtro do cliente e não tem prata/925/ouro/banho/garantia/urgência). Saída em `runtime/video/correntes/` (fora do Git): `veratus-correntes.mp4` (1080x1920, 25,5 s) e a cópia leve.
+- **Roteiro**: 0–4,8 s uma esfera preta racha com contagem 5-4-3-2-1 que acelera (sem marca, produto, preço ou prazo); estouro; quatro tomadas das fotos; diferenciais só com fatos CONFIRMED (frete grátis, nenhuma taxa extra, entrega em até 7 dias, desistência em até 7 dias, Pix ou link do Mercado Pago); conversa com o Harvey (assistente virtual, cliente fictício); fecho "Qual elo é o seu?" com o WhatsApp (11) 95832-3612. Som sintetizado (sem amostra de terceiros).
+- **Fotos**: as 5 fotos de produto que o fundador mandou (fornecedor, autorização declarada em 19/10; guardar por escrito); a seta ">" da tela do site foi cortada da foto plana. A arte com texto ("PRATA 925", "qualidade comprovada", "brilho duradouro", "alta durabilidade", "embalagem premium") **não foi usada**: as regras da marca bloqueiam essas frases.
+- **Pendências do fundador**: aprovar o vídeo; `approve-media` e aprovação no agendador antes de publicar (nada publica sozinho); "entrega em até 7 dias" vale para peça sob encomenda? (fato CONFIRMED para tudo, mas o prazo das joias de revenda ainda não foi definido); preço das joias fica fora do vídeo até a regra de preço ser definida.
+
 ## Marketplaces, rodada 3 (19/10)
 
 Commits 3699cb5 e ea578aa. Toda chave nova nasce false; com ela desligada nada sai.
