@@ -43,6 +43,13 @@ if [ ! -x "$VENV/bin/python" ]; then
 fi
 "$VENV/bin/python" -m pip install --quiet --disable-pip-version-check -r "$PROJECT_DIR/requirements-dev.txt"
 
+# Teste de navegador do site (tests/test_landing_browser.py): o Playwright da versão do
+# Chromium pré-instalado na nuvem. Fora do requirements-dev.txt para não mudar o CI.
+if [ -d /opt/pw-browsers ] && ! "$VENV/bin/python" -c "import playwright" 2>/dev/null; then
+  "$VENV/bin/python" -m pip install --quiet --disable-pip-version-check "playwright==1.56.0" ||
+    echo "session-start: playwright não instalado (testes de navegador vão pular)" >&2
+fi
+
 # Grafo do código para economizar token (local, sem LLM). Sem rede, segue sem ele.
 GRAPHIFY_VERSION="0.9.92"
 if ! graphify --version 2>/dev/null | grep -q "$GRAPHIFY_VERSION"; then

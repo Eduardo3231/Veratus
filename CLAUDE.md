@@ -41,7 +41,8 @@ Leia o topo de `docs/HANDOFF.md` antes de editar: é o diário das rodadas e das
 - `ruff check . && ruff format --check .`
 - `python -m pytest -q tests/<arquivo>` (o alvo); a suíte inteira uma vez antes do commit.
 - `python -m veratus_agents.knowledge lint` e `python -m veratus_agents.knowledge eval` quando mexer em `knowledge/`.
-- Skills locais: `systematic-debugging`, `verification-before-completion`, `requesting-code-review`.
+- Mexeu em `landing/` ou `scripts/build_landing.py`: `python -m pytest -q tests/test_landing_browser.py` (o hook de sessão instala o `playwright==1.56.0`; sem ele os 14 testes pulam em silêncio).
+- Skills locais: `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `webapp-testing`, `impeccable` (só texto).
 
 ## Economia de token
 
