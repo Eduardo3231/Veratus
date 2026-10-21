@@ -86,6 +86,12 @@ services:
         sync: false
       - key: SHOPEE_SHOP_ID
         sync: false
+      - key: SHOPEE_REDIRECT_URI
+        value: https://veratus.onrender.com/integrations/shopee/oauth/callback
+      - key: SHOPEE_OAUTH_STATE_TTL_SECONDS
+        value: "600"
+      - key: SHOPEE_API_HOST
+        value: https://partner.shopeemobile.com
       - key: TIKTOK_SHOP_ACCESS_TOKEN
         sync: false
       - key: TIKTOK_SHOP_APP_KEY
@@ -95,6 +101,8 @@ services:
       - key: TIKTOK_SHOP_REFRESH_TOKEN
         sync: false
       - key: TIKTOK_SHOP_SHOP_CIPHER
+        sync: false
+      - key: TIKTOK_SHOP_SERVICE_ID
         sync: false
       - key: AMAZON_SP_LWA_CLIENT_ID
         sync: false
@@ -106,6 +114,27 @@ services:
         value: A2Q3Y263D00KWC
       - key: AMAZON_SP_ENDPOINT
         value: https://sellingpartnerapi-na.amazon.com
+      # Conta e loja de cada canal no /os/channels (só o marcador PRESENT).
+      - key: MERCADO_LIVRE_ACCOUNT_ID
+        sync: false
+      - key: MERCADO_LIVRE_STORE_ID
+        sync: false
+      - key: SHOPEE_ACCOUNT_ID
+        sync: false
+      - key: SHOPEE_STORE_ID
+        sync: false
+      - key: TIKTOK_SHOP_ACCOUNT_ID
+        sync: false
+      - key: TIKTOK_SHOP_STORE_ID
+        sync: false
+      - key: META_ACCOUNT_ID
+        sync: false
+      - key: META_STORE_ID
+        sync: false
+      - key: AMAZON_ACCOUNT_ID
+        sync: false
+      - key: AMAZON_STORE_ID
+        sync: false
       - key: META_ACCESS_TOKEN
         sync: false
       - key: META_BUSINESS_ID
@@ -136,6 +165,18 @@ services:
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false
+      - key: WHATSAPP_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: WHATSAPP_TEMPLATES_ENABLED
+        value: "false"
+      - key: WHATSAPP_READ_RECEIPTS_ENABLED
+        value: "false"
+      - key: WHATSAPP_INTERACTIVE_ENABLED
+        value: "false"
+      - key: WHATSAPP_MEDIA_ENABLED
+        value: "false"
+      - key: FOUNDER_ALERT_WHATSAPP_ENABLED
+        value: "false"
       - key: INSTAGRAM_DM_ENABLED
         value: "false"
       - key: INSTAGRAM_ACCESS_TOKEN
@@ -145,6 +186,10 @@ services:
       - key: INSTAGRAM_APP_SECRET
         sync: false
       - key: INSTAGRAM_VERIFY_TOKEN
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: FACEBOOK_VERIFY_TOKEN
         sync: false
       - key: PAID_MEDIA_WORKER_ENABLED
         value: "true"
@@ -200,3 +245,116 @@ services:
         value: "1"
       - key: OPENAI_AGENTS_DONT_LOG_TOOL_DATA
         value: "1"
+      - key: CHANNEL_FEES_PATH
+        value: "config/channel_fees_2026-10.json"
+      - key: PAID_MEDIA_ECONOMICS_CHANNEL
+        value: "direct_card"
+      - key: CONVERSATION_MODE_FACEBOOK
+        value: "SHADOW"
+      - key: CONVERSATION_MODE_WHATSAPP
+        value: "SHADOW"
+      - key: CONVERSATION_MODE_INSTAGRAM
+        value: "SHADOW"
+      - key: CONVERSATION_MODE_MERCADO_LIVRE
+        value: "SHADOW"
+      - key: CONVERSATION_MODE_SHOPEE
+        value: "SHADOW"
+      - key: CONVERSATION_MODE_TIKTOK_SHOP
+        value: "SHADOW"
+      - key: CONVERSATION_MODE_AMAZON
+        value: "SHADOW"
+      - key: CONVERSATION_MODEL
+        value: "live"
+      - key: CONVERSATION_AUTOPROCESS_ENABLED
+        value: "false"
+      - key: FOUNDER_ALERT_WHATSAPP
+        sync: false
+      - key: FOUNDER_ALERT_EMAIL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: PAYMENT_LINKS_ENABLED
+        value: "false"
+      - key: MERCADO_PAGO_ACCESS_TOKEN
+        sync: false
+      - key: MERCADO_PAGO_WEBHOOK_SECRET
+        sync: false
+      - key: PAYMENT_INSTALLMENTS_INTEREST
+        value: "buyer"
+      - key: DISCOUNT_LIMIT_BRL
+        value: "0"
+      - key: PUBLIC_BASE_URL
+        value: "https://veratus.onrender.com"
+      - key: INSTAGRAM_MESSAGING_ENABLED
+        value: "false"
+      - key: FACEBOOK_MESSAGING_ENABLED
+        value: "false"
+      # Facebook responde e leva o cliente ao WhatsApp para fechar (como o Instagram).
+      - key: FACEBOOK_CLOSE_ON_WHATSAPP
+        value: "false"
+      - key: META_CATALOG_FEED_ENABLED
+        value: "false"
+      - key: META_CATALOG_READBACK_ENABLED
+        value: "false"
+      - key: MERCADO_LIVRE_ANSWERS_ENABLED
+        value: "false"
+      - key: MERCADO_LIVRE_SYNC_ENABLED
+        value: "false"
+      - key: MERCADO_LIVRE_LABELS_ENABLED
+        value: "false"
+      - key: MERCADO_LIVRE_SELLER_ID
+        sync: false
+      - key: SOCIAL_PUBLISH_ENABLED
+        value: "false"
+      - key: SOCIAL_INSIGHTS_ENABLED
+        value: "false"
+      - key: SOCIAL_COMMENTS_MODE
+        value: "SHADOW"
+      - key: FACEBOOK_COMMENTS_ENABLED
+        value: "false"
+      - key: META_PAGE_ID
+        sync: false
+      - key: CEP_LOOKUP_ENABLED
+        value: "false"
+      - key: CHATWOOT_SYNC_ENABLED
+        value: "false"
+      - key: CHATWOOT_BASE_URL
+        sync: false
+      - key: CHATWOOT_ACCOUNT_ID
+        sync: false
+      - key: CHATWOOT_INBOX_ID
+        sync: false
+      - key: CHATWOOT_API_TOKEN
+        sync: false
+      - key: CHATWOOT_WEBHOOK_TOKEN
+        sync: false
+      - key: CHATWOOT_WEBHOOK_SECRET
+        sync: false
+      - key: TWENTY_SYNC_ENABLED
+        value: "false"
+      - key: TWENTY_API_URL
+        sync: false
+      - key: TWENTY_API_KEY
+        sync: false
+      - key: JEWELRY_PRICE_RULE
+        sync: false
+      # Pedidos, push e webhook de Shopee, TikTok Shop e Amazon (só leitura).
+      - key: SHOPEE_SYNC_ENABLED
+        value: "false"
+      - key: TIKTOK_SHOP_SYNC_ENABLED
+        value: "false"
+      - key: AMAZON_SYNC_ENABLED
+        value: "false"
+      # TikTok: mídia só na caixa de entrada do criador; o fundador conclui no app.
+      - key: TIKTOK_CONTENT_ENABLED
+        value: "false"
+      - key: TIKTOK_CLIENT_KEY
+        sync: false
+      - key: TIKTOK_CLIENT_SECRET
+        sync: false

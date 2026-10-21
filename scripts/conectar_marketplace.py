@@ -5,11 +5,15 @@ Uso (PowerShell, na pasta do projeto):
     .\\.venv\\Scripts\\python.exe scripts\\conectar_marketplace.py mercado-livre
     .\\.venv\\Scripts\\python.exe scripts\\conectar_marketplace.py shopee
     .\\.venv\\Scripts\\python.exe scripts\\conectar_marketplace.py amazon
+    .\\.venv\\Scripts\\python.exe scripts\\conectar_marketplace.py tiktok-shop
+    .\\.venv\\Scripts\\python.exe scripts\\conectar_marketplace.py tiktok
 
 O comando pede o token de administrador (Render > serviço veratus-leads >
 Environment > VERATUS_ADMIN_TOKEN) sem mostrá-lo na tela, abre a página de
 autorização do marketplace no navegador, espera você autorizar e roda a
 verificação somente leitura dos agentes. Nenhum anúncio é criado ou alterado.
+O ``tiktok`` conecta a conta de conteúdo: o app só manda mídia para a caixa de
+entrada do TikTok, e você conclui o post no app.
 """
 
 from __future__ import annotations
@@ -61,6 +65,28 @@ CHANNELS = {
             "em Ver credenciais LWA. Cadastre os três no Render > veratus-leads > "
             "Environment."
         ),
+    },
+    "tiktok-shop": {
+        "name": "TikTok Shop",
+        "status": "/integrations/tiktok-shop/status",
+        "start": "/integrations/tiktok-shop/oauth/start?format=json",
+        "config_hint": (
+            "Confira no Render (Environment) TIKTOK_SHOP_APP_KEY, "
+            "TIKTOK_SHOP_APP_SECRET e TIKTOK_SHOP_SERVICE_ID (Partner Center > App "
+            "& Service) e se TIKTOK_SHOP_SYNC_ENABLED está true."
+        ),
+        "check": "/integrations/tiktok-shop/check",
+    },
+    "tiktok": {
+        "name": "TikTok (conteúdo)",
+        "status": "/integrations/tiktok/status",
+        "start": "/integrations/tiktok/oauth/start?format=json",
+        "config_hint": (
+            "Confira no Render (Environment) TIKTOK_CLIENT_KEY e "
+            "TIKTOK_CLIENT_SECRET (TikTok for Developers > seu app) e se "
+            "TIKTOK_CONTENT_ENABLED está true."
+        ),
+        "check": "/integrations/tiktok/check",
     },
 }
 ENCRYPTION_HINT = (
@@ -181,11 +207,12 @@ def report_summary(report: dict[str, Any]) -> list[str]:
         lines.append(
             "Marketplace Brasil: " + ("ativo" if shop["participating"] else "inativo")
         )
-    lines += [
+    lines.append(
         "Conta: "
-        + ("respondendo" if report.get("account") == "HEALTHY" else "não verificada"),
-        "Categoria de relógios: " + (category or "não encontrada"),
-    ]
+        + ("respondendo" if report.get("account") == "HEALTHY" else "não verificada")
+    )
+    if report.get("channel") != "tiktok":  # conta de conteúdo não tem categoria
+        lines.append("Categoria de relógios: " + (category or "não encontrada"))
     if report.get("category_candidates"):
         names = [
             item.get("external_category_name") for item in report["category_candidates"]

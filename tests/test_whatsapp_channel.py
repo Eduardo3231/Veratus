@@ -360,3 +360,139 @@ def test_webhook_http_verification_signature_and_admin_views(tmp_path):
     assert blocked.status_code == 409
     assert "WHATSAPP_SEND_DISABLED" in blocked.json["reasons"]
     assert misconfigured.status_code == 503
+
+
+# -- pedido de pessoa: uma CHAMADA só, nos dois registros -------------------------
+
+
+def test_person_request_callback_runs_once_per_handoff(channel):
+    calls = []
+
+    def on_handoff(*args):
+        calls.append(args)
+
+    payload = notification(text_message("wamid.P1", "quero falar com o responsável"))
+    channel.receive(payload, on_handoff=on_handoff)
+    channel.receive(payload, on_handoff=on_handoff)  # a Meta repete
+    channel.receive(
+        notification(
+            text_message("wamid.P2", "me liga?", at=NOW + timedelta(minutes=1))
+        ),
+        on_handoff=on_handoff,
+    )
+    [conversation] = channel.list_conversations()
+
+    assert calls == [
+        (conversation["conversation_id"], "wamid.P1", "quero falar com o responsável")
+    ]
+    assert conversation["state"] == "HUMAN"
+
+
+def _boom(*args, **kwargs):
+    raise AssertionError("requisição externa com as chaves desligadas")
+
+
+def test_person_request_on_the_webhook_is_exactly_one_call(tmp_path):
+    rate_store.clear()
+    environment = {
+        "VERATUS_ADMIN_TOKEN": "admin-test-key",
+        "VERATUS_AGENT_RUNTIME_DIR": str(tmp_path),
+        "VERATUS_SESSION_SALT": "salt",
+        "VERATUS_TOKEN_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+        "WHATSAPP_APP_SECRET": "app-secret",
+        "WHATSAPP_SEND_ENABLED": "false",
+        "CONVERSATION_MODEL": "template",
+        "OPENAI_API_KEY": "",
+        "DATABASE_URL": "",
+    }
+    admin = {"X-Veratus-Admin-Token": "admin-test-key"}
+
+    def post(client, message_id, body_text, at):
+        body = json.dumps(
+            notification(text_message(message_id, body_text, at=at))
+        ).encode()
+        signature = (
+            "sha256=" + hmac.new(b"app-secret", body, hashlib.sha256).hexdigest()
+        )
+        return client.post(
+            "/integrations/whatsapp/webhook",
+            data=body,
+            content_type="application/json",
+            headers={"X-Hub-Signature-256": signature},
+        )
+
+    with (
+        patch.dict("os.environ", environment),
+        patch("requests.Session.post", _boom),
+        patch("requests.post", _boom),
+    ):
+        client = app.test_client()
+        first = post(client, "wamid.H1", "Prefiro falar com um atendente", NOW)
+        replay = post(client, "wamid.H1", "Prefiro falar com um atendente", NOW)
+        later = post(client, "wamid.H2", "alô?", NOW + timedelta(minutes=1))
+        alerts = client.get("/os/conversations/alerts", headers=admin).json["alerts"]
+        engine_side = client.get(
+            "/os/conversations?channel=whatsapp", headers=admin
+        ).json["conversations"]
+        channel_side = client.get(
+            "/integrations/whatsapp/conversations", headers=admin
+        ).json["conversations"]
+        processed = client.post(
+            "/os/conversations/process", headers=admin, json={"channel": "whatsapp"}
+        )
+
+    assert first.status_code == 200 and first.json["handoffs"] == 1
+    assert replay.json["duplicates"] == 1 and later.json["handoffs"] == 0
+    assert [alert["reason"] for alert in alerts] == ["PEDIDO_DE_ATENDENTE"]
+    assert NUMBER not in json.dumps(alerts)
+    assert [item["state"] for item in engine_side] == ["HUMAN"]
+    assert [item["state"] for item in channel_side] == ["HUMAN"]
+    # Nada fica para o motor responder enquanto o fundador atende.
+    assert processed.json["results"] == []
+
+
+def test_founder_returns_the_whatsapp_conversation_to_the_bot_on_both_sides(tmp_path):
+    rate_store.clear()
+    environment = {
+        "VERATUS_ADMIN_TOKEN": "admin-test-key",
+        "VERATUS_AGENT_RUNTIME_DIR": str(tmp_path),
+        "VERATUS_SESSION_SALT": "salt",
+        "VERATUS_TOKEN_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+        "WHATSAPP_APP_SECRET": "app-secret",
+        "WHATSAPP_SEND_ENABLED": "false",
+        "CONVERSATION_MODEL": "template",
+        "OPENAI_API_KEY": "",
+        "DATABASE_URL": "",
+    }
+    admin = {"X-Veratus-Admin-Token": "admin-test-key"}
+    body = json.dumps(
+        notification(text_message("wamid.B1", "Quero falar com um atendente"))
+    ).encode()
+    signature = "sha256=" + hmac.new(b"app-secret", body, hashlib.sha256).hexdigest()
+    with (
+        patch.dict("os.environ", environment),
+        patch("requests.Session.post", _boom),
+        patch("requests.post", _boom),
+    ):
+        client = app.test_client()
+        client.post(
+            "/integrations/whatsapp/webhook",
+            data=body,
+            content_type="application/json",
+            headers={"X-Hub-Signature-256": signature},
+        )
+        [conversation] = client.get(
+            "/integrations/whatsapp/conversations", headers=admin
+        ).json["conversations"]
+        returned = client.post(
+            f"/integrations/whatsapp/conversations/{conversation['conversation_id']}"
+            "/state",
+            headers=admin,
+            json={"state": "BOT", "actor": "fundador"},
+        )
+        engine_side = client.get(
+            "/os/conversations?channel=whatsapp", headers=admin
+        ).json["conversations"]
+
+    assert returned.status_code == 200
+    assert [item["state"] for item in engine_side] == ["BOT"]

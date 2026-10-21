@@ -7,7 +7,9 @@ Put one photo per model in ``incoming/relogios/<id>.jpg`` (or .jpeg, .png,
 
 Each photo is cropped to 4:5, resized, saved as WebP without EXIF (no location
 or camera data) in ``landing/assets/watches/`` and recorded in the Product
-Master (``image``, ``image_status: REAL_PHOTO``, ``image_source``). The public
+Master (``image``, ``image_status: REAL_PHOTO``, ``image_source``). A 1080×1350
+JPEG, also without EXIF, goes to ``landing/social/posts/watches/`` for the
+Instagram and Facebook posts (the Graph API only accepts JPEG). The public
 catalogue is exported again, so the card shows the photo instead of the
 illustration. The flag records that the photos show the exact piece, with no
 third-party name or logo.
@@ -27,7 +29,9 @@ from PIL import Image, ImageOps
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "catalog" / "products.json"
 OUTPUT_DIR = ROOT / "landing" / "assets" / "watches"
+SOCIAL_DIR = ROOT / "landing" / "social" / "posts" / "watches"
 SIZE = (1122, 1402)
+SOCIAL_SIZE = (1080, 1350)
 EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 sys.path.insert(0, str(ROOT))
 
@@ -47,6 +51,7 @@ def import_photos(
         if (item.get("collection") or "watches") == "watches"
     }
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    SOCIAL_DIR.mkdir(parents=True, exist_ok=True)
     imported = []
     for photo in sorted(source.iterdir()):
         if photo.suffix.lower() not in EXTENSIONS:
@@ -58,7 +63,11 @@ def import_photos(
         target = OUTPUT_DIR / f"{product['id']}.webp"
         with Image.open(photo) as image:
             # Saving without exif= drops location and camera metadata.
-            _crop_to_card(image).save(target, "WEBP", quality=82, method=6)
+            card = _crop_to_card(image)
+            card.save(target, "WEBP", quality=82, method=6)
+            card.resize(SOCIAL_SIZE, Image.Resampling.LANCZOS).save(
+                SOCIAL_DIR / f"{product['id']}.jpg", "JPEG", quality=90, optimize=True
+            )
         product["image"] = f"assets/watches/{product['id']}.webp"
         product["image_status"] = "REAL_PHOTO"
         product["image_source"] = (

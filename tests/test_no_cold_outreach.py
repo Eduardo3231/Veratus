@@ -20,6 +20,9 @@ USER_ADDRESSED = re.compile(
     r"""["']recipient["']\s*:\s*\{\s*["'](id|user_id|username)["']"""
 )
 BULK_SENDER = ROOT / "integrations" / "meta_dm_sender.py"
+# O único lugar que endereça por id de conta: a resposta no Instagram Direct a
+# quem escreveu primeiro, dentro da janela de 24 h (testado abaixo).
+DIRECT_REPLY_ADAPTER = "veratus_agents/channel_adapters.py"
 
 
 def _repository_sources() -> list[Path]:
@@ -46,11 +49,49 @@ def test_bulk_dm_sender_does_not_exist() -> None:
 
 def test_no_file_messages_a_person_by_account_id() -> None:
     offenders = [
-        str(path.relative_to(ROOT))
+        str(path.relative_to(ROOT)).replace("\\", "/")
         for path in _repository_sources()
         if USER_ADDRESSED.search(path.read_text(encoding="utf-8", errors="ignore"))
     ]
-    assert offenders == []
+    assert offenders in ([], [DIRECT_REPLY_ADAPTER])
+
+
+def test_instagram_direct_only_answers_who_wrote_inside_the_window(tmp_path) -> None:
+    from cryptography.fernet import Fernet
+
+    from veratus_agents.channel_adapters import DirectInbox, InstagramDirectAdapter
+
+    sent: list[dict] = []
+
+    class _Session:
+        def post(self, url: str, **kwargs):
+            sent.append(kwargs["json"])
+            raise AssertionError("nenhum envio deveria acontecer")
+
+    inbox = DirectInbox(
+        tmp_path / "dm.sqlite3",
+        salt="s",
+        encryption_key=Fernet.generate_key().decode(),
+    )
+    adapter = InstagramDirectAdapter(
+        inbox, access_token="t", ig_user_id="u", session=_Session(), enabled=True
+    )
+    never_wrote = adapter.send("ig_" + "0" * 32, "Olá", idempotency_key="a")
+    conversation_id, _ = inbox.receive(
+        "instagram",
+        "IGSID",
+        "mid-1",
+        "oi",
+        datetime.now(timezone.utc) - timedelta(days=8),
+    )
+    wrote_long_ago = adapter.send(
+        conversation_id, "Olá", idempotency_key="b", human_written=True
+    )
+
+    for result in (never_wrote, wrote_long_ago):
+        assert result["status"] == "BLOCKED"
+        assert "CUSTOMER_SERVICE_WINDOW_CLOSED" in result["reasons"]
+    assert sent == []
 
 
 def test_whatsapp_text_leaves_only_through_the_gated_channel() -> None:

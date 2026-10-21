@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +21,6 @@ from .commercial_config import (
     OFFICIAL_CATEGORY,
     OFFICIAL_MATERIAL,
     OFFICIAL_MATERIAL_LABEL,
-    OFFICIAL_PRODUCT_COST_BRL,
     OFFICIAL_SALE_PRICE_BRL,
     PACKAGE_PROFILE,
     SHIP_FROM,
@@ -42,7 +43,20 @@ def _field(value: Any, source: str, confidence: str = "CONFIRMED") -> dict[str, 
     return {"value": value, "source": source, "confidence": confidence}
 
 
-def discover_products() -> list[dict[str, Any]]:
+# Custo do produto por SKU, lido do Product Master (banco) por quem chama.
+CostLookup = Callable[[str], Any]
+
+
+def _decimal(value: Any) -> Decimal | None:
+    return None if value in (None, "") else Decimal(str(value))
+
+
+def discover_products(cost_of: CostLookup | None = None) -> list[dict[str, Any]]:
+    """Produtos do catálogo com a fonte de cada campo.
+
+    O custo nunca vem do código nem do catálogo público: ``cost_of(sku)`` lê o
+    Product Master. Sem ele, o campo fica vazio e o lucro não é calculado.
+    """
     landing_names = set(catalog_names_from_landing())
     catalog_source = _source(CATALOG_PATH)
     products = []
@@ -54,7 +68,7 @@ def discover_products() -> list[dict[str, Any]]:
         collection = product.get("collection") or ("watches" if is_watch else None)
         sku = product.get("sku") or product["id"]
         status = product.get("status") or "ACTIVE"
-        cost = OFFICIAL_PRODUCT_COST_BRL if is_watch else product.get("cost")
+        cost = _decimal(cost_of(sku)) if cost_of else None
         sale_price = OFFICIAL_SALE_PRICE_BRL if is_watch else product.get("sale_price")
         material = OFFICIAL_MATERIAL if is_watch else product.get("material")
         asset_candidates = product.get("images") or ([image] if image else [])
@@ -88,7 +102,7 @@ def discover_products() -> list[dict[str, Any]]:
             ),
             "cost": _field(
                 f"{cost:.2f}" if cost is not None else None,
-                "founder-confirmed-commercial-config" if is_watch else "not_found",
+                "Product Master" if cost is not None else "not_found",
                 "REAL_CONFIRMED" if cost is not None else "UNKNOWN",
             ),
             "sale_price": _field(
@@ -215,7 +229,7 @@ def discover_products() -> list[dict[str, Any]]:
                 "missing_fields": missing,
                 "classification": "REAL_CONFIRMED" if not missing else "LIKELY_REAL",
                 "commercial_economics": (
-                    calculate_official_economics() if is_watch else None
+                    calculate_official_economics(cost) if is_watch else None
                 ),
             }
         )
@@ -293,14 +307,25 @@ def missing_business_data(
     return result
 
 
-def discovery_report() -> dict[str, Any]:
-    products = discover_products()
+def discovery_report(cost_of: CostLookup | None = None) -> dict[str, Any]:
+    products = discover_products(cost_of)
+    # Todos os relógios têm o mesmo custo confirmado pelo fundador (no banco).
+    watch_cost = next(
+        (
+            item["fields"]["cost"]["value"]
+            for item in products
+            if item["category"] == OFFICIAL_CATEGORY
+            and item["fields"]["cost"]["value"] is not None
+        ),
+        None,
+    )
     missing = missing_business_data(products)
     segments = {
         "watches_total": sum(
             item["category"] == OFFICIAL_CATEGORY for item in products
         ),
         "feminine_total": sum(item["collection"] == "feminine" for item in products),
+        "chains": sum(item["subcategory"] == "chain" for item in products),
         "necklaces": sum(item["subcategory"] == "necklace" for item in products),
         "bracelets": sum(item["subcategory"] == "bracelet" for item in products),
         "anklets": sum(item["subcategory"] == "anklet" for item in products),
@@ -311,7 +336,7 @@ def discovery_report() -> dict[str, Any]:
         "name": "VERATUS DATA DISCOVERY",
         "official_commercial_data": {
             "sale_price_brl": f"{OFFICIAL_SALE_PRICE_BRL:.2f}",
-            "product_cost_brl": f"{OFFICIAL_PRODUCT_COST_BRL:.2f}",
+            "product_cost_brl": watch_cost,
             "material": OFFICIAL_MATERIAL,
             "material_label": OFFICIAL_MATERIAL_LABEL,
             "category": OFFICIAL_CATEGORY,
@@ -324,7 +349,7 @@ def discovery_report() -> dict[str, Any]:
             "package": PACKAGE_PROFILE,
             "estimated_watch_dimensions": ESTIMATED_WATCH_DIMENSIONS,
         },
-        "official_economics": calculate_official_economics(),
+        "official_economics": calculate_official_economics(watch_cost),
         "products_total": len(products),
         "products_complete": sum(not item["missing_fields"] for item in products),
         "products_incomplete": sum(bool(item["missing_fields"]) for item in products),

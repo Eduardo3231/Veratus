@@ -86,6 +86,7 @@ def public_catalog(
         "sku",
         "name",
         "editorial_name",
+        "model_name",
         "product_type",
         "category",
         "subcategory",

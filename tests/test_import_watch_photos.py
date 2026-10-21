@@ -18,6 +18,7 @@ def test_photo_is_cropped_stripped_and_recorded(tmp_path: Path, monkeypatch) -> 
     shutil.copy(ROOT / "catalog" / "products.json", catalog)
     monkeypatch.setattr(importer, "CATALOG", catalog)
     monkeypatch.setattr(importer, "OUTPUT_DIR", tmp_path / "watches")
+    monkeypatch.setattr(importer, "SOCIAL_DIR", tmp_path / "social")
     incoming = tmp_path / "incoming"
     incoming.mkdir()
     exif = Image.Exif()
@@ -33,6 +34,11 @@ def test_photo_is_cropped_stripped_and_recorded(tmp_path: Path, monkeypatch) -> 
     with Image.open(tmp_path / "watches" / "ocean-blue.webp") as photo:
         assert photo.size == importer.SIZE
         assert not photo.getexif()
+    # JPEG para o post (a API da Meta só aceita JPEG), também sem EXIF.
+    with Image.open(tmp_path / "social" / "ocean-blue.jpg") as post:
+        assert post.size == importer.SOCIAL_SIZE
+        assert post.format == "JPEG"
+        assert not post.getexif()
     product = next(
         p for p in json.loads(catalog.read_text("utf-8")) if p["id"] == "ocean-blue"
     )

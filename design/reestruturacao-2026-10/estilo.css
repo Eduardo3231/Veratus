@@ -1,0 +1,332 @@
+/* Veratus: prévia da reestruturação do site (14/10/2026). Não publicada.
+   Paleta da marca (AGENTS.md) e dois tipos: Cormorant Garamond nos títulos, Jost no texto. */
+
+:root {
+  --obsidiana: #0d0d0d;
+  --carvao: #2b2b2b;
+  --cinza: #8a867f;
+  --marfim: #f6f4f0;
+  --ouro: #c8a56a;
+  --ouro-claro: #d8b97f;
+  --grafite: #5e5a54; /* texto secundário sobre marfim: contraste 6:1 */
+  --texto-suave: #c4bdb1;
+  --linha: rgba(246, 244, 240, .14);
+  --linha-clara: rgba(13, 13, 13, .16);
+  --serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --sans: "Jost", "Helvetica Neue", Arial, sans-serif;
+  /* Nomes usados pelas regras do primeiro slide, copiadas do landing/styles.css. */
+  --black: #050505;
+  --ivory: #f1ede5;
+  --accent: #c8a56a;
+  --accent-contrast: #0b0b0b;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; background: var(--obsidiana); }
+body { margin: 0; overflow-x: hidden; background: var(--obsidiana); color: var(--marfim); font: 400 1rem/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+body.vista-aberta { overflow: hidden; }
+img, svg { display: block; max-width: 100%; }
+a { color: inherit; text-decoration: none; }
+button { color: inherit; font: inherit; }
+h1, h2, h3, h4, figure { margin: 0; }
+main p, footer p, dialog p, .barra-movel p { margin: 0; }
+ul[role="list"], ol { margin: 0; padding: 0; list-style: none; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--ouro); outline-offset: 4px; }
+.joias :focus-visible { outline-color: var(--obsidiana); }
+.shell { width: min(100% - 80px, 1320px); margin-inline: auto; }
+.pular { position: fixed; z-index: 300; top: 12px; left: 12px; padding: 10px 14px; background: var(--marfim); color: var(--obsidiana); transform: translateY(-160%); }
+.pular:focus { transform: none; }
+
+/* ------------------------------------------------------------------
+   Primeiro slide: mantido. Mesmos valores do landing/styles.css do ar.
+   ------------------------------------------------------------------ */
+.hero { position: relative; isolation: isolate; min-height: 100svh; overflow: hidden; background: var(--black); color: var(--ivory); line-height: 1.55; }
+.hero-still { position: absolute; z-index: -3; inset: -4%; background: #080808 url("../../landing/assets/hero/veratus-hero-alpes-1280.webp") center / cover no-repeat; opacity: .42; filter: saturate(.75) contrast(1.05); animation: hero-drift 28s ease-in-out infinite alternate; }
+@keyframes hero-drift { from { transform: scale(1.02) translate3d(0, 0, 0); } to { transform: scale(1.1) translate3d(-2%, -1.5%, 0); } }
+.hero-veil { position: absolute; z-index: -2; inset: 0; background: linear-gradient(90deg, rgba(5, 5, 5, .88), rgba(5, 5, 5, .57) 55%, rgba(5, 5, 5, .77)); }
+.hero-layout { display: grid; min-height: 100svh; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: center; gap: clamp(30px, 5vw, 90px); padding-top: 110px; padding-bottom: 100px; }
+.hero-copy { position: relative; z-index: 2; max-width: 690px; padding-top: 30px; }
+.hero-copy h1 { margin: 22px 0 30px; color: var(--ivory); font: 500 clamp(5.5rem, 8vw, 9rem)/.78 var(--serif); letter-spacing: -.07em; text-transform: uppercase; }
+.hero-copy h1 em { color: var(--accent); font-weight: 500; }
+.hero-copy > p:last-of-type { max-width: 430px; margin: 1em 0; color: #c2bcb3; font-size: .93rem; }
+.hero .eyebrow { margin: 0; color: var(--accent); font-size: .61rem; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; }
+.status-dot { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--accent); animation: status-pulse 2s ease-in-out infinite; }
+@keyframes status-pulse { 50% { opacity: .35; transform: scale(.7); } }
+.hero-offer { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 30px; padding: 0; list-style: none; }
+.hero-offer li { padding: 8px 14px; border: 1px solid rgba(200, 165, 106, .35); background: rgba(8, 8, 8, .45); color: #d8d1c5; font-size: .58rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; backdrop-filter: blur(8px); }
+.hero-offer b { color: var(--accent); }
+.hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 28px; margin-top: 35px; }
+.hero .button { display: inline-flex; min-height: 52px; align-items: center; justify-content: center; gap: 22px; padding: 0 24px; border: 1px solid transparent; font-size: .61rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; transition: transform .25s, background-color .5s, color .5s; }
+.hero .button:hover { transform: translateY(-3px); }
+.hero .button-accent { background: var(--accent); color: var(--accent-contrast); }
+.hero .text-link { display: inline-flex; width: max-content; align-items: center; gap: 22px; padding-bottom: 5px; border-bottom: 1px solid currentColor; color: var(--accent); font-size: .59rem; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }
+.brand-universe { position: relative; isolation: isolate; display: grid; width: min(100%, 660px); aspect-ratio: 1; place-items: center; margin: 0 auto; }
+.brand-universe__halo { position: absolute; inset: 18%; border-radius: 50%; background: radial-gradient(circle, rgba(200, 165, 106, .18), transparent 65%); filter: blur(28px); }
+.brand-universe__ring { position: absolute; top: 50%; left: 50%; width: 91%; height: 54%; border: 1px solid rgba(200, 165, 106, .42); border-radius: 50%; transform: translate(-50%, -50%) rotate(-18deg); animation: brand-orbit 18s linear infinite; }
+.brand-universe__ring::before, .brand-universe__ring::after { position: absolute; top: 50%; width: 7px; height: 7px; border-radius: 50%; content: ""; background: #e7c582; box-shadow: 0 0 22px rgba(231, 197, 130, .95); }
+.brand-universe__ring::before { left: -3px; }
+.brand-universe__ring::after { right: -3px; width: 3px; height: 3px; }
+.brand-universe__ring--middle { width: 73%; height: 72%; border-color: rgba(200, 165, 106, .28); transform: translate(-50%, -50%) rotate(58deg); animation: brand-orbit-middle 24s linear infinite reverse; }
+.brand-universe__ring--inner { width: 56%; height: 87%; border-color: rgba(200, 165, 106, .16); transform: translate(-50%, -50%) rotate(20deg); animation: brand-orbit-inner 31s linear infinite; }
+.brand-universe__mark { position: relative; z-index: 2; width: 49%; filter: drop-shadow(0 18px 25px rgba(0, 0, 0, .65)); animation: brand-float 5s ease-in-out infinite; }
+.brand-universe__mark img { width: 100%; height: auto; }
+.brand-universe__caption { position: absolute; bottom: 2%; color: #c8a56a; font-size: .58rem; font-weight: 700; letter-spacing: .2em; text-align: center; }
+@keyframes brand-orbit { to { transform: translate(-50%, -50%) rotate(342deg); } }
+@keyframes brand-orbit-middle { to { transform: translate(-50%, -50%) rotate(418deg); } }
+@keyframes brand-orbit-inner { to { transform: translate(-50%, -50%) rotate(380deg); } }
+@keyframes brand-float { 50% { transform: translateY(-13px); } }
+.hero-footer { position: absolute; bottom: 21px; left: 50%; display: flex; justify-content: space-between; transform: translateX(-50%); color: #77726b; font-size: .52rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.hero-footer a { display: flex; gap: 15px; align-items: center; }
+.hero-footer i { color: var(--accent); font-style: normal; }
+
+/* ------------------------------------------------------------------
+   Topo
+   ------------------------------------------------------------------ */
+.topo { position: fixed; z-index: 100; top: 0; right: 0; left: 0; display: flex; height: 84px; align-items: center; gap: 36px; padding: 0 max(40px, calc((100vw - 1320px) / 2)); border-bottom: 1px solid transparent; transition: height .35s, background-color .35s, border-color .35s; }
+.topo.is-rolado { height: 68px; border-color: var(--linha); background: rgba(13, 13, 13, .88); backdrop-filter: blur(16px); }
+.marca { display: inline-flex; align-items: center; gap: 12px; font: 500 .75rem var(--serif); letter-spacing: .26em; }
+.topo .marca { margin-right: auto; }
+.marca img { width: 42px; height: 54px; object-fit: contain; }
+.topo__nav { display: flex; gap: 30px; }
+.topo__nav a { padding: 6px 0; border-bottom: 1px solid transparent; color: #d9d4cb; font-size: .9375rem; transition: color .3s, border-color .3s; }
+.topo__nav a:hover { border-color: var(--ouro); color: var(--marfim); }
+.topo__conversar { display: inline-flex; min-height: 44px; align-items: center; padding: 0 20px; border: 1px solid rgba(200, 165, 106, .7); color: var(--ouro); font-size: .9375rem; font-weight: 500; transition: background-color .3s, color .3s; }
+.topo__conversar:hover { background: var(--ouro); color: var(--obsidiana); }
+
+/* ------------------------------------------------------------------
+   Capítulos
+   ------------------------------------------------------------------ */
+.capitulo { position: relative; padding: clamp(96px, 12vw, 168px) 0; }
+.capitulo__topo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 430px); align-items: end; gap: 20px 56px; margin-bottom: clamp(36px, 5vw, 64px); }
+.capitulo h2 { font: 500 clamp(3.6rem, 10vw, 8.5rem)/.86 var(--serif); letter-spacing: -.035em; }
+
+.botao { display: inline-flex; min-height: 52px; align-items: center; justify-content: center; padding: 0 26px; font-size: 1rem; font-weight: 500; transition: background-color .3s, color .3s; }
+.botao--ouro { background: var(--ouro); color: var(--obsidiana); }
+.botao--ouro:hover { background: var(--ouro-claro); }
+.acao { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 0 16px; border: 1px solid var(--linha); font-size: .9375rem; font-weight: 500; transition: background-color .3s, border-color .3s, color .3s; }
+
+/* Relógios: o preço único é o título secundário do capítulo. */
+.relogios__oferta { padding-bottom: 10px; color: var(--texto-suave); }
+.relogios__oferta p + p { color: var(--cinza); }
+.relogios__preco { margin-bottom: 10px; color: var(--marfim); font: 500 clamp(2.2rem, 3.6vw, 3rem)/1 var(--serif); }
+.relogios__preco span { color: var(--cinza); font: 400 1rem var(--sans); }
+.relogios__filtros { display: flex; align-items: center; gap: 4px 28px; margin-bottom: 32px; padding-bottom: 12px; border-bottom: 1px solid var(--linha); }
+.relogios__filtros button { flex: none; padding: 8px 0; border: 0; border-bottom: 1px solid transparent; background: none; color: var(--cinza); cursor: pointer; font-size: .9375rem; }
+.relogios__filtros button:hover { color: var(--marfim); }
+.relogios__filtros button[aria-pressed="true"] { border-color: var(--ouro); color: var(--marfim); }
+.relogios__contagem { margin-left: auto; color: var(--cinza); font-size: .875rem; white-space: nowrap; }
+.relogios__grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(40px, 4.5vw, 64px) clamp(16px, 2vw, 28px); }
+.relogio__foto { position: relative; display: block; overflow: hidden; aspect-ratio: 1122 / 1402; background: #151412; }
+.relogio__foto img { width: 100%; height: 100%; object-fit: cover; }
+.relogio__info { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 16px; padding-top: 18px; }
+.relogio h3 { font: 500 1.65rem/1.1 var(--serif); }
+.relogio h3 a { background: linear-gradient(var(--ouro), var(--ouro)) 0 100% / 0 1px no-repeat; transition: background-size .35s; }
+.relogio h3 a:hover { background-size: 100% 1px; }
+.relogio__estilo { grid-column: 1; color: var(--cinza); font-size: .875rem; }
+.relogio__preco { grid-column: 2; grid-row: 1; font: 500 1.4rem/1.1 var(--serif); }
+.relogio__acoes { display: flex; grid-column: 1 / -1; gap: 10px; margin-top: 16px; }
+.acao--ver { flex: 1; }
+.acao--ver:hover { border-color: var(--marfim); }
+.acao--pedir { flex: 1; border-color: var(--ouro); background: var(--ouro); color: var(--obsidiana); }
+.acao--pedir:hover { border-color: var(--ouro-claro); background: var(--ouro-claro); }
+
+/* Joias: segundo mundo, em marfim, agrupado por tipo de peça. */
+.joias { background: var(--marfim); color: var(--obsidiana); }
+.joias .shell { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(64px, 8vw, 112px) clamp(16px, 2vw, 28px); }
+.joias .capitulo__topo, .joias__grupo--colares { grid-column: 1 / -1; }
+.joias .capitulo__topo { margin-bottom: 0; }
+.joias__intro { padding-bottom: 10px; color: var(--grafite); font-size: 1.0625rem; }
+.joias__grupo-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 28px; padding-bottom: 12px; border-bottom: 1px solid var(--linha-clara); }
+.joias__grupo-topo h3 { font: 500 clamp(1.9rem, 3vw, 2.5rem)/1 var(--serif); }
+.joias__grupo-topo span { color: var(--grafite); font-size: .875rem; }
+.joias__lista { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 44px clamp(16px, 2vw, 28px); }
+.joias__grupo:not(.joias__grupo--colares) .joias__lista { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.joia--destaque { grid-column: span 2; grid-row: span 2; }
+.joia figure { display: grid; gap: 16px; }
+.joia img { width: 100%; height: auto; aspect-ratio: 1122 / 1402; object-fit: cover; background: #e8e2d8; }
+.joia h4 { font: 500 1.55rem/1.1 var(--serif); }
+.joia--destaque h4 { font-size: clamp(2rem, 3vw, 2.6rem); }
+.joia__tipo { margin-top: 4px; color: var(--grafite); font-size: .875rem; }
+.joia__texto { max-width: 34ch; margin-top: 8px; color: #35322e; font-size: .9375rem; }
+.acao--interesse { min-height: 36px; margin-top: 12px; padding: 0 0 2px; border: 0; border-bottom: 1px solid var(--ouro); justify-content: flex-start; }
+.acao--interesse:hover { border-color: var(--obsidiana); }
+
+/* Como comprar: os quatro passos são uma sequência real. */
+.compra { border-top: 1px solid var(--linha); }
+.compra h2 { margin-bottom: clamp(44px, 6vw, 80px); }
+.compra__passos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; counter-reset: passo; }
+.compra__passos li { padding-top: 22px; border-top: 1px solid var(--linha); counter-increment: passo; }
+.compra__passos li::before { display: block; margin-bottom: 20px; color: var(--ouro); content: counter(passo); font: 500 3.2rem/1 var(--serif); }
+.compra__passos h3 { margin-bottom: 8px; font: 500 1.65rem/1.1 var(--serif); }
+.compra__passos p { max-width: 30ch; color: var(--texto-suave); }
+.compra__nota { margin-top: clamp(40px, 5vw, 64px); color: var(--texto-suave); }
+.compra__nota a, .vista__nota a { margin-left: 6px; border-bottom: 1px solid currentColor; color: var(--ouro); }
+
+/* Rodapé */
+.rodape { padding: clamp(80px, 10vw, 140px) 0 64px; border-top: 1px solid var(--linha); }
+.rodape__chamada { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 32px; padding-bottom: clamp(56px, 7vw, 96px); }
+.rodape__chamada p { max-width: 11ch; font: 500 clamp(2.8rem, 6.5vw, 5.4rem)/.94 var(--serif); letter-spacing: -.025em; }
+.rodape__base { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 28px 56px; padding-top: 32px; border-top: 1px solid var(--linha); color: #a8a196; font-size: .9375rem; }
+.rodape__vendedor { display: flex; flex-wrap: wrap; gap: 4px 24px; font-style: normal; }
+.rodape__vendedor b { color: var(--marfim); font-weight: 500; }
+.rodape__base nav { display: flex; flex-wrap: wrap; gap: 4px 24px; }
+.rodape__base a:hover { color: var(--marfim); }
+.rodape__base small { grid-column: 1 / -1; color: var(--cinza); font-size: .8125rem; }
+
+.barra-movel { display: none; }
+
+/* ------------------------------------------------------------------
+   Vista do relógio: o palco gira o relógio conforme a rolagem.
+   ------------------------------------------------------------------ */
+.vista { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; overflow-y: auto; overscroll-behavior: contain; border: 0; background: var(--obsidiana); color: var(--marfim); }
+.vista::backdrop { background: var(--obsidiana); }
+.vista[open] { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+.vista__topo { position: fixed; z-index: 5; top: 0; right: 0; left: 0; display: flex; align-items: center; justify-content: space-between; padding: 20px max(24px, 3vw); pointer-events: none; }
+.vista__topo > * { pointer-events: auto; }
+.vista__voltar { min-height: 44px; padding: 0 18px; border: 1px solid var(--linha); background: rgba(13, 13, 13, .62); cursor: pointer; font-size: .9375rem; backdrop-filter: blur(10px); transition: border-color .3s; }
+.vista__voltar:hover { border-color: var(--marfim); }
+.vista__posicao { color: var(--cinza); font-size: .875rem; }
+
+.palco { position: sticky; top: 0; display: grid; height: 100dvh; place-items: center; overflow: hidden; isolation: isolate; background: radial-gradient(60% 55% at 16% 24%, rgba(200, 165, 106, .16), transparent 72%), var(--obsidiana); }
+.palco__ambiente { position: absolute; z-index: -2; inset: -12%; background: center / cover no-repeat; opacity: .7; filter: blur(70px) saturate(1.2) brightness(.42); }
+/* O criativo inteiro, como na vitrine, vira um painel com espessura sobre um mostrador. */
+.palco__cena { position: relative; height: min(64dvh, 620px); aspect-ratio: 1122 / 1402; margin-bottom: 8dvh; perspective: 1500px; transform-style: preserve-3d; }
+.palco__chao { position: absolute; bottom: 0; left: 50%; width: 150%; aspect-ratio: 1; transform: translate(-50%, 50%) rotateX(80deg); }
+.palco__mostrador { width: 100%; height: 100%; overflow: visible; transform: rotate(var(--mostrador, 0deg)); }
+.palco__mostrador circle { fill: none; stroke: rgba(200, 165, 106, .32); stroke-width: .5; }
+.palco__mostrador line { stroke: rgba(200, 165, 106, .38); stroke-width: .5; }
+.palco__mostrador line.longa { stroke: rgba(200, 165, 106, .8); stroke-width: 1; }
+.palco__mostrador .pip { fill: #e7c582; stroke: none; }
+.palco__entrada, .palco__giro { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
+/* "backwards": terminada a entrada, nada fica aplicado e o 3D volta a valer. */
+.palco.is-entrando .palco__entrada { animation: palco-entrada 1.1s cubic-bezier(.2, .75, .2, 1) backwards; }
+@keyframes palco-entrada { from { opacity: 0; transform: rotateY(-75deg) translateZ(-160px); } }
+.palco__giro { transform: rotateY(var(--giro, 0deg)) rotateX(var(--incl, 0deg)); }
+.palco__painel { position: absolute; inset: 0; overflow: hidden; background: #151412; box-shadow: 0 0 0 1px rgba(200, 165, 106, .28); }
+.palco__foto { width: 100%; height: 100%; object-fit: cover; }
+.palco__borda { position: absolute; top: 0; width: 16px; height: 100%; background: linear-gradient(90deg, #1a1712, #4a3f2e 50%, #1a1712); }
+.palco__borda--direita { left: 100%; transform: rotateY(90deg); transform-origin: left center; }
+.palco__borda--esquerda { right: 100%; transform: rotateY(-90deg); transform-origin: right center; }
+.palco__reflexo { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 36%, rgba(255, 232, 190, .1) 44%, rgba(255, 246, 228, .34) 50%, rgba(255, 232, 190, .1) 56%, transparent 64%) no-repeat; background-position: var(--reflexo, 50%) 0; background-size: 280% 100%; mix-blend-mode: screen; pointer-events: none; }
+.palco__dica { position: absolute; bottom: 8%; left: 50%; display: flex; align-items: center; gap: 10px; color: #d9d2c5; font-size: .875rem; transform: translateX(-50%); transition: opacity .5s; }
+.palco__dica::before { width: 1px; height: 22px; content: ""; background: linear-gradient(var(--ouro), transparent); animation: dica 1.8s ease-in-out infinite; }
+@keyframes dica { 50% { transform: translateY(6px); opacity: .4; } }
+.palco.is-girado .palco__dica { opacity: 0; }
+.palco__legenda { position: absolute; bottom: 22px; left: max(24px, 3vw); color: var(--cinza); font-size: .8125rem; }
+
+.vista__texto { padding: 0 max(24px, 4.5vw) 0 max(24px, 3vw); }
+.vista__bloco { display: flex; min-height: 62dvh; max-width: 470px; flex-direction: column; justify-content: center; padding: 96px 0 40px; }
+.vista__bloco--abertura { min-height: 100dvh; }
+.vista__estilo { margin-bottom: 12px; color: var(--cinza); font-size: .9375rem; }
+.vista h2:focus { outline: none; }
+.vista h2 { margin-bottom: 20px; font: 500 clamp(3.2rem, 5.2vw, 5rem)/.9 var(--serif); letter-spacing: -.03em; }
+.vista__descricao { max-width: 36ch; color: var(--texto-suave); font-size: 1.0625rem; }
+.vista__preco { margin: 32px 0 26px; padding-top: 26px; border-top: 1px solid var(--linha); }
+.vista__preco b { display: block; font: 500 2.75rem/1 var(--serif); }
+.vista__preco span { display: block; margin-top: 10px; color: var(--texto-suave); font-size: .9375rem; }
+.vista__bloco .botao { align-self: flex-start; }
+.vista h3 { margin-bottom: 26px; font: 500 2rem/1.1 var(--serif); }
+.vista__passos { display: grid; gap: 18px; counter-reset: etapa; }
+.vista__passos li { display: grid; grid-template-columns: 34px minmax(0, 1fr); color: var(--texto-suave); counter-increment: etapa; }
+.vista__passos li::before { color: var(--ouro); content: counter(etapa); font: 500 1.45rem/1.15 var(--serif); }
+.vista__nota { margin-top: 30px; color: var(--cinza); font-size: .9375rem; }
+.vista__outros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px 12px; }
+.vista__outros button { display: grid; width: 100%; justify-items: center; gap: 8px; padding: 0; border: 0; background: none; color: var(--texto-suave); cursor: pointer; font-size: .8125rem; line-height: 1.3; text-align: center; }
+.mini { position: relative; display: block; width: 100%; max-width: 84px; aspect-ratio: 1; overflow: hidden; border: 1px solid var(--linha); border-radius: 50%; background: #151412; transition: border-color .3s; }
+.mini img { position: absolute; top: calc(50% - var(--fy) * 312.4%); left: calc(50% - var(--fx) * 250%); width: 250%; max-width: none; }
+.vista__outros button:hover .mini, .vista__outros button:focus-visible .mini { border-color: var(--ouro); }
+.vista__barra { display: none; }
+
+/* ------------------------------------------------------------------
+   Telas menores
+   ------------------------------------------------------------------ */
+@media (max-width: 980px) {
+  .hero-layout { grid-template-columns: .95fr 1.05fr; }
+  .hero-copy h1 { font-size: clamp(4.5rem, 8vw, 7rem); }
+  .capitulo__topo { grid-template-columns: 1fr; }
+  .relogios__grade, .joias__lista { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .joias .shell { display: block; }
+  .joias__grupo { margin-top: 72px; }
+  .compra__passos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 24px; }
+}
+
+@media (max-width: 900px) {
+  .vista[open] { display: block; }
+  .palco { z-index: 2; height: 56svh; padding-top: 44px; }
+  .palco__cena { height: 34svh; margin-bottom: 8svh; }
+  .palco__dica { bottom: 12px; left: 16px; font-size: .8125rem; transform: none; }
+  .palco__legenda { right: 16px; bottom: 12px; left: auto; font-size: .75rem; }
+  .vista__topo { padding: 12px 16px; }
+  .vista__texto { padding: 30px 16px 120px; }
+  .vista__bloco, .vista__bloco--abertura { min-height: 0; max-width: none; padding: 0 0 52px; }
+  .vista__bloco--abertura .botao { display: none; }
+  .vista h2 { font-size: clamp(2.8rem, 12vw, 3.6rem); }
+  .vista__preco { margin: 24px 0 0; }
+  .vista__barra { position: fixed; z-index: 6; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--linha); background: rgba(13, 13, 13, .96); }
+  .vista__barra b { display: block; font: 500 1.6rem/1 var(--serif); }
+  .vista__barra span { color: var(--cinza); font-size: .8125rem; }
+  .vista__barra .botao { min-height: 48px; padding: 0 20px; }
+}
+
+@media (max-width: 680px) {
+  .shell { width: min(100% - 32px, 1320px); }
+  .hero-layout { display: flex; min-height: 100svh; flex-direction: column; justify-content: flex-start; gap: 20px; padding-top: 112px; padding-bottom: 85px; }
+  .hero-copy { width: 100%; }
+  .hero-copy h1 { margin: 15px 0 20px; font-size: clamp(3.45rem, 13.1vw, 5.1rem); line-height: .82; }
+  .hero-copy > p:last-of-type { max-width: 360px; margin: 0; font-size: .82rem; }
+  .hero-offer { margin: 12px 0 24px; }
+  .hero-offer li { padding: 7px 10px; font-size: .5rem; }
+  .hero-actions { margin-top: 22px; }
+  .hero-actions .text-link { display: none; }
+  .brand-universe { width: min(100%, 370px); margin-top: -15px; }
+  .brand-universe__caption { bottom: 0; font-size: .45rem; letter-spacing: .13em; }
+  .hero-footer { width: calc(100% - 32px); }
+  .hero-footer > span { display: none; }
+  .hero-footer a { margin-left: auto; }
+  .hero-still { background-image: url("../../landing/assets/hero/veratus-hero-alpes-720.webp"); background-position: 60% center; }
+
+  .topo { height: 64px; gap: 18px; padding: 0 16px; }
+  .topo.is-rolado { height: 60px; }
+  .marca img { width: 34px; height: 44px; }
+  .topo .marca span, .topo__extra { display: none; }
+  .topo__nav { gap: 18px; }
+  .topo__conversar { min-height: 40px; padding: 0 14px; }
+
+  .capitulo { padding: 88px 0; }
+  .capitulo h2 { font-size: clamp(3.6rem, 19vw, 5rem); }
+  .relogios__filtros { gap: 22px; margin-right: -16px; overflow-x: auto; scrollbar-width: none; }
+  .relogios__contagem { padding-right: 16px; }
+  .relogios__grade { gap: 36px 12px; }
+  .relogio__info { grid-template-columns: 1fr; padding-top: 12px; }
+  .relogio h3 { font-size: 1.3rem; }
+  .relogio__estilo { font-size: .8125rem; }
+  .relogio__preco { grid-column: 1; grid-row: auto; margin-top: 6px; font-size: 1.15rem; }
+  .relogio__acoes { margin-top: 12px; }
+  .acao--ver { display: none; }
+  .joias__lista { gap: 32px 12px; }
+  .joia--destaque { grid-column: 1 / -1; grid-row: auto; }
+  .joia figure { gap: 12px; }
+  .joia h4 { font-size: 1.3rem; }
+  .joia__texto { display: none; }
+  .joia--destaque .joia__texto { display: block; }
+  .compra__passos { grid-template-columns: 1fr; gap: 0; }
+  .compra__passos li { display: grid; grid-template-columns: 52px minmax(0, 1fr); padding: 20px 0; }
+  .compra__passos li::before { grid-row: span 2; margin: 0; font-size: 2.4rem; }
+  .rodape { padding-bottom: 110px; }
+  .rodape__base { grid-template-columns: 1fr; }
+  .barra-movel { position: fixed; z-index: 90; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--linha); background: rgba(13, 13, 13, .94); transform: translateY(110%); transition: transform .35s; backdrop-filter: blur(14px); }
+  .barra-movel.is-visivel { transform: none; }
+  .barra-movel p { color: var(--texto-suave); font-size: .9375rem; }
+  .barra-movel b { color: var(--marfim); font: 500 1.25rem var(--serif); }
+  .barra-movel .botao { min-height: 44px; padding: 0 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .hero-still { inset: 0; animation: none; }
+  .brand-universe__ring, .brand-universe__mark, .status-dot, .palco__dica::before { animation: none; }
+  .palco.is-entrando .palco__entrada { animation: none; }
+  .palco__dica { display: none; }
+  .topo, .barra-movel, .hero .button { transition: none; }
+}

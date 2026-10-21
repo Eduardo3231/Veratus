@@ -1,0 +1,291 @@
+/* Veratus, recriação da landing pela skill img-to-html (reference.webp + wireframe.txt).
+   Cada região do wireframe é uma classe; cada tag tipada, uma classe utilitária.
+   Cormorant Garamond nos títulos, Jost no texto (Google Fonts, no index.html). */
+
+:root {
+  /* Paleta da marca (AGENTS.md) */
+  --obsidiana: #0d0d0d;
+  --carvao: #2b2b2b;
+  --cinza: #8a867f;
+  --marfim: #f6f4f0;
+  --ouro: #c8a56a;
+  --ouro-claro: #d8b97f;
+  /* Tons medidos na referência */
+  --preto: #050505;
+  --fundo-foto: #080808;
+  --marfim-hero: #f1ede5;
+  --grafite: #5e5a54; /* texto secundário sobre marfim: contraste 6:1 */
+  --texto-suave: #c4bdb1;
+  --texto-hero: #c2bcb3;
+  --texto-chip: #d8d1c5;
+  --texto-nav: #d9d4cb;
+  --texto-pe: var(--cinza); /* o #77726b da referência ficava em 3,7–4,1:1 sobre o hero, abaixo do AA (landing, 17/10) */
+  --texto-base: #a8a196;
+  --texto-joia: #35322e;
+  --quadro-relogio: #151412;
+  --quadro-joia: #e8e2d8;
+  --linha: rgba(246, 244, 240, .14);
+  --linha-clara: rgba(13, 13, 13, .16);
+  --borda-chip: rgba(200, 165, 106, .35);
+  --borda-conversar: rgba(200, 165, 106, .7);
+  --veu: linear-gradient(90deg, rgba(5, 5, 5, .88), rgba(5, 5, 5, .57) 55%, rgba(5, 5, 5, .77));
+  /* Tipografia */
+  --serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --sans: "Jost", "Helvetica Neue", Arial, sans-serif;
+  /* Medidas */
+  --largura: 1320px;
+  --gutter: 80px;
+  --nav-altura: 84px;
+  --respiro-capitulo: clamp(96px, 12vw, 168px);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; background: var(--obsidiana); }
+body { margin: 0; overflow-x: hidden; background: var(--obsidiana); color: var(--marfim); font: 400 1rem/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+img { display: block; max-width: 100%; }
+a { color: inherit; text-decoration: none; }
+h1, h2, h3, h4, p, figure { margin: 0; }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+:focus-visible { outline: 2px solid var(--ouro); outline-offset: 4px; }
+.joias :focus-visible { outline-color: var(--obsidiana); }
+.shell { width: min(100% - var(--gutter), var(--largura)); margin-inline: auto; }
+.pular { position: fixed; z-index: 300; top: 12px; left: 12px; padding: 10px 14px; background: var(--marfim); color: var(--obsidiana); transform: translateY(-160%); }
+.pular:focus { transform: none; }
+
+/* ------------------------------------------------------------------
+   Tags tipadas do wireframe: família e peso; o tamanho vem da região
+   ------------------------------------------------------------------ */
+.h1 { margin: 22px 0 30px; color: var(--marfim-hero); font: 500 clamp(5.5rem, 8vw, 9rem)/.78 var(--serif); letter-spacing: -.07em; text-transform: uppercase; }
+.h1 em { color: var(--ouro); font-weight: 500; }
+.h2 { font: 500 clamp(3.6rem, 10vw, 8.5rem)/.86 var(--serif); letter-spacing: -.035em; }
+.h3 { font: 500 1.65rem/1.1 var(--serif); }
+.t1 { font: 500 1.4rem/1.1 var(--serif); }
+.t2 { font-family: var(--sans); font-weight: 400; }
+.t3 { color: var(--cinza); font-family: var(--sans); font-size: .875rem; font-weight: 400; }
+.eyb { color: var(--ouro); font-family: var(--sans); font-size: .61rem; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; }
+.chip { padding: 8px 14px; border: 1px solid var(--borda-chip); background: rgba(8, 8, 8, .45); color: var(--texto-chip); font-size: .58rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; backdrop-filter: blur(8px); }
+.chip b { color: var(--ouro); }
+.btn { display: inline-flex; min-height: 52px; align-items: center; justify-content: center; padding: 0 26px; background: var(--ouro); color: var(--obsidiana); font-size: 1rem; font-weight: 500; transition: background-color .3s, border-color .3s, transform .25s; }
+.btn:hover { border-color: var(--ouro-claro); background: var(--ouro-claro); }
+.btn2 { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 0 16px; border: 1px solid var(--linha); font-size: .9375rem; font-weight: 500; transition: background-color .3s, border-color .3s, color .3s; }
+.btn2:hover { border-color: var(--marfim); }
+.lnk { transition: color .3s, border-color .3s; }
+.ico { flex-shrink: 0; }
+.img { display: block; max-width: 100%; }
+.bg { pointer-events: none; } /* camada decorativa: não intercepta clique nem toque */
+.ico--marca { display: block; width: 42px; height: 54px; object-fit: contain; }
+.ico--ponto { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--ouro); animation: pulso 2s ease-in-out infinite; }
+@keyframes pulso { 50% { opacity: .35; transform: scale(.7); } }
+
+/* ------------------------------------------------------------------
+   hero: [bg:montanha] sob o véu, texto à esquerda e universo à direita
+   ------------------------------------------------------------------ */
+.hero { position: relative; z-index: 1; isolation: isolate; min-height: 100svh; overflow: hidden; background: var(--preto); color: var(--marfim-hero); line-height: 1.55; }
+/* A foto como está, apagada pela opacidade e pelo véu */
+.hero::before { position: absolute; z-index: -2; inset: -4%; content: ""; background: var(--fundo-foto) url("hero/veratus-hero-alpes-1280.webp") center / cover no-repeat; opacity: .42; filter: saturate(.75) contrast(1.05); animation: deriva 28s ease-in-out infinite alternate; }
+.hero::after { position: absolute; z-index: -1; inset: 0; content: ""; background: var(--veu); }
+@keyframes deriva { from { transform: scale(1.02) translate3d(0, 0, 0); } to { transform: scale(1.1) translate3d(-2%, -1.5%, 0); } }
+.hero__layout { display: grid; min-height: 100svh; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: center; gap: clamp(30px, 5vw, 90px); padding-top: 110px; padding-bottom: 100px; }
+.hero__texto { position: relative; z-index: 2; max-width: 690px; padding-top: 30px; }
+.hero__texto > .t2 { max-width: 430px; margin: 1em 0; color: var(--texto-hero); font-size: .93rem; }
+.hero__chips { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 30px; }
+.hero__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 28px; margin-top: 35px; }
+.hero .btn { gap: 22px; padding: 0 24px; border: 1px solid transparent; color: #0b0b0b; font-size: .61rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.hero .btn:hover { border-color: transparent; background: var(--ouro); transform: translateY(-3px); }
+.hero__acoes .lnk { display: inline-flex; width: max-content; align-items: center; gap: 22px; padding-bottom: 5px; border-bottom: 1px solid currentColor; color: var(--ouro); font-size: .59rem; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }
+.hero__pe { position: absolute; bottom: 21px; left: 50%; display: flex; justify-content: space-between; transform: translateX(-50%); color: var(--texto-pe); font-size: .52rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.hero__pe .eyb { color: inherit; font-size: inherit; letter-spacing: inherit; }
+.hero__pe .lnk { display: flex; align-items: center; gap: 15px; }
+.hero__pe i { color: var(--ouro); font-style: normal; }
+
+/* nav: fixa e transparente sobre o hero; ganha fundo depois da primeira rolagem (app.js) */
+.nav { position: fixed; z-index: 100; top: 0; right: 0; left: 0; display: flex; height: var(--nav-altura); align-items: center; gap: 36px; padding: 0 max(40px, calc((100vw - var(--largura)) / 2)); border-bottom: 1px solid transparent; color: var(--marfim); line-height: 1.6; transition: height .35s, background-color .35s, border-color .35s; }
+.nav.is-rolado { height: 68px; border-color: var(--linha); background: rgba(13, 13, 13, .88); backdrop-filter: blur(16px); }
+.nav .marca { margin-right: auto; }
+.nav__links { display: flex; gap: 30px; }
+.nav__links .lnk { padding: 6px 0; border-bottom: 1px solid transparent; color: var(--texto-nav); font-size: .9375rem; }
+.nav__links .lnk:hover { border-color: var(--ouro); color: var(--marfim); }
+.nav .btn2 { padding: 0 20px; border-color: var(--borda-conversar); color: var(--ouro); }
+.nav .btn2:hover { background: var(--ouro); color: var(--obsidiana); }
+
+/* marca: [ico:marca] + VERATUS, no topo e na base */
+.marca { display: inline-flex; align-items: center; gap: 12px; }
+.marca .t3 { color: inherit; font: 500 .75rem var(--serif); letter-spacing: .26em; }
+
+/* universo: [bg:aneis] em CSS com o [img:simbolo] no centro */
+.universo { position: relative; isolation: isolate; display: grid; width: min(100%, 660px); aspect-ratio: 1; place-items: center; margin: 0 auto; }
+.aneis { position: absolute; inset: 0; }
+.aneis__halo { position: absolute; inset: 18%; border-radius: 50%; background: radial-gradient(circle, rgba(200, 165, 106, .18), transparent 65%); filter: blur(28px); }
+.anel { position: absolute; top: 50%; left: 50%; width: 91%; height: 54%; border: 1px solid rgba(200, 165, 106, .42); border-radius: 50%; transform: translate(-50%, -50%) rotate(-18deg); animation: orbita-fora 18s linear infinite; }
+.anel::before, .anel::after { position: absolute; top: 50%; width: 7px; height: 7px; border-radius: 50%; content: ""; background: #e7c582; box-shadow: 0 0 22px rgba(231, 197, 130, .95); }
+.anel::before { left: -3px; }
+.anel::after { right: -3px; width: 3px; height: 3px; }
+.anel--meio { width: 73%; height: 72%; border-color: rgba(200, 165, 106, .28); transform: translate(-50%, -50%) rotate(58deg); animation: orbita-meio 24s linear infinite reverse; }
+.anel--dentro { width: 56%; height: 87%; border-color: rgba(200, 165, 106, .16); transform: translate(-50%, -50%) rotate(20deg); animation: orbita-dentro 31s linear infinite; }
+@keyframes orbita-fora { to { transform: translate(-50%, -50%) rotate(342deg); } }
+@keyframes orbita-meio { to { transform: translate(-50%, -50%) rotate(418deg); } }
+@keyframes orbita-dentro { to { transform: translate(-50%, -50%) rotate(380deg); } }
+.img--simbolo { position: relative; z-index: 2; display: block; width: 49%; height: auto; aspect-ratio: 1; filter: drop-shadow(0 18px 25px rgba(0, 0, 0, .65)); animation: flutua 5s ease-in-out infinite; }
+@keyframes flutua { 50% { transform: translateY(-13px); } }
+.universo .eyb { position: absolute; bottom: 2%; font-size: .58rem; text-align: center; }
+
+/* ------------------------------------------------------------------
+   Capítulos: relogios, joias e compra
+   ------------------------------------------------------------------ */
+.relogios, .joias, .compra { position: relative; padding: var(--respiro-capitulo) 0; scroll-margin-top: var(--nav-altura); }
+.relogios { background: var(--obsidiana); }
+.grupo { scroll-margin-top: var(--nav-altura); }
+
+/* cap-topo: título à esquerda, oferta ou descrição numa coluna de 430 px */
+.cap-topo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 430px); align-items: end; gap: 20px 56px; margin-bottom: clamp(36px, 5vw, 64px); }
+.cap-topo__lado { padding-bottom: 10px; color: var(--cinza); }
+.cap-topo .t1 { margin-bottom: 10px; color: var(--marfim); font-size: clamp(2.2rem, 3.6vw, 3rem); line-height: 1; }
+.cap-topo .t1 .t3 { font-size: 1rem; }
+
+/* índice dos grupos de relógio */
+.indice { display: flex; flex-wrap: wrap; gap: 4px 32px; margin-bottom: clamp(48px, 6vw, 72px); }
+.indice .lnk { padding: 6px 0; border-bottom: 1px solid transparent; color: var(--texto-suave); font-size: .9375rem; }
+.indice .lnk:hover { border-color: var(--ouro); color: var(--marfim); }
+.indice span { margin-left: 4px; color: var(--cinza); font-size: .8125rem; }
+
+/* grupo: título com a contagem sobre uma linha de 1 px */
+.grupo + .grupo { margin-top: clamp(72px, 8vw, 112px); }
+.grupo__topo { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 28px; padding-bottom: 12px; border-bottom: 1px solid var(--linha); }
+.grupo__topo .h3 { font-size: clamp(1.9rem, 3vw, 2.5rem); line-height: 1; }
+.relogios .grupo__lista { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(40px, 4.5vw, 64px) clamp(16px, 2vw, 28px); }
+
+/* card: relógio no quadro escuro 1122/1402, nome, preço e duas ações */
+.card__foto { position: relative; display: block; overflow: hidden; aspect-ratio: 1122 / 1402; background: var(--quadro-relogio); }
+.card__foto img { width: 100%; height: 100%; object-fit: cover; }
+.card__info { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 16px; padding-top: 18px; }
+.card .h3 a { background: linear-gradient(var(--ouro), var(--ouro)) 0 100% / 0 1px no-repeat; transition: background-size .35s; }
+.card .h3 a:hover { background-size: 100% 1px; }
+.card .t3 { grid-column: 1; }
+.card .t1 { grid-column: 2; grid-row: 1; }
+.card__acoes { display: flex; grid-column: 1 / -1; gap: 10px; margin-top: 16px; }
+.card .btn2, .card .btn { flex: 1; min-height: 44px; padding: 0 16px; font-size: .9375rem; }
+.card .btn { border: 1px solid var(--ouro); }
+
+/* joias: segundo mundo, em marfim */
+.joias { background: var(--marfim); color: var(--obsidiana); }
+.joias .cap-topo > .t2 { padding-bottom: 10px; color: var(--grafite); font-size: 1.0625rem; }
+.joias .grupo__topo { border-color: var(--linha-clara); }
+.joias .grupo__topo .t3 { color: var(--grafite); }
+.joias__grupos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(72px, 8vw, 112px) clamp(16px, 2vw, 28px); }
+.joias__grupos .grupo + .grupo { margin-top: 0; }
+.joias .grupo--largo { grid-column: 1 / -1; }
+.joias .grupo__lista { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 44px clamp(16px, 2vw, 28px); }
+.joias .grupo--largo .grupo__lista { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* card2: joia em marfim; o "Tenho interesse" alinha na fileira, qualquer que seja o texto */
+.card2 figure { display: grid; height: 100%; grid-template-rows: auto 1fr; gap: 16px; }
+.card2__foto { display: block; aspect-ratio: 1122 / 1402; background: var(--quadro-joia); }
+.card2__foto img, .card2__vazio { display: block; width: 100%; height: 100%; object-fit: cover; }
+.card2 figcaption { display: flex; flex-direction: column; align-items: flex-start; }
+.card2 .h3 { font-size: 1.55rem; }
+.card2 .t3 { margin-top: 4px; color: var(--grafite); }
+.card2 .t2 { max-width: 34ch; margin: 8px 0 4px; color: var(--texto-joia); font-size: .9375rem; }
+.card2 .lnk { display: inline-flex; min-height: 36px; align-items: center; margin-top: auto; padding: 12px 0 2px; border-bottom: 1px solid var(--ouro); font-size: .9375rem; font-weight: 500; }
+.card2 .lnk:hover { border-color: var(--obsidiana); }
+
+/* compra: quatro passos com o número escrito no HTML */
+.compra { border-top: 1px solid var(--linha); background: var(--obsidiana); }
+.compra .h2 { margin-bottom: clamp(44px, 6vw, 80px); }
+.compra__passos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; }
+.card3 { padding-top: 22px; border-top: 1px solid var(--linha); }
+.card3 .t1 { margin-bottom: 20px; color: var(--ouro); font-size: 3.2rem; line-height: 1; }
+.card3 .h3 { margin-bottom: 8px; }
+.card3 .t2 { max-width: 30ch; color: var(--texto-suave); }
+.compra__nota { margin-top: clamp(40px, 5vw, 64px); color: var(--texto-suave); }
+.compra__nota .lnk { margin-left: 6px; border-bottom: 1px solid currentColor; color: var(--ouro); }
+
+/* ------------------------------------------------------------------
+   rodape: chamada e base com marca, vendedor e links
+   ------------------------------------------------------------------ */
+.rodape { padding: clamp(80px, 10vw, 140px) 0 64px; border-top: 1px solid var(--linha); background: var(--obsidiana); }
+.chamada { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 32px; padding-bottom: clamp(56px, 7vw, 96px); }
+.chamada .t1 { max-width: 11ch; font-size: clamp(2.8rem, 6.5vw, 5.4rem); line-height: .94; letter-spacing: -.025em; }
+.base { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 28px 56px; padding-top: 32px; border-top: 1px solid var(--linha); color: var(--texto-base); font-size: .9375rem; }
+.vendedor { display: flex; flex-wrap: wrap; gap: 4px 24px; font-style: normal; }
+.vendedor .t3 { color: inherit; font-size: inherit; }
+.vendedor b.t3 { color: var(--marfim); font-weight: 500; }
+.base__links { display: flex; flex-wrap: wrap; gap: 4px 24px; }
+.base .lnk:hover { color: var(--marfim); }
+.base > .t3 { grid-column: 1 / -1; font-size: .8125rem; }
+
+/* ------------------------------------------------------------------
+   Telas menores: os mesmos cortes da landing (980 e 680 px)
+   ------------------------------------------------------------------ */
+@media (max-width: 980px) {
+  .hero__layout { grid-template-columns: .95fr 1.05fr; }
+  .h1 { font-size: clamp(4.5rem, 8vw, 7rem); }
+  .cap-topo { grid-template-columns: 1fr; }
+  .joias__grupos { grid-template-columns: 1fr; }
+  .joias .grupo--largo .grupo__lista { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .compra__passos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 24px; }
+}
+
+@media (max-width: 680px) {
+  :root { --gutter: 32px; --nav-altura: 64px; }
+  /* hero em coluna */
+  .hero::before { background-image: url("hero/veratus-hero-alpes-720.webp"); background-position: 60% center; }
+  .hero__layout { display: flex; min-height: 100svh; flex-direction: column; justify-content: flex-start; gap: 20px; padding-top: 112px; padding-bottom: 85px; }
+  .hero__texto { width: 100%; }
+  .h1 { margin: 15px 0 20px; font-size: clamp(3.45rem, 13.1vw, 5.1rem); line-height: .82; }
+  .hero__texto > .t2 { max-width: 360px; margin: 0; font-size: .82rem; }
+  .hero__chips { margin: 12px 0 24px; }
+  .chip { padding: 7px 10px; font-size: .5rem; }
+  .hero__acoes { margin-top: 22px; }
+  .hero__acoes .lnk { display: none; }
+  .universo { width: min(100%, 370px); margin-top: -15px; }
+  .universo .eyb { bottom: 0; font-size: .45rem; letter-spacing: .13em; }
+  .hero__pe > .eyb { display: none; }
+  /* alvo de 44 px sem mexer no desenho do slide */
+  .hero__pe .lnk { margin-left: auto; padding: 22px 0 10px; margin-block: -22px -10px; }
+
+  .nav { gap: 18px; padding: 0 16px; }
+  .nav.is-rolado { height: 60px; }
+  .marca .ico--marca { width: 34px; height: 44px; }
+  .nav .marca .t3, .nav__extra { display: none; }
+  /* alvos de toque de 44 px: logo, menu e Conversar */
+  .nav .marca { min-width: 44px; }
+  .nav__links { gap: 18px; }
+  .nav__links .lnk { padding: 10px 8px; margin-inline: -8px; }
+  .nav .btn2 { min-height: 44px; padding: 0 14px; }
+
+  .relogios, .joias, .compra { padding: 88px 0; }
+  .h2 { font-size: clamp(3.6rem, 19vw, 5rem); }
+  .indice { gap: 4px 24px; margin-bottom: 40px; }
+  .indice .lnk { padding-block: 10px; margin-block: -4px; }
+  .grupo + .grupo { margin-top: 64px; }
+  .grupo__topo { margin-bottom: 20px; }
+  /* relógios em trilho horizontal, um card e um pedaço do próximo; a folga de 8 px não corta o anel de foco */
+  .relogios .grupo__lista { display: flex; gap: 12px; margin: 0 -8px -8px; padding: 0 8px 8px; overflow-x: auto; overscroll-behavior-x: contain; scroll-padding-left: 8px; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .relogios .grupo__lista::-webkit-scrollbar { display: none; }
+  .card { flex: 0 0 76%; scroll-snap-align: start; }
+  .card__info { padding-top: 14px; }
+  .card .h3 { font-size: 1.4rem; }
+  .card .t1 { font-size: 1.2rem; }
+  .card__acoes { margin-top: 14px; }
+  /* joias em duas colunas, sem o texto longo */
+  .joias .grupo__lista { gap: 32px 12px; }
+  .card2 figure { gap: 12px; }
+  .card2 .h3 { font-size: 1.3rem; }
+  .card2 .t2 { display: none; }
+  .card2 .lnk { min-height: 44px; }
+  /* passos em uma coluna, número ao lado */
+  .compra__passos { grid-template-columns: 1fr; gap: 0; }
+  .card3 { display: grid; grid-template-columns: 52px minmax(0, 1fr); padding: 20px 0; }
+  .card3 .t1 { grid-row: span 2; margin: 0; font-size: 2.4rem; }
+  /* links de 44 px na base; o row-gap menor mantém o respiro entre os blocos */
+  .base { grid-template-columns: 1fr; row-gap: 18px; }
+  .vendedor, .base__links { align-items: center; row-gap: 0; }
+  .vendedor .lnk, .base__links .lnk { display: inline-flex; min-height: 44px; align-items: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .hero::before { inset: 0; animation: none; }
+  .anel, .img--simbolo, .ico--ponto { animation: none; }
+  .nav, .btn, .hero .btn { transition: none; }
+}

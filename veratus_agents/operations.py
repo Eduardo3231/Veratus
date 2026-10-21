@@ -46,6 +46,7 @@ class ApprovalType(StrEnum):
     PUBLISH_APPROVAL = "PUBLISH_APPROVAL"
     DESTRUCTIVE_ACTION = "DESTRUCTIVE_ACTION"
     CREDENTIAL_CHANGE = "CREDENTIAL_CHANGE"
+    AUTONOMY_CHANGE = "AUTONOMY_CHANGE"
 
 
 class ApprovalStatus(StrEnum):
@@ -341,7 +342,107 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
             "attribution-anomaly",
         ),
     ),
+    # Papéis aprovados pelo fundador em 2026-10-13 (seção 0 do prompt de canais).
+    # Nenhum publica, gasta ou envia marketing; CONVERSE e CREATE_PAYMENT_LINK
+    # seguem o nível do canal e SCHEDULE_APPROVED_CONTENT só publica item aprovado.
+    "customer-supervisor": AgentDefinition(
+        "customer-supervisor",
+        "Customer Supervisor",
+        2,
+        "customer",
+        "general-manager",
+        frozenset({"READ_PRODUCT", "READ_ORDERS", "CONVERSE", "HANDOFF", "REPORT"}),
+    ),
+    "sales-agent": AgentDefinition(
+        "sales-agent",
+        "Sales Agent V2",
+        3,
+        "customer",
+        "customer-supervisor",
+        frozenset(
+            {
+                "READ_PRODUCT",
+                "CONVERSE",
+                "CREATE_ORDER_DRAFT",
+                "CREATE_PAYMENT_LINK",
+                "REPORT",
+            }
+        ),
+    ),
+    "aftersales-agent": AgentDefinition(
+        "aftersales-agent",
+        "Aftersales Agent",
+        3,
+        "customer",
+        "customer-supervisor",
+        frozenset({"READ_ORDERS", "CONVERSE", "REPORT"}),
+    ),
+    "social-media-worker": AgentDefinition(
+        "social-media-worker",
+        "Social Media Worker",
+        2,
+        "social",
+        "general-manager",
+        frozenset(
+            {
+                "READ_PRODUCT",
+                "CREATE_DRAFT",
+                "SCHEDULE_APPROVED_CONTENT",
+                "READ_INSIGHTS",
+                "REPORT",
+            }
+        ),
+    ),
 }
+
+# Permissões que dependem de um estado externo ao registro.
+CHANNEL_GATED_PERMISSIONS = frozenset({"CONVERSE", "CREATE_PAYMENT_LINK"})
+APPROVAL_GATED_PERMISSIONS = frozenset({"SCHEDULE_APPROVED_CONTENT"})
+FORBIDDEN_FOR_NEW_ROLES = frozenset(
+    {"PUBLISH", "SPEND", "SEND_MARKETING", "WRITE_PRICE", "EXTERNAL_WRITE"}
+)
+# Os papéis de 2026-10-13: mesmo com o registro alterado, nunca recebem as
+# permissões de FORBIDDEN_FOR_NEW_ROLES em tempo de execução.
+NEW_ROLE_IDS = frozenset(
+    {"customer-supervisor", "sales-agent", "aftersales-agent", "social-media-worker"}
+)
+
+
+def _forbidden_for_role(agent_id: str, permission: str) -> bool:
+    return agent_id in NEW_ROLE_IDS and permission in FORBIDDEN_FOR_NEW_ROLES
+
+
+def permission_allowed(
+    agent_id: str,
+    permission: str,
+    *,
+    channel_mode: str | None = None,
+    risk: int | None = None,
+    item_status: str | None = None,
+) -> bool:
+    """Permissão do registro somada ao nível do canal ou à aprovação do item.
+
+    ``CONVERSE`` só envia sozinho em ``AUTO_SAFE`` (risco 0) ou ``AUTO``
+    (risco até 1); ``CREATE_PAYMENT_LINK`` só em ``AUTO``;
+    ``SCHEDULE_APPROVED_CONTENT`` só para item ``APPROVED``. Os papéis novos
+    nunca recebem publicar, gastar, marketing, preço ou escrita externa.
+    """
+    if _forbidden_for_role(agent_id, permission):
+        return False
+    definition = AGENT_REGISTRY.get(agent_id)
+    if definition is None or permission not in definition.permissions:
+        return False
+    if permission == "CONVERSE":
+        level = risk if risk is not None else 0
+        return (channel_mode == "AUTO_SAFE" and level == 0) or (
+            channel_mode == "AUTO" and level <= 1
+        )
+    if permission == "CREATE_PAYMENT_LINK":
+        return channel_mode == "AUTO"
+    if permission in APPROVAL_GATED_PERMISSIONS:
+        return item_status == "APPROVED"
+    return True
+
 
 _TEAM_CONTRACTS = {
     "general-manager": (
@@ -365,8 +466,39 @@ _TEAM_CONTRACTS = {
         ("approved-products",),
         ("external-action", "timeout"),
     ),
+    "customer-supervisor": (
+        "supervisionar o atendimento por canal, passagens ao fundador e disjuntor",
+        ("assign", "handoff", "report"),
+        ("conversation-engine", "approval-engine", "audit-log"),
+        ("product-master", "orders", "knowledge"),
+        ("handoff-trigger", "gate-failure", "complaint"),
+    ),
+    "sales-agent": (
+        "conduzir a conversa até o pagamento confirmado pelo provedor",
+        ("converse", "order-draft", "payment-link"),
+        ("conversation-engine", "payments", "audit-log"),
+        ("product-master", "knowledge"),
+        ("handoff-trigger", "gate-failure"),
+    ),
+    "aftersales-agent": (
+        "responder status de pedido e rastreio depois do pagamento",
+        ("converse", "order-status"),
+        ("conversation-engine", "audit-log"),
+        ("orders",),
+        ("complaint", "payment-problem"),
+    ),
+    "social-media-worker": (
+        "montar o calendário, pedir aprovação semanal e publicar só o aprovado",
+        ("draft", "schedule", "insights", "weekly-report"),
+        ("social-scheduler", "approval-engine", "audit-log"),
+        ("product-master", "insights"),
+        ("publish-failure", "blocked-media"),
+    ),
 }
 for _agent_id, _definition in list(AGENT_REGISTRY.items()):
+    if _definition.mission:
+        # Contrato escrito na própria definição (paid-acquisition-worker) prevalece.
+        continue
     _mission, _capabilities, _tools, _read, _escalations = _TEAM_CONTRACTS.get(
         _agent_id,
         (
@@ -391,6 +523,10 @@ for _agent_id, _definition in list(AGENT_REGISTRY.items()):
                 "WRITE_CREATIVE",
                 "WRITE_PRICE_RECOMMENDATION",
                 "CREATE_DRAFT",
+                "CREATE_ORDER_DRAFT",
+                "CREATE_PAYMENT_LINK",
+                "SCHEDULE_APPROVED_CONTENT",
+                "CONVERSE",
             }
         ),
         escalation_rules=_escalations,
@@ -925,7 +1061,11 @@ class CommandEngine:
 
     def authorize(self, agent: str, permission: str) -> None:
         definition = AGENT_REGISTRY.get(agent)
-        if definition is None or permission not in definition.permissions:
+        if (
+            definition is None
+            or permission not in definition.permissions
+            or _forbidden_for_role(agent, permission)
+        ):
             raise PermissionError(f"{agent} não possui {permission}")
 
     def delegate(
@@ -1103,7 +1243,7 @@ class ParsedCommand:
 
 
 class OperationalRuntime:
-    """Deterministic 15-agent runtime.
+    """Deterministic runtime for every role in ``AGENT_REGISTRY``.
 
     The runtime deliberately stops at persisted local drafts. An external API write is
     never performed here; publishing belongs behind the approval and write guard.
@@ -1162,11 +1302,13 @@ class OperationalRuntime:
             and not any(query in normalized for query in ("quais", "pendente"))
         ):
             raise CommandRoutedElsewhere("/os/paid-media/plan")
-        if "cadastre" in normalized and "feminin" in normalized:
+        # Joias e correntes de revenda seguem o caminho da coleção feminina.
+        jewelry = any(word in normalized for word in ("feminin", "joia", "corrente"))
+        if "cadastre" in normalized and jewelry:
             return ParsedCommand("intake_feminine", collection="feminine")
         if (
             "prepare" in normalized
-            and "feminin" in normalized
+            and jewelry
             and any(token in normalized for token in ("marketplace", "mercado livre"))
         ):
             return ParsedCommand(
@@ -1579,6 +1721,37 @@ class OperationalRuntime:
             "status": "APPROVED",
         }
 
+    def _feminine_draft(self, product: dict[str, Any], channel: str) -> dict[str, Any]:
+        """Joia aprovada vira rascunho com o texto revisado do anúncio; nada sai."""
+        from .listing_content import find_catalog_entry, listing_copy
+
+        sku = str(product.get("sku") or product.get("id"))
+        entry = find_catalog_entry(product)
+        if entry is None:
+            return {"product": sku, "state": "BLOCKED", "reason": "NOT_IN_CATALOG"}
+        copy = listing_copy(entry, "facebook" if channel == "meta" else channel)
+        draft = {"product": sku, "state": "DRAFT", "ready": copy["ready"]}
+        if self.marketplace_store is not None:
+            from .marketplace_adapters import Marketplace
+            from .marketplace_ops import prepare_listing
+
+            payload = {
+                **self._draft_payload(product, sku, channel),
+                "title": copy["title"],
+                "description": copy["description"],
+                "attributes": copy["attributes"],
+                # Sob encomenda: o canal só recebe o teto do produto (0 até o
+                # fundador definir estoque e prazo).
+                "channel_stock_cap": int(entry.get("channel_stock_cap") or 0),
+            }
+            draft["listing_id"] = prepare_listing(
+                self.marketplace_store,
+                self._draft_product(product, sku),
+                Marketplace(channel),
+                payload,
+            )["id"]
+        return draft
+
     def _draft_payload(
         self, product: dict[str, Any], sku: str, channel: str
     ) -> dict[str, Any]:
@@ -1730,7 +1903,11 @@ class OperationalRuntime:
         blocked = [
             {
                 "product": str(item.get("sku") or item.get("id")),
-                "reason": "BLOCKED_NEEDS_PRICING",
+                # Com preço, a peça só espera a aprovação do fundador.
+                "reason": "BLOCKED_AWAITING_APPROVAL"
+                if self._field_value(item, "price_brl")
+                or self._field_value(item, "sale_price")
+                else "BLOCKED_NEEDS_PRICING",
             }
             for item in products
             if item not in approved
@@ -1756,7 +1933,10 @@ class OperationalRuntime:
             depends_on=[manager.task_id],
         )
         channel_tasks = []
+        made = 0
         for channel in channels:
+            drafts = [self._feminine_draft(item, channel) for item in approved]
+            made += sum(draft["state"] == "DRAFT" for draft in drafts)
             channel_tasks.append(
                 self._run_task(
                     command,
@@ -1764,9 +1944,10 @@ class OperationalRuntime:
                     "PREPARE_FEMININE_DRAFTS",
                     channel,
                     {
-                        "drafts": [],
+                        "drafts": drafts,
                         "blocked": blocked,
                         "category_discovery": [
+                            "chain",
                             "necklace",
                             "bracelet",
                             "anklet",
@@ -1782,7 +1963,7 @@ class OperationalRuntime:
             "sync-monitor-agent",
             "SYNC_FEMININE_DRAFT_STATUS",
             "feminine",
-            {"drafts": 0, "blocked": len(blocked), "external_write": False},
+            {"drafts": made, "blocked": len(blocked), "external_write": False},
             parent_task_id=distribution.task_id,
             depends_on=[task.task_id for task in channel_tasks],
         )
@@ -2117,7 +2298,9 @@ class OperationalRuntime:
                 "tracking": MetaAdsAdapter().get_tracking_status()["status"],
                 "economics": {
                     str(item.get("sku") or item.get("id")): calculate_economics(
-                        item, paid_config.safety_factor
+                        item,
+                        paid_config.safety_factor,
+                        channel=paid_config.economics_channel,
                     )["status"]
                     for item in eligible
                 },
@@ -2126,6 +2309,68 @@ class OperationalRuntime:
             parent_task_id=manager.task_id,
             depends_on=[task.task_id for task in product_tasks],
         )
+        from .conversations import CHANNELS, channel_mode
+        from .meta_webhooks import env_flag
+
+        modes = {channel: channel_mode(channel) for channel in CHANNELS}
+        customer = self._run_task(
+            command,
+            "customer-supervisor",
+            "AUDIT_CONVERSATION_LEVELS",
+            "conversations",
+            {"modes": modes, "upgrade": "APPROVAL_ONLY", "external_write": False},
+            parent_task_id=manager.task_id,
+        )
+        conversation_tasks = [
+            customer,
+            self._run_task(
+                command,
+                "sales-agent",
+                "AUDIT_SALES_READINESS",
+                "conversations",
+                {
+                    "payment_links": (
+                        "ENABLED" if env_flag("PAYMENT_LINKS_ENABLED") else "BLOCKED"
+                    ),
+                    "auto_channels": [
+                        channel for channel, mode in modes.items() if mode != "SHADOW"
+                    ],
+                    "external_write": False,
+                },
+                parent_task_id=customer.task_id,
+                depends_on=[customer.task_id],
+            ),
+            self._run_task(
+                command,
+                "aftersales-agent",
+                "AUDIT_AFTERSALES_READINESS",
+                "orders",
+                {
+                    "templates": ["pedido_confirmado", "pedido_enviado"],
+                    "external_write": False,
+                },
+                parent_task_id=customer.task_id,
+                depends_on=[customer.task_id],
+            ),
+            self._run_task(
+                command,
+                "social-media-worker",
+                "AUDIT_SOCIAL_SCHEDULE",
+                "social",
+                {
+                    "publish": (
+                        "ENABLED"
+                        if env_flag("SOCIAL_PUBLISH_ENABLED")
+                        else "PREVIEW_ONLY"
+                    ),
+                    # Contagem por status, próximos, bloqueios, aprovações,
+                    # tarefas manuais e a última métrica (só leitura local).
+                    **_social_snapshot(),
+                    "external_write": False,
+                },
+                parent_task_id=manager.task_id,
+            ),
+        ]
         next_actions = []
         if blocked:
             next_actions.append("COMPLETE_BLOCKING_PRODUCT_DATA")
@@ -2147,7 +2392,11 @@ class OperationalRuntime:
                 "external_writes": False,
             },
             parent_task_id=manager.task_id,
-            depends_on=[sync.task_id, paid_media.task_id],
+            depends_on=[
+                sync.task_id,
+                paid_media.task_id,
+                *(task.task_id for task in conversation_tasks),
+            ],
         )
 
     def _report(self, command: Command) -> dict[str, Any]:
@@ -2169,3 +2418,42 @@ class OperationalRuntime:
             ],
             "external_writes": "BLOCKED",
         }
+
+
+def _social_snapshot() -> dict[str, Any]:
+    """Resumo do agendador social para o painel (nunca derruba a auditoria)."""
+    from .social_scheduler import audit_snapshot_from_env
+
+    return audit_snapshot_from_env()
+
+
+def runtime_persistence() -> str:
+    """Onde o CommandEngine guarda tarefas e aprovações (o mesmo do servidor)."""
+    from .config import AgentSettings
+
+    settings = AgentSettings.from_env()
+    return settings.database_url or str(settings.runtime_dir / "runtime.sqlite3")
+
+
+def request_approval(
+    engine: CommandEngine,
+    requested_by: str,
+    approval_type: ApprovalType,
+    reason: str,
+    payload: dict[str, Any],
+) -> ApprovalRequest:
+    """Abre um ApprovalRequest e registra na auditoria, sob a trava comum."""
+    with engine.synchronized():
+        approval = engine.approvals.request(
+            requested_by, approval_type, reason, payload
+        )
+        engine.tasks.record(
+            requested_by, "APPROVAL_REQUESTED", approval.request_id, "PENDING"
+        )
+    return approval
+
+
+def approval_status(engine: CommandEngine, request_id: str | None) -> str | None:
+    engine.refresh()
+    item = engine.approvals.requests.get(request_id or "")
+    return item.status.value if item else None

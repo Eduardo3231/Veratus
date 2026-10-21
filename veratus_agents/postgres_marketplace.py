@@ -14,6 +14,7 @@ from .marketplace_ops import (
     MarketplaceAccount,
     SyncConflict,
     _now,
+    readback_listing,
 )
 from .sqlstore import lock_schema
 
@@ -240,8 +241,10 @@ class PostgresMarketplaceStore:
             "sku": sku,
             "channel": channel,
             "state": state.value,
-            "external_listing_id": None,
-            "external_product_id": None,
+            # Ids lidos de volta do canal (set_remote_ids) não se perdem no rascunho.
+            "external_listing_id": old.get("external_listing_id"),
+            "external_product_id": old.get("external_product_id"),
+            "remote_ids": old.get("remote_ids", []),
             "local_version": old.get("local_version", 0) + 1,
             "remote_version": old.get("remote_version"),
             "last_sync_at": old.get("last_sync_at"),
@@ -250,6 +253,24 @@ class PostgresMarketplaceStore:
             "payload": payload if payload is not None else old.get("payload", {}),
         }
         return self._put("listings", key, data)
+
+    def set_remote_ids(
+        self, channel: str, sku: str, remote_ids: list[Any]
+    ) -> dict[str, Any] | None:
+        """Mesmo contrato de ``MarketplaceStore.set_remote_ids``."""
+        ids = [str(item) for item in remote_ids if item]
+        current = self.listing(channel, sku)
+        if current is None:
+            if not ids:
+                return None
+            current = self.upsert_listing(sku, channel, ListingState.NOT_CREATED)
+        data = {
+            **current,
+            "external_listing_id": ids[0] if ids else None,
+            "remote_ids": ids,
+            "last_sync_at": _now(),
+        }
+        return self._put("listings", f"{channel}|{sku}", data)
 
     def listings(self, channel: str | None = None) -> list[dict[str, Any]]:
         values = self._all("listings")
@@ -316,6 +337,36 @@ class PostgresMarketplaceStore:
             for item in values
             if not unresolved_only or not item.get("resolved_at")
         ]
+
+    def resolve_sync_conflicts(self, channel: str, sku: str, types: list[str]) -> int:
+        """Mesmo contrato de ``MarketplaceStore.resolve_sync_conflicts``."""
+        found = [
+            item
+            for item in self.sync_conflicts()
+            if (item["channel"], item["sku"]) == (channel, sku)
+            and item["type"] in types
+        ]
+        for item in found:
+            self._put(
+                "sync_conflicts", item["conflict_id"], {**item, "resolved_at": _now()}
+            )
+        return len(found)
+
+    def record_readback(
+        self,
+        channel: str,
+        sku: str,
+        *,
+        state: ListingState,
+        remote: dict[str, Any],
+        published: bool = False,
+    ) -> dict[str, Any]:
+        """Mesmo contrato de ``MarketplaceStore.record_readback``."""
+        current = self.listing(channel, sku) or self.upsert_listing(sku, channel, state)
+        data = readback_listing(
+            current, state=state, remote=remote, published=published
+        )
+        return self._put("listings", f"{channel}|{sku}", data)
 
     def request_approval(
         self, channel: str, sku: str, payload: dict[str, Any]

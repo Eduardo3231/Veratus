@@ -77,9 +77,17 @@ def _client_ip():
     return request.remote_addr or "unknown"
 
 
+_ALLOWLIST_WARNED = []  # o aviso da allowlist vazia sai uma vez por processo
+
+
 def _mercado_livre_notification_source_allowed() -> bool:
     configured = os.getenv("MERCADO_LIVRE_NOTIFICATION_IP_ALLOWLIST", "").strip()
     if not configured:
+        # Vazia vale só em dev. No Render (RENDER=true, posto pela plataforma) a
+        # rota aceitaria qualquer origem: fica o aviso no log.
+        if os.getenv("RENDER", "").strip().lower() == "true" and not _ALLOWLIST_WARNED:
+            _ALLOWLIST_WARNED.append(True)
+            app.logger.warning("mercado_livre_notification_ip_allowlist_empty")
         return True
     try:
         source = ipaddress.ip_address(_client_ip())
@@ -266,15 +274,22 @@ def _metrics_store():
 
 
 @lru_cache(maxsize=4)
-def _order_ledger_cached(operations_db: str, database_url: str | None):
+def _order_ledger_cached(
+    operations_db: str, database_url: str | None, encryption_key: str = ""
+):
     from veratus_agents.orders import make_order_ledger
 
-    return make_order_ledger(operations_db, database_url)
+    # A chave cifra o código de rastreio; sem ela, o ledger segue sem rastreio.
+    return make_order_ledger(operations_db, database_url, encryption_key or None)
 
 
 def _order_ledger():
     settings = AgentSettings.from_env()
-    return _order_ledger_cached(str(settings.operations_db), settings.database_url)
+    return _order_ledger_cached(
+        str(settings.operations_db),
+        settings.database_url,
+        os.getenv("VERATUS_TOKEN_ENCRYPTION_KEY", "").strip(),
+    )
 
 
 @lru_cache(maxsize=4)
@@ -818,6 +833,15 @@ def mercado_livre_notifications():
         ), 503
     except Exception as exc:  # noqa: BLE001 - public boundary sanitizes storage errors
         return _oauth_persistence_unavailable("notification", exc)
+    from veratus_agents.meta_webhooks import env_flag
+
+    if inserted and (
+        payload.get("topic") == "questions" or env_flag("MERCADO_LIVRE_SYNC_ENABLED")
+    ):
+        # Pergunta nova: o motor busca as não respondidas na API. Com a sincronia
+        # ligada, todo topic dispara o canal, que antes consome a fila
+        # (_mercado_livre_sync).
+        _autoprocess("mercado_livre")
     return jsonify(
         {
             "status": "accepted" if inserted else "duplicate",
@@ -872,6 +896,202 @@ def os_calculate_pricing():
     except ValidationError:
         return jsonify({"status": "error", "message": "invalid_pricing_input"}), 400
     return jsonify({"status": "ok", "pricing": result}), 200
+
+
+def _economics_product(sku: str):
+    """Product Master primeiro; os relógios do catálogo como reserva."""
+    product = _product_store().get(sku)
+    if product is not None:
+        return product
+    from veratus_agents.data_discovery import discover_products
+
+    return next(
+        (
+            item
+            for item in discover_products()
+            if sku in (item.get("sku"), item.get("id"))
+        ),
+        None,
+    )
+
+
+def _master_cost(sku: str):
+    """Custo do Product Master (banco); o código e o catálogo não guardam custo."""
+    from veratus_agents.pricing_agent import product_cost
+
+    return product_cost(_product_store().get(sku) or {})
+
+
+def _fee_config_or_error():
+    from veratus_agents.channel_economics import FeeConfigError, default_config
+
+    try:
+        return default_config(), None
+    except FeeConfigError as exc:
+        app.logger.error("channel_fees_invalid error=%s", exc)
+        return None, (
+            jsonify({"status": "blocked", "message": "channel_fees_invalid"}),
+            503,
+        )
+
+
+@app.route("/os/economics/<sku>", methods=["GET"])
+def os_economics(sku):
+    denied = _admin_required()
+    if denied:
+        return denied
+    config, error = _fee_config_or_error()
+    if error:
+        return error
+    from veratus_agents import channel_economics as engine
+    from veratus_agents.pricing_agent import product_cost, product_price
+
+    product = _economics_product(sku)
+    if product is None:
+        return jsonify({"status": "error", "message": "product_not_found"}), 404
+    price = product_price(product)
+    if price is None or price <= 0:
+        return jsonify({"status": "error", "message": "price_missing"}), 409
+    channel = request.args.get("channel") or None
+    if channel and channel not in config.channels:
+        return jsonify({"status": "error", "message": "unknown_channel"}), 400
+    channels = [channel] if channel else list(config.channels)
+    product_type = engine.product_type_of(product)
+    results = {
+        name: engine.evaluate(
+            name, product_type, price, cost=product_cost(product), config=config
+        )
+        for name in channels
+    }
+    return jsonify(
+        {
+            "sku": sku,
+            "product_type": product_type,
+            "channels": results,
+            "external_write": False,
+        }
+    ), 200
+
+
+@app.route("/os/watches/readiness", methods=["GET"])
+def os_watches_readiness():
+    """O que falta na ficha dos relógios, por modelo e por canal."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.watch_sheet import WatchSheetError, load_sheet, readiness_report
+
+    try:
+        report = readiness_report(load_sheet())
+    except WatchSheetError as exc:
+        return jsonify({"status": "error", "message": f"ficha: {exc}"[:200]}), 409
+    return jsonify(_json_safe(report)), 200
+
+
+@app.route("/os/economics/simulate", methods=["POST"])
+def os_economics_simulate():
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    config, error = _fee_config_or_error()
+    if error:
+        return error
+    from decimal import Decimal, InvalidOperation
+
+    from veratus_agents import channel_economics as engine
+
+    allowed = {"channel", "product_type", "price", "cost", "assumptions"}
+    if set(data) - allowed or not {"channel", "product_type", "price"} <= set(data):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    try:
+        assumptions = engine.Assumptions.from_mapping(data.get("assumptions"))
+        price = Decimal(str(data["price"]))
+        cost = None if data.get("cost") is None else Decimal(str(data["cost"]))
+        result = engine.evaluate(
+            str(data["channel"]),
+            str(data["product_type"]),
+            price,
+            cost=cost,
+            assumptions=assumptions,
+            config=config,
+        )
+        result["price_to_match_reference"] = str(
+            engine.price_to_match(
+                result["channel"],
+                result["product_type"],
+                price,
+                assumptions=assumptions,
+                config=config,
+            )
+        )
+        if cost is not None:
+            minimum = engine.price_for_target_margin(
+                result["channel"],
+                result["product_type"],
+                cost,
+                assumptions=assumptions,
+                config=config,
+            )
+            result["min_price_for_target_margin"] = (
+                None if minimum is None else str(minimum)
+            )
+    except (ValueError, InvalidOperation, TypeError) as exc:
+        message = str(exc) if str(exc) else "invalid_request"
+        return jsonify({"status": "error", "message": message[:80]}), 400
+    return jsonify({"simulation": result, "external_write": False}), 200
+
+
+def _pricing_agent():
+    from veratus_agents.pricing_agent import PricingAgent
+
+    return PricingAgent(_economics_product)
+
+
+@app.route("/os/pricing/channel-plan/<sku>", methods=["GET"])
+def os_pricing_channel_plan(sku):
+    denied = _admin_required()
+    if denied:
+        return denied
+    _, error = _fee_config_or_error()
+    if error:
+        return error
+    try:
+        plan = _pricing_agent().channel_price_plan(sku)
+    except KeyError:
+        return jsonify({"status": "error", "message": "product_not_found"}), 404
+    return jsonify(plan), 200
+
+
+@app.route("/os/pricing/channel-plan/<sku>/request", methods=["POST"])
+def os_pricing_request_price(sku):
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    if set(data) != {"channel", "price", "reason"} or not all(
+        isinstance(data[key], str) and data[key].strip() for key in data
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        result = _pricing_agent().request_price_change(
+            _runtime(),
+            sku,
+            data["channel"],
+            Decimal(data["price"]),
+            reason=data["reason"].strip()[:300],
+        )
+    except KeyError:
+        return jsonify({"status": "error", "message": "product_not_found"}), 404
+    except (ValueError, InvalidOperation):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    return jsonify(result), 202
 
 
 def _validation_errors(exc: ValidationError) -> list[dict[str, str]]:
@@ -988,6 +1208,7 @@ def os_order_status(order_id):
         OrderConflictError,
         OrderTransitionError,
         StatusChange,
+        TrackingStorageError,
     )
 
     try:
@@ -1006,7 +1227,29 @@ def os_order_status(order_id):
         return jsonify({"status": "error", "message": "order_not_found"}), 404
     except (OrderConflictError, OrderTransitionError) as exc:
         return jsonify({"status": "error", "message": str(exc)}), 409
-    return jsonify({"status": result, "order": stored}), 200
+    except TrackingStorageError:
+        return jsonify(
+            {"status": "blocked", "message": "tracking_storage_not_configured"}
+        ), 503
+    body = {"status": result, "order": stored}
+    if stored["status"] == "SHIPPED":
+        # Repetir o POST é seguro: o aviso sai uma vez por pedido.
+        body["notices"] = _shipped_notices(order_id)
+    return jsonify(body), 200
+
+
+def _shipped_notices(order_id):
+    """Aviso de despacho com o rastreio (engine.shipped_notice), sem derrubar o POST."""
+    try:
+        engine, _ = _engine_or_error()
+        if engine is None:
+            return [{"action": "SKIPPED", "reason": "CONVERSATIONS_NOT_CONFIGURED"}]
+        return engine.shipped_notice(order_id)
+    except Exception as exc:  # noqa: BLE001 - o status já foi gravado
+        app.logger.error(
+            "conversation_shipped_notice_failed error_type=%s", type(exc).__name__
+        )
+        return [{"action": "FAILED", "reason": "NOTICE_ERROR"}]
 
 
 @app.route("/os/products", methods=["GET", "POST"])
@@ -1182,7 +1425,8 @@ def os_distribution_draft(sku):
 
     try:
         channel = Marketplace(data["channel"])
-        draft = build_distribution_draft(product, channel)
+        # A categoria descoberta na API do canal entra no rascunho (PENDING_* sem ela).
+        draft = build_distribution_draft(product, channel, store=_marketplace_store())
         listing = prepare_listing(
             _marketplace_store(), product, channel, draft["payload"]
         )
@@ -1307,6 +1551,17 @@ def os_listing_publish(channel, sku):
         return jsonify(
             {"status": "blocked", "reasons": reasons, "external_write": False}
         ), 409
+    if channel == "mercado-livre":
+        from veratus_agents.marketplace_ops import write_mercado_livre_listing
+
+        return _mercado_livre_write(
+            lambda store, writer: write_mercado_livre_listing(
+                store,
+                writer,
+                product,
+                base_url=os.getenv("PUBLIC_BASE_URL", "").strip(),
+            )
+        )
     return jsonify(
         {
             "status": "blocked",
@@ -1314,6 +1569,34 @@ def os_listing_publish(channel, sku):
             "external_write": False,
         }
     ), 409
+
+
+def _mercado_livre_write(action):
+    """Escrita no Mercado Livre, já aprovada pelo guard: 200 com a leitura de volta,
+    409 bloqueada antes da rede, 502 quando o canal recusa ou cai."""
+    from veratus_agents.marketplace_clients import (
+        MarketplaceApiError,
+        MercadoLivreWriteClient,
+    )
+
+    try:
+        writer = MercadoLivreWriteClient(_mercado_livre_reader())
+    except MarketplaceApiError as exc:
+        return jsonify(
+            {"status": "blocked", "reasons": [exc.code], "external_write": False}
+        ), 409
+    try:
+        result = action(_marketplace_store(), writer)
+    except MarketplaceApiError as exc:
+        reason = exc.code
+    except Exception as exc:  # noqa: BLE001 - resposta sem detalhe do canal
+        app.logger.error("mercado_livre_write_failed error_type=%s", type(exc).__name__)
+        reason = "WRITE_FAILED"
+    else:
+        return jsonify(result), 409 if result["status"] == "BLOCKED" else 200
+    return jsonify(
+        {"status": "failed", "reasons": [reason], "external_write": "UNCONFIRMED"}
+    ), 502
 
 
 @app.route("/os/listings/<channel>/<sku>/pause", methods=["POST"])
@@ -1326,6 +1609,22 @@ def os_listing_pause(channel, sku):
         return jsonify({"status": "error", "message": "listing_not_found"}), 404
     from veratus_agents.marketplace_ops import ListingState
 
+    if channel == "mercado-livre" and listing.get("external_listing_id"):
+        # O anúncio existe no canal: pausar só aqui criaria divergência. A pausa
+        # remota passa pelo mesmo guard do publish (aprovação, flags, papel).
+        from veratus_agents.marketplace_ops import (
+            mercado_livre_guard_reasons,
+            pause_mercado_livre_listing,
+        )
+
+        product = _product_store().get(sku) or {"sku": sku}
+        if reasons := mercado_livre_guard_reasons(_marketplace_store(), product):
+            return jsonify(
+                {"status": "blocked", "reasons": reasons, "external_write": False}
+            ), 409
+        return _mercado_livre_write(
+            lambda store, writer: pause_mercado_livre_listing(store, writer, product)
+        )
     return jsonify(
         {
             "listing": _marketplace_store().upsert_listing(
@@ -1334,6 +1633,21 @@ def os_listing_pause(channel, sku):
             "external_write": False,
         }
     ), 200
+
+
+@app.route("/os/sync/mercado-livre/plan", methods=["POST"])
+def os_mercado_livre_sync_plan():
+    """Dry-run: preço e estoque dos anúncios vs. Product Master, só leitura.
+
+    Diferença vira conflito e UPDATE_PENDING; aplicar é o publish, atrás do guard.
+    """
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.marketplace_service import MarketplaceConnectionService
+
+    service = MarketplaceConnectionService(_marketplace_store())
+    return jsonify(service.sync_plan(_economics_product)), 200
 
 
 @app.route("/os/sync", methods=["POST"])
@@ -1368,7 +1682,7 @@ def os_data_quality():
         return denied
     from veratus_agents.data_discovery import discovery_report
 
-    report = discovery_report()
+    report = discovery_report(_master_cost)
     missing_by_field = {}
     for item in report["missing_business_data"]:
         missing_by_field[item["field"]] = missing_by_field.get(item["field"], 0) + 1
@@ -1538,6 +1852,7 @@ def _operational_runtime():
         for channel in OperationalRuntime.CHANNEL_AGENTS:
             for canonical_category in (
                 "Relógios",
+                "jewelry_accessories/chain",
                 "jewelry_accessories/necklace",
                 "jewelry_accessories/bracelet",
                 "jewelry_accessories/anklet",
@@ -1647,7 +1962,7 @@ def os_paid_media_plan():
 
     try:
         result = _paid_media_worker().plan(
-            discover_products(),
+            discover_products(_master_cost),
             data.get("creative"),
             idempotency_key=data.get("idempotency_key"),
         )
@@ -1943,6 +2258,8 @@ def _meta_signed_payload(app_secret_env):
     """Return (payload, None) for a genuine Meta POST, or (None, response)."""
     from veratus_agents.meta_webhooks import verify_signature
 
+    # O limite geral do app (8 KB) recusaria lotes normais da Meta com 413.
+    request.max_content_length = _META_WEBHOOK_MAX_BYTES
     if (request.content_length or 0) > _META_WEBHOOK_MAX_BYTES:
         return None, (jsonify({"status": "error", "message": "payload_too_large"}), 413)
     raw = request.get_data(cache=True)
@@ -1995,38 +2312,120 @@ def _whatsapp_unavailable(exc):
 def whatsapp_webhook():
     if request.method == "GET":
         return _meta_subscription("WHATSAPP_VERIFY_TOKEN")
+    if (request.content_length or 0) > _META_WEBHOOK_MAX_BYTES:
+        # Lote grande da importação de histórico (coexistência): 200 sem ler, senão
+        # a Meta reenvia. Mensagem de cliente não chega a esse tamanho.
+        return jsonify({"status": "ignored", "message": "payload_too_large"}), 200
     payload, error = _meta_signed_payload("WHATSAPP_APP_SECRET")
     if error:
         return error
     from veratus_agents.whatsapp import WhatsAppConfigurationError
 
     try:
-        counts = _whatsapp_channel().receive(payload)
+        counts = _whatsapp_channel().receive(
+            payload,
+            on_handoff=_whatsapp_person_requested,
+            on_founder_reply=_whatsapp_founder_replied,
+            on_send_failed=_whatsapp_delivery_failed,
+            on_opt_out=_whatsapp_opted_out,
+        )
     except WhatsAppConfigurationError as exc:
         # 503 makes Meta retry for up to 7 days instead of losing the message.
         return _whatsapp_unavailable(exc)
+    if counts.get("messages"):
+        _autoprocess("whatsapp")
     return jsonify({"status": "received", **counts}), 200
+
+
+def _whatsapp_person_requested(conversation_id, message_id, text):
+    """Pedido de pessoa na entrada do WhatsApp: a mesma CHAMADA do motor."""
+    from veratus_agents.conversations import InboundText
+
+    try:
+        engine, _ = _engine_or_error()
+        if engine is not None:
+            engine.person_requested(
+                InboundText("whatsapp", conversation_id, message_id, text)
+            )
+    except Exception as exc:  # noqa: BLE001 - o webhook da Meta não cai pelo alerta
+        app.logger.error(
+            "whatsapp_person_request_failed error_type=%s", type(exc).__name__
+        )
+
+
+def _whatsapp_founder_replied(conversation_id):
+    """Resposta do fundador pelo app (coexistência): o motor também para."""
+    try:
+        engine, _ = _engine_or_error()
+        if engine is not None:
+            conversation = engine.store.conversation("whatsapp", conversation_id)
+            if conversation["state"] == "BOT":
+                engine.set_state(
+                    "whatsapp", conversation_id, "HUMAN", actor="founder-app"
+                )
+    except Exception as exc:  # noqa: BLE001 - o webhook da Meta não cai pelo motor
+        app.logger.error(
+            "whatsapp_founder_reply_failed error_type=%s", type(exc).__name__
+        )
+
+
+def _whatsapp_delivery_failed(conversation_id, codes):
+    """Status failed da Meta: tarefa ERRO_ENVIO no painel, sem ping."""
+    try:
+        engine, _ = _engine_or_error()
+        if engine is not None:
+            engine.delivery_failed("whatsapp", conversation_id, codes)
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error(
+            "whatsapp_delivery_failed_task error_type=%s", type(exc).__name__
+        )
+
+
+def _whatsapp_opted_out(conversation_id, message_id):
+    """Pedido de saída do marketing: confirmação pelas travas de sempre."""
+    from veratus_agents.whatsapp import WhatsAppCloudClient, confirm_opt_out
+
+    try:
+        confirm_opt_out(
+            _whatsapp_channel(),
+            conversation_id,
+            message_id,
+            client=WhatsAppCloudClient.from_env(),
+        )
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("whatsapp_opt_out_failed error_type=%s", type(exc).__name__)
 
 
 @app.route("/integrations/whatsapp/drafts/process", methods=["POST"])
 def whatsapp_process_drafts():
+    """Aposentada: consumia as mesmas mensagens NEW do motor de atendimento."""
     denied = _admin_required()
     if denied:
         return denied
-    data, error = _agent_json()
-    if error:
-        return jsonify({"status": "error", "message": error[0]}), error[1]
-    limit = data.get("limit", 20)
-    if set(data) - {"limit"} or not isinstance(limit, int):
-        return jsonify({"status": "error", "message": "invalid_request"}), 400
-    from veratus_agents import run_sales_workflow
-    from veratus_agents.whatsapp import WhatsAppConfigurationError
+    return jsonify(
+        {
+            "status": "gone",
+            "message": "use_/os/conversations/process",
+            "external_message_sent": False,
+        }
+    ), 410
 
-    try:
-        result = _whatsapp_channel().draft_pending(run_sales_workflow, limit=limit)
-    except WhatsAppConfigurationError as exc:
-        return _whatsapp_unavailable(exc)
-    return jsonify({"status": "ok", **result, "external_message_sent": False}), 200
+
+@app.route("/os/whatsapp/health", methods=["GET"])
+def os_whatsapp_health():
+    """Só leitura na Meta: número, nome, qualidade, app assinado e templates."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.harvey import WHATSAPP_NUMBER
+    from veratus_agents.whatsapp import WhatsAppCloudClient, account_health
+
+    report = account_health(
+        WhatsAppCloudClient.from_env(),
+        os.getenv("WHATSAPP_BUSINESS_ACCOUNT_ID", "").strip() or None,
+        expected_number=WHATSAPP_NUMBER,
+    )
+    return jsonify(report), 200
 
 
 @app.route("/integrations/whatsapp/conversations", methods=["GET"])
@@ -2088,6 +2487,16 @@ def whatsapp_conversation_state(conversation_id):
         return jsonify({"status": "error", "message": "conversation_not_found"}), 404
     except ValueError:
         return jsonify({"status": "error", "message": "invalid_state"}), 400
+    # O pedido de pessoa na entrada também pôs o motor em HUMAN: os dois voltam
+    # juntos, senão o canal fica BOT e o motor segue mudo.
+    engine, _ = _engine_or_error()
+    if engine is not None:
+        try:
+            engine.set_state(
+                "whatsapp", conversation_id, data["state"], actor=data["actor"].strip()
+            )
+        except KeyError:
+            pass
     return jsonify({"conversation": conversation}), 200
 
 
@@ -2188,6 +2597,166 @@ def _start_instagram_token_watcher():
         )
 
 
+@lru_cache(maxsize=4)
+def _social_store_cached(operations_db, database_url):
+    from veratus_agents.social_scheduler import SocialScheduleStore
+
+    return SocialScheduleStore(operations_db, database_url)
+
+
+def _social_store():
+    settings = AgentSettings.from_env()
+    return _social_store_cached(str(settings.operations_db), settings.database_url)
+
+
+def _post_keyword_rules():
+    """Palavras-chave dos posts publicados pelo agendador, por id de mídia."""
+    from veratus_agents.instagram_comments import load_keyword_replies
+    from veratus_agents.social_scheduler import media_reply_rules
+
+    return media_reply_rules(_social_store(), load_keyword_replies())
+
+
+@app.route("/os/social/posts", methods=["GET"])
+def os_social_posts():
+    denied = _admin_required()
+    if denied:
+        return denied
+    status = request.args.get("status") or None
+    return jsonify(
+        {"posts": _social_store().items(status=status, week=request.args.get("week"))}
+    ), 200
+
+
+def _social_admin_json():
+    """Admin + corpo JSON (pode ser {}): devolve (data, resposta de erro)."""
+    denied = _admin_required()
+    if denied:
+        return None, denied
+    data, error = _agent_json()
+    if error:
+        return None, (jsonify({"status": "error", "message": error[0]}), error[1])
+    return data, None
+
+
+@app.route("/os/social/posts/<item_id>/reject", methods=["POST"])
+def os_social_reject(item_id):
+    data, denied = _social_admin_json()
+    if denied:
+        return denied
+    from veratus_agents.social_scheduler import reject_item
+
+    try:
+        item = reject_item(
+            _social_store(),
+            item_id,
+            actor="fundador",
+            reason=str(data.get("reason") or "")[:300],
+        )
+    except KeyError:
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 409
+    return jsonify({"post": item}), 200
+
+
+@app.route("/os/social/posts/<item_id>/edit", methods=["POST"])
+def os_social_edit(item_id):
+    data, denied = _social_admin_json()
+    if denied:
+        return denied
+    from veratus_agents.social_scheduler import CalendarError, edit_item
+
+    try:
+        item = edit_item(_social_store(), item_id, actor="fundador", **data)
+    except KeyError:
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    except (CalendarError, ValueError, TypeError) as exc:
+        return jsonify({"status": "error", "message": str(exc)[:200]}), 400
+    return jsonify({"post": item}), 200
+
+
+@app.route("/os/social/request-approval", methods=["POST"])
+def os_social_request_approval():
+    data, denied = _social_admin_json()
+    if denied:
+        return denied
+    from veratus_agents.social_scheduler import request_weekly_approvals
+
+    week = str(data.get("week") or "") or None
+    return jsonify(
+        {"approvals": request_weekly_approvals(_social_store(), _runtime(), week=week)}
+    ), 200
+
+
+@app.route("/os/social/run-due", methods=["POST"])
+def os_social_run_due():
+    """Para o cron do Render; com SOCIAL_PUBLISH_ENABLED desligada, só a prévia."""
+    _data, denied = _social_admin_json()
+    if denied:
+        return denied
+    from veratus_agents.social_scheduler import run_due_from_env
+
+    return jsonify(run_due_from_env(_social_store(), _runtime())), 200
+
+
+@app.route("/os/social/insights", methods=["POST"])
+def os_social_insights():
+    """Com SOCIAL_INSIGHTS_ENABLED desligada, só a prévia (sem chamar a Meta)."""
+    _data, denied = _social_admin_json()
+    if denied:
+        return denied
+    from veratus_agents.social_scheduler import run_insights
+
+    return jsonify(run_insights(_social_store())), 200
+
+
+@app.route("/os/social/comments", methods=["GET"])
+def os_social_comments():
+    denied = _admin_required()
+    if denied:
+        return denied
+    status = request.args.get("status") or None
+    return jsonify({"actions": _instagram_queue().list_actions(status=status)}), 200
+
+
+@app.route("/os/social/comments/<comment_id>/<action>/<decision>", methods=["POST"])
+def os_social_comment_decision(comment_id, action, decision):
+    """O fundador aprova ou rejeita a resposta pública ou o ocultar."""
+    data, denied = _social_admin_json()
+    if denied:
+        return denied
+    if decision not in ("approve", "reject"):
+        return jsonify({"status": "error", "message": "invalid_decision"}), 400
+    from veratus_agents.instagram_comments import FacebookCommentClient, InstagramClient
+
+    queue = _instagram_queue()
+    platform = next(
+        (
+            row["platform"]
+            for row in queue.list_actions(status="DRAFT", limit=500)
+            if row["comment_id"] == comment_id
+        ),
+        None,
+    )
+    client = (
+        FacebookCommentClient.from_env()
+        if platform == "facebook"
+        else InstagramClient.from_env(token=_instagram_token_store().current())
+    )
+    try:
+        result = queue.resolve_action(
+            comment_id,
+            action.upper(),
+            approve=decision == "approve",
+            client=client,
+            text=str(data.get("text") or "") or None,
+        )
+    except KeyError:
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    return jsonify(result), 200
+
+
 @app.route("/integrations/instagram/token/status", methods=["GET"])
 def instagram_token_status():
     denied = _admin_required()
@@ -2215,10 +2784,316 @@ def instagram_webhook():
     from veratus_agents.instagram_comments import load_rules
 
     _, rules = load_rules()
+    own_account = os.getenv("INSTAGRAM_USER_ID", "").strip()
+    post_rules = _post_keyword_rules()
     counts = _instagram_queue().enqueue(
-        payload, rules, own_account_id=os.getenv("INSTAGRAM_USER_ID", "").strip()
+        payload, rules, own_account_id=own_account, media_rules=post_rules
     )
+    # Triagem do resto (SOCIAL_COMMENTS_MODE): rascunhos e tarefas, sem o texto.
+    from veratus_agents.instagram_comments import parse_comments
+
+    triage = _instagram_queue().triage(
+        parse_comments(payload),
+        rules,
+        own_account_id=own_account,
+        media_rules=post_rules,
+    )
+    counts = {**counts, "triage": triage}
+    if counts["queued"] or triage["private_replies"]:
+        _autoprocess_comment_replies()
+    # Direct (campo messages): guarda a conversa; responder segue o nível do canal.
+    from veratus_agents.channel_adapters import parse_instagram_messages
+
+    direct = parse_instagram_messages(payload, own_account)
+    if direct:
+        try:
+            inbox = _direct_inbox()
+        except ValueError as exc:
+            app.logger.error("instagram_direct_not_configured %s", exc)
+            return jsonify(
+                {"status": "blocked", "message": "direct_not_configured"}
+            ), 503
+        stored = 0
+        for item in direct:
+            _, inserted = inbox.receive(
+                "instagram",
+                item["contact"],
+                item["message_id"],
+                item["text"],
+                item["sent_at"],
+                origin=item.get("origin"),
+            )
+            stored += inserted
+        counts = {**counts, "direct_messages": stored}
+        if stored:
+            _autoprocess("instagram")
     return jsonify({"status": "received", **counts}), 200
+
+
+@app.route("/integrations/facebook/webhook", methods=["GET", "POST"])
+def facebook_webhook():
+    """Messenger da Página (canal principal): guarda a mensagem e dispara o canal."""
+    if request.method == "GET":
+        return _meta_subscription("FACEBOOK_VERIFY_TOKEN")
+    payload, error = _meta_signed_payload("FACEBOOK_APP_SECRET")
+    if error:
+        return error
+    from veratus_agents.channel_adapters import parse_messenger_messages
+    from veratus_agents.meta_webhooks import env_flag
+
+    page_id = os.getenv("META_PAGE_ID", "").strip()
+    comments = {}
+    # Comentários na Página (campo feed): só com FACEBOOK_COMMENTS_ENABLED.
+    if env_flag("FACEBOOK_COMMENTS_ENABLED"):
+        from veratus_agents.instagram_comments import parse_facebook_comments
+
+        events = parse_facebook_comments(payload, page_id)
+        if events:
+            comments = {
+                "comments": _instagram_queue().triage(events, [], platform="facebook")
+            }
+    messages = parse_messenger_messages(payload, page_id)
+    if not messages:
+        return jsonify({"status": "received", "messages": 0, **comments}), 200
+    try:
+        inbox = _direct_inbox()
+    except ValueError as exc:
+        app.logger.error("facebook_messenger_not_configured %s", exc)
+        # 503 faz a Meta reenviar em vez de perder a mensagem.
+        return jsonify(
+            {"status": "blocked", "message": "messenger_not_configured"}
+        ), 503
+    stored = 0
+    for item in messages:
+        _, inserted = inbox.receive(
+            "facebook",
+            item["contact"],
+            item["message_id"],
+            item["text"],
+            item["sent_at"],
+            # Loja ou anúncio click-to-Messenger: a peça e a origem vão ao motor.
+            origin=item.get("origin"),
+            product_id=item.get("product_id"),
+        )
+        stored += inserted
+    if stored:
+        _autoprocess("facebook")
+    return jsonify({"status": "received", "messages": stored}), 200
+
+
+@app.route("/feeds/meta-catalog.csv", methods=["GET"])
+def meta_catalog_feed():
+    """Feed do catálogo da Meta: o Commerce Manager busca por esta URL.
+
+    Desligado (``META_CATALOG_FEED_ENABLED``) responde 404. Só peças prontas,
+    com campos públicos: preço do site, link e foto liberada.
+    """
+    from veratus_agents.meta_webhooks import env_flag
+
+    if not env_flag("META_CATALOG_FEED_ENABLED"):
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    from veratus_agents.meta_catalog import feed_csv, feed_rows
+
+    return (
+        feed_csv(feed_rows()),
+        200,
+        {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Cache-Control": "public, max-age=900",
+        },
+    )
+
+
+@app.route("/os/harvey", methods=["GET"])
+def os_harvey():
+    """O que o Harvey aprendeu: canais do perfil, Instagram → WhatsApp e objeções."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.harvey import report
+
+    return jsonify(report(engine)), 200
+
+
+ESCRITORIO_DIR = Path(__file__).resolve().parent / "escritorio"
+_CHATWOOT_CHANNELS = frozenset({"whatsapp", "instagram", "facebook", "mercado_livre"})
+
+
+@lru_cache(maxsize=4)
+def _chatwoot_bridge_cached(store: str):
+    from veratus_agents.chatwoot import ChatwootBridge
+
+    return ChatwootBridge.from_env(store)
+
+
+def _chatwoot_bridge():
+    settings = AgentSettings.from_env()
+    return _chatwoot_bridge_cached(
+        settings.database_url or str(settings.runtime_dir / "chatwoot.sqlite3")
+    )
+
+
+def _mirror_to_chatwoot(item, result):
+    """Espelha a conversa na caixa do fundador (Chatwoot); desligado, não faz nada."""
+    from veratus_agents.meta_webhooks import env_flag
+
+    if item.channel not in _CHATWOOT_CHANNELS or not env_flag("CHATWOOT_SYNC_ENABLED"):
+        return
+    try:
+        bridge = _chatwoot_bridge()
+        key = f"{item.channel}:{item.conversation_id}"
+        bridge.mirror_inbound(item.channel, key, item.text, intent=result.get("intent"))
+        reply = result.get("reply")
+        if result["action"] == "SEND" and result.get("external_message_sent") and reply:
+            bridge.mirror_reply(key, reply)
+        elif result["action"] == "QUEUE" and reply:
+            bridge.note(key, f"Rascunho do Harvey (não enviado): {reply}")
+        elif result["action"] == "HANDOFF":
+            bridge.escalate(key, result.get("reason") or "PEDIDO_DE_ATENDENTE")
+    except Exception as exc:  # noqa: BLE001 - o espelho não para a conversa
+        app.logger.error("chatwoot_mirror_failed error_type=%s", type(exc).__name__)
+
+
+@app.route("/integrations/chatwoot/webhook", methods=["POST"])
+def chatwoot_webhook():
+    """Resposta do fundador no Chatwoot sai pelo canal; resolver devolve ao Harvey."""
+    from veratus_agents.chatwoot import verify_webhook_signature, verify_webhook_token
+
+    body = request.get_data()
+    if len(body) > 256 * 1024:
+        return jsonify({"status": "error", "message": "payload_too_large"}), 413
+    signed = verify_webhook_signature(
+        body,
+        request.headers.get("X-Chatwoot-Timestamp"),
+        request.headers.get("X-Chatwoot-Signature"),
+    )
+    if not (signed or verify_webhook_token(request.args.get("token"))):
+        return jsonify({"status": "error", "message": "unauthorized"}), 401
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    bridge = _chatwoot_bridge()
+    action = bridge.handle_webhook(request.get_json(silent=True))
+    if action["action"] == "IGNORE":
+        return jsonify({"status": "ignored", "reason": action.get("reason")}), 200
+    channel, conversation_id = action["conv_key"].split(":", 1)
+    conversation = engine.store.get(channel, conversation_id)
+    if conversation is None:
+        return jsonify({"status": "ignored", "reason": "unknown_conversation"}), 200
+    wanted = "BOT" if action["action"] == "BOT" else "HUMAN"
+    if conversation["state"] != wanted and (
+        wanted == "BOT" or conversation["state"] == "BOT"
+    ):
+        engine.set_state(channel, conversation_id, wanted, actor="founder-chatwoot")
+        if channel == "whatsapp":
+            _whatsapp_channel().set_state(
+                conversation_id, wanted, actor="founder-chatwoot"
+            )
+    if action["action"] == "BOT":
+        return jsonify({"status": "bot"}), 200
+    adapter = engine.adapters.get(channel)
+    if adapter is None:
+        bridge.note(action["conv_key"], "Não entregue: canal sem adaptador.")
+        return jsonify({"status": "not_sent"}), 200
+    # Escrita do fundador: a janela de 24 h e o resto das regras ficam no adaptador.
+    sent = adapter.send(
+        conversation_id,
+        action["text"],
+        idempotency_key=f"chatwoot:{action['message_id']}",
+        human_written=True,
+    )
+    if sent.get("status") != "SENT":
+        reasons = ", ".join(sent.get("reasons") or [])
+        bridge.note(action["conv_key"], f"Não entregue: {sent.get('status')} {reasons}")
+    return jsonify({"status": "processed", "send": sent.get("status")}), 200
+
+
+@app.route("/os/crm/twenty", methods=["GET"])
+def os_crm_twenty():
+    """Prévia do funil no Twenty (nada é enviado)."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.crm_twenty import TwentySync
+
+    return jsonify(TwentySync.from_env().preview(engine)), 200
+
+
+@app.route("/os/crm/twenty/sync", methods=["POST"])
+def os_crm_twenty_sync():
+    """Leva as conversas ao Twenty; desligado, devolve a prévia (DISABLED)."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.crm_twenty import TwentySync
+
+    return jsonify(TwentySync.from_env().sync(engine)), 200
+
+
+@app.route("/os/escritorio", methods=["GET"])
+def os_escritorio():
+    """O escritório virtual agora: cada agente como funcionário, sem dado de cliente."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.office import snapshot
+
+    return jsonify(snapshot(engine, _runtime(), _order_ledger())), 200
+
+
+@app.route("/os/escritorio/painel", methods=["GET"])
+def os_escritorio_painel():
+    """Página do escritório: sem dados; ela pede o token e lê /os/escritorio."""
+    html = (ESCRITORIO_DIR / "painel.html").read_text(encoding="utf-8")
+    script = (ESCRITORIO_DIR / "office.js").read_text(encoding="utf-8")
+    body = html.replace("/*__OFFICE_JS__*/", script.replace("</", "<\\/"))
+    return (
+        body,
+        200,
+        {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+            "X-Robots-Tag": "noindex",
+        },
+    )
+
+
+@app.route("/os/meta-catalog", methods=["GET"])
+def os_meta_catalog():
+    """Prontidão do catálogo da Meta, peça por peça (revisão, nada é enviado)."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.meta_catalog import catalog_report
+
+    return jsonify(catalog_report()), 200
+
+
+@app.route("/os/meta-catalog/readback", methods=["POST"])
+def os_meta_catalog_readback():
+    """Lê de volta o catálogo na Meta (só GET, META_CATALOG_READBACK_ENABLED).
+
+    Cada item recusado, ausente ou divergente do feed vira conflito de
+    sincronização (canal ``meta``). Desligado, nenhuma chamada sai.
+    """
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.meta_catalog import catalog_readback
+
+    return jsonify(catalog_readback(_marketplace_store())), 200
 
 
 @app.route("/integrations/instagram/replies", methods=["GET"])
@@ -2242,6 +3117,10 @@ def instagram_process_replies():
         return jsonify({"status": "error", "message": error[0]}), error[1]
     if data:
         return jsonify({"status": "error", "message": "body_must_be_empty"}), 400
+    return jsonify({"status": "ok", **_process_comment_replies()}), 200
+
+
+def _process_comment_replies():
     from veratus_agents.instagram_comments import (
         InstagramClient,
         dm_enabled,
@@ -2249,13 +3128,904 @@ def instagram_process_replies():
     )
 
     landing_url, rules = load_rules()
-    result = _instagram_queue().process(
+    rules = [
+        *rules,
+        *(rule for items in _post_keyword_rules().values() for rule in items),
+    ]
+    return _instagram_queue().process(
         client=InstagramClient.from_env(token=_instagram_token_store().current()),
         enabled=dm_enabled(),
         landing_url=landing_url,
         rules=rules,
     )
-    return jsonify({"status": "ok", **result}), 200
+
+
+def _start_comment_replies_thread():
+    import threading
+
+    def work():
+        try:
+            with app.app_context():
+                _process_comment_replies()
+        except Exception as exc:  # noqa: BLE001 - o erro fica no log, sem texto
+            app.logger.error(
+                "comment_replies_autoprocess_failed error_type=%s", type(exc).__name__
+            )
+
+    threading.Thread(target=work, name="comment-replies", daemon=True).start()
+
+
+def _autoprocess_comment_replies():
+    """Com CONVERSATION_AUTOPROCESS_ENABLED e INSTAGRAM_DM_ENABLED, responde já."""
+    from veratus_agents.instagram_comments import dm_enabled
+    from veratus_agents.meta_webhooks import env_flag
+
+    if not (env_flag("CONVERSATION_AUTOPROCESS_ENABLED") and dm_enabled()):
+        return False
+    try:
+        _start_comment_replies_thread()
+    except Exception as exc:  # noqa: BLE001 - o webhook responde mesmo sem a thread
+        app.logger.error(
+            "comment_replies_autoprocess_not_started error_type=%s",
+            type(exc).__name__,
+        )
+        return False
+    return True
+
+
+# -- Atendimento autônomo (Fase 3) --------------------------------------------
+
+
+@lru_cache(maxsize=4)
+def _conversation_store_cached(operations_db, database_url, encryption_key):
+    from veratus_agents.conversations import ConversationStore
+
+    return ConversationStore(operations_db, database_url, encryption_key=encryption_key)
+
+
+@lru_cache(maxsize=4)
+def _direct_inbox_cached(operations_db, database_url, salt, encryption_key):
+    from veratus_agents.channel_adapters import DirectInbox
+
+    return DirectInbox(
+        operations_db, database_url, salt=salt, encryption_key=encryption_key
+    )
+
+
+def _direct_inbox():
+    settings = AgentSettings.from_env()
+    return _direct_inbox_cached(
+        str(settings.operations_db),
+        settings.database_url,
+        os.getenv("VERATUS_SESSION_SALT", "").strip(),
+        os.getenv("VERATUS_TOKEN_ENCRYPTION_KEY", "").strip(),
+    )
+
+
+def _mercado_livre_token_provider():
+    from veratus_agents.mercado_livre_oauth import persisted_credentials_available
+
+    try:
+        if not persisted_credentials_available():
+            return None
+        from veratus_agents.marketplace_clients import MercadoLivreOAuthTokenManager
+
+        # Sem o store, from_env levantava TypeError e as perguntas nunca chegavam.
+        manager = MercadoLivreOAuthTokenManager.from_env(_mercado_oauth_store())
+    except Exception:  # noqa: BLE001 - sem conexão, o canal só enfileira
+        return None
+    return manager.access_token
+
+
+def _conversation_order_factory(channel, conversation_id, product):
+    from veratus_agents.catalog import public_price
+    from veratus_agents.orders import OrderChannel, OrderRecord, PaymentMethod
+
+    price = public_price(product)
+    if price is None:
+        return None
+    reference = (
+        conversation_id
+        if re.fullmatch(r"(?:wa|ig|fb)_[a-f0-9]{32}", conversation_id)
+        else None
+    )
+    _, order = _order_ledger().record(
+        OrderRecord(
+            order_id=f"ord-{uuid.uuid4().hex[:20]}",
+            sku=product["id"],
+            channel=OrderChannel(channel),
+            conversation_ref=reference,
+            sale_price=price,
+            payment_method=PaymentMethod.UNKNOWN,
+            evidence_ref=f"conversation:{channel}",
+            recorded_by="sales-agent",
+        )
+    )
+    return order
+
+
+def _conversation_payment_linker(order, product):
+    from decimal import Decimal
+
+    from veratus_agents.payments import (
+        MercadoPagoClient,
+        PaymentLinkRequest,
+        create_payment_link,
+    )
+
+    base = os.getenv("PUBLIC_BASE_URL", "https://veratus.onrender.com").rstrip("/")
+    return create_payment_link(
+        PaymentLinkRequest(
+            order_id=order["order_id"],
+            title=f"Veratus {product['name']}",
+            amount=Decimal(str(order["sale_price"])),
+            sku=order["sku"],
+            notification_url=f"{base}/integrations/mercado-pago/webhook",
+        ),
+        client=MercadoPagoClient.from_env(),
+    )
+
+
+def _conversation_engine():
+    from veratus_agents.channel_adapters import (
+        FacebookMessengerAdapter,
+        FounderAlertSender,
+        InstagramDirectAdapter,
+        ManualPasteAdapter,
+        MercadoLivreConversationAdapter,
+        WhatsAppAdapter,
+    )
+    from veratus_agents.conversations import (
+        ConversationEngine,
+        LiveSalesModel,
+        TemplateSalesModel,
+    )
+    from veratus_agents.whatsapp import WhatsAppCloudClient
+
+    settings = AgentSettings.from_env()
+    store = _conversation_store_cached(
+        str(settings.operations_db),
+        settings.database_url,
+        os.getenv("VERATUS_TOKEN_ENCRYPTION_KEY", "").strip(),
+    )
+    ml_token = _mercado_livre_token_provider()
+    adapters = {
+        "shopee": ManualPasteAdapter("shopee"),
+        "tiktok_shop": ManualPasteAdapter("tiktok_shop"),
+        "amazon": ManualPasteAdapter("amazon"),
+        "mercado_livre": MercadoLivreConversationAdapter(
+            token_provider=ml_token,
+            seller_id=os.getenv("MERCADO_LIVRE_SELLER_ID", "").strip() or None,
+            token_refresher=_mercado_livre_token_refresher(ml_token),
+        ),
+    }
+    try:
+        adapters["whatsapp"] = WhatsAppAdapter(
+            _whatsapp_channel(),
+            client=WhatsAppCloudClient.from_env(),
+            # Template fora da janela só com o pedido vinculado à conversa.
+            order_lookup=lambda cid: (store.get("whatsapp", cid) or {}).get("order_id"),
+        )
+    except Exception as exc:  # noqa: BLE001 - canal sem segredo fica sem adaptador
+        app.logger.error("conversation_adapter_unavailable channel=whatsapp %s", exc)
+    try:
+        adapters["instagram"] = InstagramDirectAdapter(
+            _direct_inbox(),
+            access_token=_instagram_token_store().current()
+            or os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
+            or None,
+            ig_user_id=os.getenv("INSTAGRAM_USER_ID", "").strip() or None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("conversation_adapter_unavailable channel=instagram %s", exc)
+    try:
+        adapters["facebook"] = FacebookMessengerAdapter(
+            _direct_inbox(),
+            access_token=os.getenv("META_PAGE_ACCESS_TOKEN", "").strip() or None,
+            page_id=os.getenv("META_PAGE_ID", "").strip() or None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        app.logger.error("conversation_adapter_unavailable channel=facebook %s", exc)
+    model = (
+        LiveSalesModel()
+        if os.getenv("OPENAI_API_KEY", "").strip()
+        and os.getenv("CONVERSATION_MODEL", "live").strip() != "template"
+        else TemplateSalesModel()
+    )
+    return ConversationEngine(
+        store,
+        adapters=adapters,
+        model=model,
+        alert_sender=FounderAlertSender.from_env(),
+        order_factory=_conversation_order_factory,
+        payment_linker=_conversation_payment_linker,
+        order_lookup=_order_ledger().get,
+        tracking_lookup=_order_ledger().tracking_code,
+    )
+
+
+def _conversations_unavailable(exc):
+    app.logger.error("conversations_not_configured error_type=%s", type(exc).__name__)
+    return jsonify(
+        {"status": "blocked", "message": "conversations_not_configured"}
+    ), 503
+
+
+def _engine_or_error():
+    try:
+        return _conversation_engine(), None
+    except ValueError as exc:
+        return None, _conversations_unavailable(exc)
+
+
+@app.route("/os/conversations/process", methods=["POST"])
+def os_conversations_process():
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    from veratus_agents.conversations import CHANNELS
+
+    channel, limit = data.get("channel"), data.get("limit", 20)
+    if (
+        set(data) - {"channel", "limit"}
+        or channel not in CHANNELS
+        or not isinstance(limit, int)
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    results = _process_channel(engine, channel, limit)
+    return jsonify({"status": "ok", "channel": channel, "results": results}), 200
+
+
+# Canais sem API de mensagem verificada: o fundador cola a pergunta do painel.
+PASTE_CHANNELS = frozenset({"shopee", "tiktok_shop", "amazon"})
+_PASTE_FIELD = re.compile(r"[A-Za-z0-9_.:-]{1,120}")
+
+
+@app.route("/os/conversations/<channel>/inbound", methods=["POST"])
+def os_conversations_paste_inbound(channel):
+    """Pergunta do comprador colada do painel (Shopee, TikTok Shop, Amazon).
+
+    Telefone, e-mail, CPF/CNPJ, CEP e endereço saem do texto antes do motor; os
+    ids do painel viram pseudônimos (HMAC). A resposta fica na fila para colar
+    no painel: o envio segue BLOCKED (API_CONTRACT_UNVERIFIED).
+    """
+    denied = _admin_required()
+    if denied:
+        return denied
+    if channel not in PASTE_CHANNELS:
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    raw_ids = (data.get("conversation_id"), data.get("message_id"))
+    text, hint = data.get("text"), data.get("product_hint")
+    if (
+        set(data) - {"conversation_id", "message_id", "text", "product_hint"}
+        or not all(isinstance(v, str) and _PASTE_FIELD.fullmatch(v) for v in raw_ids)
+        or not isinstance(text, str)
+        or not text.strip()
+        or len(text) > 2000
+        or (
+            hint is not None
+            and not (isinstance(hint, str) and _PASTE_FIELD.fullmatch(hint))
+        )
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    salt = os.getenv("VERATUS_SESSION_SALT", "").strip().encode()
+    if not salt:
+        return _conversations_unavailable(ValueError("VERATUS_SESSION_SALT"))
+    # O id do painel pode ser o apelido do comprador: só o pseudônimo entra.
+    conversation_id, message_id = (
+        f"{kind}_"
+        + hmac.new(salt, f"{channel}:{kind}:{raw}".encode(), "sha256").hexdigest()[:32]
+        for kind, raw in zip(("cv", "msg"), raw_ids, strict=True)
+    )
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.chatwoot import redact
+    from veratus_agents.conversations import InboundText
+
+    item = InboundText(
+        channel=channel,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        text=redact(text)[:2000],
+        product_hint=hint,
+    )
+    try:
+        result = engine.handle(item)
+    except Exception as exc:  # noqa: BLE001 - vira tarefa no painel, como no process
+        app.logger.error(
+            "conversation_message_failed channel=%s error_type=%s",
+            channel,
+            type(exc).__name__,
+        )
+        engine.message_failed(item, exc)
+        return jsonify({"status": "error", "message": "conversation_failed"}), 500
+    return jsonify(
+        {
+            "status": "ok",
+            "channel": channel,
+            "conversation_id": conversation_id,
+            **{k: v for k, v in result.items() if k != "reply"},
+        }
+    ), 200
+
+
+def _mercado_livre_product_hint(adapter, item_id):
+    """SKU do anúncio da pergunta: o id gravado no listing (leitura de volta) ou,
+    sem ele, o SELLER_SKU do anúncio (GET /items/{id}, só leitura)."""
+    from veratus_agents.marketplace_service import listing_sku
+
+    try:
+        sku = listing_sku(_marketplace_store(), "mercado-livre", item_id)
+    except Exception as exc:  # noqa: BLE001 - sem o store, tenta o anúncio
+        app.logger.error("mercado_livre_listing_lookup_failed %s", type(exc).__name__)
+        sku = None
+    return sku or adapter.item_sku(item_id)
+
+
+def _mercado_livre_token_refresher(token_provider):
+    """``refresh`` do gerente OAuth por trás do provedor: uma nova tentativa no 401."""
+    return getattr(getattr(token_provider, "__self__", None), "refresh", None)
+
+
+def _mercado_livre_reader():
+    """Leitura com a conta conectada (OAuth); sem ela, a notificação espera na fila."""
+    from veratus_agents.marketplace_clients import (
+        MarketplaceApiError,
+        MercadoLivreOAuthTokenManager,
+    )
+
+    try:
+        return MercadoLivreOAuthTokenManager.from_env(_mercado_oauth_store()).client()
+    except Exception as exc:  # conta desconectada é passageira: a fila espera
+        raise MarketplaceApiError("NOT_CONNECTED") from exc
+
+
+def _ml_resource(item, kind):
+    prefix = f"/{kind}/"
+    resource = item["resource"]
+    return resource[len(prefix) :] if resource.startswith(prefix) else None
+
+
+def _ml_outcome(result):
+    if result["status"] != "BLOCKED":
+        return result["status"]
+    app.logger.warning("mercado_livre_sync_blocked reason=%s", result["reason"])
+    return f"BLOCKED:{result['reason']}"
+
+
+def _ml_order_notification(client, item):
+    """orders_v2: o pedido lido de volta (GET /orders/{id}) entra no ledger."""
+    from veratus_agents.marketplace_service import listing_sku
+    from veratus_agents.orders import import_mercado_livre_order
+
+    order_id = _ml_resource(item, "orders")
+    if not order_id:
+        return "IGNORED"
+    return _ml_outcome(
+        import_mercado_livre_order(
+            _order_ledger(),
+            client.get_order(order_id),
+            event_id=item["event_id"],
+            sku_for_item=lambda ref: listing_sku(
+                _marketplace_store(), "mercado-livre", ref
+            ),
+        )
+    )
+
+
+def _ml_shipment_notification(client, item):
+    """shipments: rastreio pelo Mercado Envios; o pedido entra antes, se faltar."""
+    from types import SimpleNamespace
+
+    from veratus_agents.orders import sync_mercado_livre_shipment
+
+    shipment_id = _ml_resource(item, "shipments")
+    if not shipment_id:
+        return "IGNORED"
+    shipment = client.get_shipment(shipment_id)
+    if not shipment.get("order_id"):
+        return "IGNORED"
+    order_id = f"ml-{shipment['order_id']}"
+    ledger = _order_ledger()
+    if ledger.get(order_id) is None:
+        imported = _ml_order_notification(
+            client, {**item, "resource": f"/orders/{shipment['order_id']}"}
+        )
+        if ledger.get(order_id) is None:
+            return imported
+    # O envio já foi lido: o sync não repete o GET.
+    reader = SimpleNamespace(get_shipment=lambda _: shipment)
+    return _ml_outcome(
+        sync_mercado_livre_shipment(ledger, reader, order_id, shipment_id)
+    )
+
+
+def _ml_item_notification(client, item):
+    """items: anúncio lido de volta vs. preço público e estoque confirmado."""
+    from veratus_agents.marketplace_ops import MERCADO_LIVRE, plan_mercado_livre_item
+    from veratus_agents.marketplace_service import listing_sku
+
+    item_id = _ml_resource(item, "items")
+    store = _marketplace_store()
+    sku = listing_sku(store, MERCADO_LIVRE, item_id) if item_id else None
+    listing = store.listing(MERCADO_LIVRE, sku) if sku else None
+    product = _economics_product(sku) if listing else None
+    if product is None:
+        return "IGNORED"
+    plan = plan_mercado_livre_item(store, listing, product, client.get_item(item_id))
+    return plan["status"]
+
+
+def _mercado_livre_sync():
+    """Fila de notificações do Mercado Livre, atrás de MERCADO_LIVRE_SYNC_ENABLED.
+
+    questions e messages: o motor lê as perguntas e mensagens logo em seguida
+    (_process_channel); orders_v2: pedido no ledger; shipments: rastreio; items:
+    conflito de preço e estoque. No canal, só leitura (GET).
+    """
+    from veratus_agents.meta_webhooks import env_flag
+
+    if not env_flag("MERCADO_LIVRE_SYNC_ENABLED"):
+        return []
+    from veratus_agents.mercado_livre_oauth import dispatch_notifications
+
+    readers = []
+
+    def reader():
+        if not readers:
+            readers.append(_mercado_livre_reader())
+        return readers[0]
+
+    return dispatch_notifications(
+        _mercado_oauth_store(),
+        {
+            "questions": lambda item: "PROCESSED",
+            "messages": lambda item: "PROCESSED",
+            "orders_v2": lambda item: _ml_order_notification(reader(), item),
+            "shipments": lambda item: _ml_shipment_notification(reader(), item),
+            "items": lambda item: _ml_item_notification(reader(), item),
+        },
+    )
+
+
+def _mercado_livre_post_sale(adapter, limit):
+    """Pós-venda (pack-<id>): só o que o comprador escreveu, com o SKU do pedido
+    importado quando a conversa já está no ledger (conversation_ref)."""
+    from veratus_agents.conversations import InboundText
+    from veratus_agents.orders import OrderChannel
+
+    reader = getattr(adapter, "list_unread_post_sale", None)
+    try:
+        messages = reader(limit) if reader else []
+    except Exception as exc:  # noqa: BLE001 - pós-venda fora não para as perguntas
+        app.logger.error("mercado_livre_post_sale_failed %s", type(exc).__name__)
+        return []
+    if not messages:
+        return []
+    try:
+        orders = _order_ledger().list_orders(
+            channel=OrderChannel.MERCADO_LIVRE, limit=500
+        )
+    except Exception as exc:  # noqa: BLE001 - sem o ledger, entra sem SKU
+        app.logger.error("mercado_livre_order_lookup_failed %s", type(exc).__name__)
+        orders = []
+    skus = {row["conversation_ref"]: row["sku"] for row in orders}
+    return [
+        InboundText(
+            channel="mercado_livre",
+            conversation_id=f"pack-{item['pack_id']}",
+            message_id=f"pm-{item['message_id']}",
+            text=item["text"],
+            product_hint=skus.get(f"pack-{item['pack_id']}"),
+            kind=item["kind"],
+        )
+        for item in messages
+    ]
+
+
+def _process_channel(engine, channel, limit=20):
+    """Passa as mensagens pendentes do canal pelo motor (rota e processamento contínuo)."""
+    from veratus_agents.conversations import InboundText
+
+    adapter = engine.adapters.get(channel)
+    if channel == "mercado_livre":
+        try:
+            _mercado_livre_sync()
+        except Exception as exc:  # noqa: BLE001 - a fila não para as perguntas
+            app.logger.error(
+                "mercado_livre_sync_failed error_type=%s", type(exc).__name__
+            )
+        questions = adapter.list_unanswered_questions(limit)
+        hints = {
+            item_id: _mercado_livre_product_hint(adapter, item_id)
+            for item_id in {item["item_id"] for item in questions if item["item_id"]}
+        }
+        inbound = [
+            InboundText(
+                channel=channel,
+                conversation_id=f"q-{item['question_id']}",
+                message_id=f"q-{item['question_id']}",
+                text=item["text"],
+                product_hint=hints.get(item["item_id"]),
+            )
+            for item in questions
+        ]
+        inbound += _mercado_livre_post_sale(adapter, limit)
+    elif hasattr(adapter, "pending"):
+        inbound = adapter.pending(limit)
+    else:
+        inbound = []
+    results = []
+    for item in inbound:
+        try:
+            result = engine.handle(item)
+        except Exception as exc:  # noqa: BLE001 - uma mensagem não para as outras
+            # Sem nova tentativa automática: repetir poderia duplicar envio ou
+            # alerta. A mensagem vira tarefa no painel e sai da fila do canal.
+            app.logger.error(
+                "conversation_message_failed channel=%s error_type=%s",
+                channel,
+                type(exc).__name__,
+            )
+            try:
+                engine.message_failed(item, exc)
+            except Exception as task_exc:  # noqa: BLE001 - a fila do canal segue
+                app.logger.error(
+                    "conversation_task_failed channel=%s error_type=%s",
+                    channel,
+                    type(task_exc).__name__,
+                )
+            if hasattr(adapter, "mark"):
+                adapter.mark(item.message_id, "V2_ERROR")
+            results.append({"message_id": item.message_id, "action": "ERROR"})
+            continue
+        if result["action"] == "BUSY":
+            # Outra thread ou worker está na conversa: a mensagem segue pendente.
+            results.append({"message_id": item.message_id, "action": "BUSY"})
+            continue
+        _mirror_to_chatwoot(item, result)
+        if result["action"] == "HANDOFF" and channel == "whatsapp":
+            _whatsapp_channel().set_state(
+                item.conversation_id, "HUMAN", actor="sales-agent"
+            )
+        if hasattr(adapter, "mark"):
+            adapter.mark(item.message_id, f"V2_{result['action']}")
+        results.append(
+            {
+                "message_id": item.message_id,
+                **{k: v for k, v in result.items() if k != "reply"},
+            }
+        )
+    return results
+
+
+# Processamento contínuo: com CONVERSATION_AUTOPROCESS_ENABLED, cada webhook que
+# grava mensagem nova dispara o canal em segundo plano. Uma execução por canal
+# neste processo; o que chega no meio dela é pego na volta seguinte do laço.
+# Entre processos do gunicorn, claim_message do motor evita resposta dupla.
+_autoprocess_lock = Lock()
+_autoprocess_running: set[str] = set()
+_autoprocess_again: set[str] = set()
+# Mensagem em conversa ocupada (BUSY) espera e tenta de novo, poucas vezes.
+AUTOPROCESS_BUSY_RETRIES = 3
+AUTOPROCESS_BUSY_WAIT_SECONDS = 5
+
+
+def _start_autoprocess_thread(channel):
+    import threading
+
+    threading.Thread(
+        target=_autoprocess_worker,
+        args=(channel,),
+        name=f"autoprocess-{channel}",
+        daemon=True,
+    ).start()
+
+
+def _autoprocess(channel):
+    from veratus_agents.meta_webhooks import env_flag
+
+    if not env_flag("CONVERSATION_AUTOPROCESS_ENABLED"):
+        return False
+    with _autoprocess_lock:
+        if channel in _autoprocess_running:
+            _autoprocess_again.add(channel)
+            return True
+        _autoprocess_running.add(channel)
+    try:
+        _start_autoprocess_thread(channel)
+    except Exception as exc:  # noqa: BLE001 - o webhook responde mesmo sem a thread
+        with _autoprocess_lock:
+            _autoprocess_running.discard(channel)
+        app.logger.error(
+            "conversation_autoprocess_not_started channel=%s error_type=%s",
+            channel,
+            type(exc).__name__,
+        )
+        return False
+    return True
+
+
+def _autoprocess_worker(channel):
+    busy_rounds = 0
+    while True:
+        busy = False
+        try:
+            with app.app_context():
+                results = _process_channel(_conversation_engine(), channel)
+            busy = any(item.get("action") == "BUSY" for item in results or [])
+        except Exception as exc:  # noqa: BLE001 - o erro fica no log, sem texto do cliente
+            app.logger.error(
+                "conversation_autoprocess_failed channel=%s error_type=%s",
+                channel,
+                type(exc).__name__,
+            )
+        if busy and busy_rounds < AUTOPROCESS_BUSY_RETRIES:
+            busy_rounds += 1
+            time.sleep(AUTOPROCESS_BUSY_WAIT_SECONDS)
+            continue
+        with _autoprocess_lock:
+            if channel not in _autoprocess_again:
+                _autoprocess_running.discard(channel)
+                return
+            _autoprocess_again.discard(channel)
+
+
+@app.route("/os/conversations", methods=["GET"])
+def os_conversations():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.conversations import public_conversation
+
+    rows = engine.store.conversations(
+        channel=request.args.get("channel") or None,
+        state=request.args.get("state") or None,
+    )
+    return jsonify({"conversations": [public_conversation(row) for row in rows]}), 200
+
+
+@app.route("/os/conversations/queue", methods=["GET"])
+def os_conversations_queue():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    return jsonify(
+        {
+            "drafts": engine.store.queue(
+                channel=request.args.get("channel") or None,
+                status=request.args.get("status") or None,
+            )
+        }
+    ), 200
+
+
+@app.route("/os/conversations/queue/<draft_id>/<decision>", methods=["POST"])
+def os_conversations_decide(draft_id, decision):
+    denied = _admin_required()
+    if denied:
+        return denied
+    if decision not in {"approve", "reject"}:
+        return jsonify({"status": "error", "message": "not_found"}), 404
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    actor, text = data.get("actor"), data.get("text")
+    if (
+        set(data) - {"actor", "text"}
+        or not isinstance(actor, str)
+        or not actor.strip()
+        or (text is not None and not isinstance(text, str))
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    try:
+        if decision == "approve":
+            result = engine.approve_draft(draft_id, actor=actor.strip(), text=text)
+        else:
+            result = engine.reject_draft(draft_id, actor=actor.strip())
+    except KeyError:
+        return jsonify({"status": "error", "message": "draft_not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 409
+    return jsonify(result), 200
+
+
+@app.route("/os/conversations/<channel>/<conversation_id>/state", methods=["POST"])
+def os_conversation_state(channel, conversation_id):
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    if set(data) != {"state", "actor"} or not all(
+        isinstance(data[key], str) and data[key].strip() for key in data
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    try:
+        conversation = engine.set_state(
+            channel, conversation_id, data["state"], actor=data["actor"].strip()
+        )
+    except KeyError:
+        return jsonify({"status": "error", "message": "conversation_not_found"}), 404
+    except ValueError:
+        return jsonify({"status": "error", "message": "invalid_state"}), 400
+    if channel == "whatsapp":
+        try:
+            _whatsapp_channel().set_state(
+                conversation_id, data["state"], actor=data["actor"].strip()
+            )
+        except KeyError:
+            pass
+    return jsonify({"conversation": conversation}), 200
+
+
+@app.route("/os/conversations/readiness", methods=["GET"])
+def os_conversations_readiness():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.operations import ApprovalType, request_approval
+
+    report = engine.readiness()
+    # Subir de nível nunca é automático: o critério atingido vira um pedido de
+    # aprovação, e o fundador muda CONVERSATION_MODE_<CANAL> no Render.
+    for channel, item in report.items():
+        if item["eligible"] and not item["approval_id"]:
+            approval = request_approval(
+                _runtime(),
+                "customer-supervisor",
+                ApprovalType.AUTONOMY_CHANGE,
+                f"{channel}: critérios atingidos para {item['next_mode']}",
+                {
+                    "channel": channel,
+                    "from": item["mode"],
+                    "to": item["next_mode"],
+                    "criteria": item["criteria"],
+                    "action": (
+                        f"definir CONVERSATION_MODE_{channel.upper()}="
+                        f"{item['next_mode']} no Render"
+                    ),
+                    "external_write": False,
+                },
+            )
+            engine.store.save_readiness_request(
+                channel, item["next_mode"], approval.request_id
+            )
+            item["approval_id"] = approval.request_id
+    return jsonify({"channels": report}), 200
+
+
+@app.route("/os/conversations/metrics", methods=["GET"])
+def os_conversations_metrics():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    return jsonify({"channels": engine.metrics()}), 200
+
+
+@app.route("/os/flow", methods=["GET"])
+def os_flow():
+    """Fluxo de vendas por canal: papéis, nível, chaves de envio e métricas."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.sales_flow import flow_report
+
+    return jsonify(flow_report(engine, _order_ledger())), 200
+
+
+@app.route("/os/conversations/alerts", methods=["GET"])
+def os_conversations_alerts():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    return jsonify({"alerts": engine.store.alerts()}), 200
+
+
+@app.route("/os/conversations/adapters", methods=["GET"])
+def os_conversations_adapters():
+    denied = _admin_required()
+    if denied:
+        return denied
+    engine, error = _engine_or_error()
+    if error:
+        return error
+    from veratus_agents.channel_adapters import adapter_contract
+
+    return jsonify(
+        {
+            "adapters": {
+                name: {**adapter_contract(adapter), "mode": engine.mode(name)}
+                for name, adapter in engine.adapters.items()
+            }
+        }
+    ), 200
+
+
+@app.route("/integrations/mercado-pago/webhook", methods=["POST"])
+def mercado_pago_webhook():
+    from veratus_agents.payments import (
+        MercadoPagoClient,
+        PaymentError,
+        confirm_payment,
+        verify_signature,
+    )
+
+    data_id = request.args.get("data.id") or (
+        (request.get_json(silent=True) or {}).get("data") or {}
+    ).get("id")
+    if not verify_signature(
+        signature_header=request.headers.get("x-signature"),
+        request_id=request.headers.get("x-request-id"),
+        data_id=str(data_id) if data_id else None,
+        secret=os.getenv("MERCADO_PAGO_WEBHOOK_SECRET", "").strip(),
+        now=time.time(),
+    ):
+        return jsonify({"status": "error", "message": "invalid_signature"}), 401
+    topic = request.args.get("type") or (request.get_json(silent=True) or {}).get(
+        "type"
+    )
+    if topic != "payment":
+        return jsonify({"status": "ignored"}), 200
+    client = MercadoPagoClient.from_env()
+    if client is None:
+        return jsonify(
+            {"status": "blocked", "message": "mercado_pago_not_configured"}
+        ), 503
+    try:
+        result = confirm_payment(str(data_id), client=client, ledger=_order_ledger())
+    except PaymentError as exc:
+        app.logger.error("mercado_pago_readback_failed http_status=%s", exc.http_status)
+        # 5xx faz o Mercado Pago tentar de novo.
+        return jsonify({"status": "error", "message": "readback_failed"}), 502
+    # ALREADY_PROCESSED também: se a volta anterior caiu depois do PAID no ledger,
+    # o aviso ainda não saiu. payment_confirmed é idempotente por pedido.
+    if result["status"] in ("PAID", "ALREADY_PROCESSED"):
+        try:
+            engine, _ = _engine_or_error()
+            if engine is not None:
+                engine.payment_confirmed(result["order_id"])
+        except Exception as exc:  # noqa: BLE001 - 5xx faz o provedor reenviar
+            app.logger.error(
+                "conversation_payment_notice_failed error_type=%s", type(exc).__name__
+            )
+            return jsonify({"status": "error", "message": "notice_failed"}), 500
+    return jsonify({"status": "received", "result": result["status"]}), 200
 
 
 # Shopee (and future marketplaces): connection routes, read-only.

@@ -27,7 +27,7 @@ def approved_product(tmp_path):
             supplier_ref="supplier-royal-blue",
             availability="confirmar_com_equipe",
             images=["assets/catalog/royal-blue.webp"],
-            cost_brl=Decimal("65.00"),
+            cost_brl=Decimal("10.00"),  # fictício
             price_brl=Decimal("289.90"),
             contribution_margin_brl=Decimal("150.00"),
             max_cpa_brl=Decimal("80.00"),
@@ -103,3 +103,26 @@ def test_amazon_draft_targets_the_brazil_store_and_waits_for_the_account(tmp_pat
     assert payload["product_type"] == "PENDING_AMAZON_WATCH_PRODUCT_TYPE"
     assert payload["product_identifier"] == "CONFIRMAR_GTIN_OU_ISENCAO"
     assert payload["external_write"] is False
+
+
+def test_watch_in_the_master_format_uses_the_discovered_category(tmp_path):
+    from veratus_agents.marketplace_ops import CategoryMappingStatus, MarketplaceStore
+
+    product = {
+        **approved_product(tmp_path),
+        "category": "accessories",
+        "subcategory": "watches",
+    }
+    store = MarketplaceStore(tmp_path / "marketplace.sqlite3")
+
+    # Sem descoberta na API do canal, o rascunho espera a categoria (PENDING_*).
+    pending = build_distribution_draft(product, Marketplace.MERCADO_LIVRE, store=store)
+    assert pending["payload"]["category_id"] == "PENDING_ML_WATCH_CATEGORY"
+    store.upsert_category_mapping(
+        "mercado-livre",
+        "accessories/watches",
+        external_category="MLB0000",
+        status=CategoryMappingStatus.DISCOVERED,
+    )
+    found = build_distribution_draft(product, Marketplace.MERCADO_LIVRE, store=store)
+    assert found["payload"]["category_id"] == "MLB0000"

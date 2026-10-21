@@ -1,0 +1,2 @@
+# Cópias de skills de terceiros ficam iguais à origem (ver .claude/skills/founder-skill-ORIGEM.md).
+extend-exclude = [".claude"]

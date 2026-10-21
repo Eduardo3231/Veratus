@@ -18,6 +18,10 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Test
         run: python -m pytest -q
+      - name: Knowledge lint and eval (modelo simulado)
+        run: |
+          python -m veratus_agents.knowledge lint
+          python -m veratus_agents.knowledge eval
       - name: Lint and format
         shell: bash
         run: |

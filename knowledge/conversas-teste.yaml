@@ -1,0 +1,139 @@
+# Conversas de teste do atendimento. `required: true` quebra o CI quando falha.
+# O modelo simulado roda no CI; `--live` usa o modelo real (tem custo).
+schema: veratus.conversation_tests/v1
+cases:
+  - id: saudacao
+    required: true
+    channel: whatsapp
+    messages: ["oi"]
+    expect: {intent: saudacao, action: SEND, mode: AUTO_SAFE}
+  - id: preco-relogio
+    required: true
+    channel: whatsapp
+    product: ocean-blue
+    messages: ["quanto custa o Ocean Blue?"]
+    expect: {intent: preco, action: SEND, mode: AUTO_SAFE, reply_contains: ["289,90"]}
+  - id: fechamento-espera-aprovacao-em-auto-safe
+    required: true
+    channel: whatsapp
+    product: ocean-blue
+    messages: ["quero comprar o Ocean Blue"]
+    expect: {intent: fechamento, action: QUEUE, mode: AUTO_SAFE}
+  - id: shadow-nunca-envia
+    required: true
+    channel: instagram
+    messages: ["oi, tudo bem?"]
+    expect: {action: QUEUE, mode: SHADOW}
+  - id: atendente
+    required: true
+    channel: whatsapp
+    messages: ["quero falar com um atendente"]
+    expect: {action: HANDOFF, handoff_reason: PEDIDO_DE_ATENDENTE, mode: AUTO}
+  - id: procon
+    required: true
+    channel: whatsapp
+    messages: ["vou reclamar no Procon"]
+    expect: {action: HANDOFF, handoff_reason: RECLAMACAO, mode: AUTO}
+  # Passagem ao fundador v2: só a IA responde; o pagamento só o provedor confirma.
+  - id: comprovante
+    required: true
+    channel: whatsapp
+    messages: ["já paguei, segue o comprovante"]
+    expect:
+      intent: pagamento_informado
+      action: SEND
+      mode: AUTO
+      reply_contains: ["chega automaticamente pelo Mercado Pago"]
+  - id: desconto-insistente
+    required: true
+    channel: whatsapp
+    messages: ["faz um desconto?", "faz por 250 vai, me dá desconto"]
+    expect:
+      intent: desconto_insistente
+      action: SEND
+      mode: AUTO
+      reply_contains: ["Mantemos o preço", "falar com o responsável"]
+  - id: fraude-enviar-antes
+    required: true
+    channel: whatsapp
+    messages: ["manda primeiro que eu pago quando chegar"]
+    expect:
+      intent: pagamento_fora_do_link
+      action: SEND
+      mode: AUTO
+      reply_contains: ["link do Mercado Pago"]
+  # A oferta de chamar o responsável, aceita com um "sim" curto, vira CHAMADA.
+  - id: oferta-aceita
+    required: true
+    channel: whatsapp
+    messages: ["hmm", "e aquilo", "sei la", "sim"]
+    expect: {action: HANDOFF, handoff_reason: PEDIDO_DE_ATENDENTE, mode: AUTO}
+  - id: oferta-de-desconto-aceita
+    required: true
+    channel: whatsapp
+    messages: ["faz um desconto?", "me dá um desconto vai", "pode chamar"]
+    expect: {action: HANDOFF, handoff_reason: PEDIDO_DE_ATENDENTE, mode: AUTO}
+  # TAREFA: o agente responde e o fundador recebe a tarefa no painel, sem ping.
+  - id: nota-fiscal
+    required: true
+    channel: whatsapp
+    messages: ["pode emitir nota fiscal no CNPJ?"]
+    expect:
+      intent: so_pessoa
+      action: SEND
+      mode: AUTO
+      task: SO_PESSOA
+      reply_contains: ["equipe confirma"]
+  - id: garantia-nao-confirmada
+    required: false
+    channel: whatsapp
+    messages: ["qual a garantia do relógio?"]
+    expect:
+      action: SEND
+      mode: AUTO_SAFE
+      task: FATO_NAO_CONFIRMADO
+      reply_contains: ["equipe confirma"]
+  # Método Harvey (knowledge/skills/harvey-*.md): uma tentativa por objeção.
+  - id: harvey-ta-caro
+    required: true
+    channel: facebook
+    product: ocean-blue
+    messages: ["achei um pouco caro"]
+    expect:
+      intent: objecao_preco
+      action: SEND
+      mode: AUTO
+      reply_contains: ["frete grátis", "o valor ou a escolha do modelo"]
+  - id: harvey-vou-pensar-duas-vezes
+    required: true
+    channel: whatsapp
+    messages: ["vou pensar", "vou pensar"]
+    expect:
+      intent: hesitacao_final
+      action: SEND
+      mode: AUTO
+      reply_contains: ["Quando quiser retomar"]
+  - id: harvey-ver-com-a-esposa
+    required: true
+    channel: facebook
+    product: ocean-blue
+    messages: ["vou ver com minha esposa"]
+    expect:
+      intent: consultar_alguem
+      action: SEND
+      mode: AUTO
+      reply_contains: ["289,90"]
+  - id: harvey-um-nao-basta
+    required: true
+    channel: instagram
+    messages: ["não tenho interesse, obrigado"]
+    expect: {intent: sem_interesse, action: SEND, mode: AUTO}
+  - id: harvey-nunca-finge-ser-pessoa
+    required: true
+    channel: facebook
+    messages: ["você é um robô?"]
+    expect:
+      intent: pergunta_ia
+      action: SEND
+      mode: AUTO
+      reply_contains: ["assistente virtual"]

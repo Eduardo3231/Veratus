@@ -3,9 +3,39 @@
   "rules": [
     {
       "id": "colecao",
-      "keywords": ["colecao", "coleção", "catalogo", "catálogo", "link"],
+      "keywords": [
+        "colecao",
+        "coleção",
+        "catalogo",
+        "catálogo",
+        "link"
+      ],
       "utm_campaign": "comentario_colecao",
       "message": "Olá! Obrigado pelo comentário. Aqui está a coleção Veratus: {link}\nNo site você escolhe o modelo e fala direto com a nossa equipe pelo WhatsApp."
     }
-  ]
+  ],
+  "keyword_replies_note": "Respostas privadas por palavra-chave, ligadas a cada post publicado pelo agendador (social_scheduler). Valem só no post que pediu a palavra.",
+  "keyword_replies": {
+    "QUERO": {
+      "message": "Olá! Que bom que gostou. Aqui está a peça e a coleção Veratus: {link}\nPelo site você fala direto com a nossa equipe no WhatsApp."
+    },
+    "CATÁLOGO": {
+      "message": "Olá! Aqui está o catálogo Veratus: {link}\nEscolha o modelo e fale com a nossa equipe pelo WhatsApp."
+    },
+    "PRESENTE": {
+      "message": "Olá! Para presentear, veja a coleção Veratus: {link}\nNossa equipe ajuda a escolher pelo WhatsApp."
+    },
+    "TREVO": {
+      "message": "Olá! Aqui está a peça com trevo da coleção feminina Veratus: {link}"
+    },
+    "CORAÇÃO": {
+      "message": "Olá! Aqui está a peça com coração da coleção feminina Veratus: {link}"
+    },
+    "LUZ": {
+      "message": "Olá! Aqui está a peça Lumière da coleção feminina Veratus: {link}"
+    },
+    "IPHONE": {
+      "message": "Olá! Obrigado pelo interesse. Veja a Veratus por aqui: {link}\nNossa equipe responde pelo WhatsApp."
+    }
+  }
 }

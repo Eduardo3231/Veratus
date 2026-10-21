@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
 from threading import Lock
@@ -526,6 +529,33 @@ class MarketplaceStore:
             db.commit()
         return data
 
+    def set_remote_ids(
+        self, channel: str, sku: str, remote_ids: list[Any]
+    ) -> dict[str, Any] | None:
+        """Ids do anúncio no canal (leitura de volta) no listing do SKU.
+
+        Anúncio que só existe no canal ganha um listing ``NOT_CREATED``.
+        """
+        ids = [str(item) for item in remote_ids if item]
+        current = self.listing(channel, sku)
+        if current is None:
+            if not ids:
+                return None
+            current = self.upsert_listing(sku, channel, ListingState.NOT_CREATED)
+        data = {
+            **current,
+            "external_listing_id": ids[0] if ids else None,
+            "remote_ids": ids,
+            "last_sync_at": _now(),
+        }
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                "UPDATE marketplace_listings SET data_json=? WHERE sku=? AND channel=?",
+                (json.dumps(data), sku, channel),
+            )
+            db.commit()
+        return data
+
     def listings(self, channel: str | None = None) -> list[dict[str, Any]]:
         query = "SELECT data_json FROM marketplace_listings" + (
             " WHERE channel=?" if channel else ""
@@ -642,6 +672,40 @@ class MarketplaceStore:
             for row in rows
         ]
 
+    def resolve_sync_conflicts(self, channel: str, sku: str, types: list[str]) -> int:
+        """Conflito que a leitura de volta não mostra mais fica resolvido."""
+        marks = ",".join("?" for _ in types) or "NULL"
+        with sqlite3.connect(self.path) as db:
+            count = db.execute(
+                "UPDATE marketplace_sync_conflicts SET resolved_at=? WHERE channel=? "
+                f"AND sku=? AND resolved_at IS NULL AND type IN ({marks})",
+                (_now(), channel, sku, *types),
+            ).rowcount
+            db.commit()
+        return count
+
+    def record_readback(
+        self,
+        channel: str,
+        sku: str,
+        *,
+        state: ListingState,
+        remote: dict[str, Any],
+        published: bool = False,
+    ) -> dict[str, Any]:
+        """Leitura de volta depois de uma escrita no canal (``readback_listing``)."""
+        current = self.listing(channel, sku) or self.upsert_listing(sku, channel, state)
+        data = readback_listing(
+            current, state=state, remote=remote, published=published
+        )
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                "UPDATE marketplace_listings SET data_json=? WHERE sku=? AND channel=?",
+                (json.dumps(data), sku, channel),
+            )
+            db.commit()
+        return data
+
     def request_approval(
         self, channel: str, sku: str, payload: dict[str, Any]
     ) -> dict[str, Any]:
@@ -704,7 +768,7 @@ class ExternalWriteGuard:
         product: dict[str, Any],
         *,
         approval: ApprovalRequestLike | None = None,
-        agent: str = "marketplace-agent",
+        agent: str | None = None,
         publish_enabled: bool = False,
     ) -> tuple[bool, list[str]]:
         reasons: list[str] = []
@@ -723,12 +787,12 @@ class ExternalWriteGuard:
         if product.get("status") != ProductStatus.APPROVED.value:
             reasons.append("PRODUCT_NOT_APPROVED")
         try:
-            from .operations import AGENT_REGISTRY
+            from .operations import AGENT_REGISTRY, OperationalRuntime
 
-            if (
-                agent in AGENT_REGISTRY
-                and "PUBLISH" not in AGENT_REGISTRY[agent].permissions
-            ):
+            # Sem agente, vale o agente do canal; id fora do registro não publica.
+            agent = agent or OperationalRuntime.CHANNEL_AGENTS.get(channel, "")
+            registered = AGENT_REGISTRY.get(agent)
+            if registered is None or "PUBLISH" not in registered.permissions:
                 reasons.append("AGENT_PUBLISH_PERMISSION_REQUIRED")
         except ImportError:
             reasons.append("AGENT_REGISTRY_UNAVAILABLE")
@@ -736,11 +800,48 @@ class ExternalWriteGuard:
             reasons.append("PUBLISH_APPROVAL_REQUIRED")
         if self.store.is_overridden(product.get("sku", ""), channel, "PUBLISH"):
             reasons.append("CEO_OVERRIDE_BLOCK")
+        from .commercial_config import watch_channel_blockers
+
+        reasons += [
+            f"WATCH_INFO_PENDING:{code}"
+            for code in watch_channel_blockers(product, channel)
+        ]
         return not reasons, reasons
 
 
 class ApprovalRequestLike:
     status: str
+
+
+def readback_listing(
+    current: dict[str, Any],
+    *,
+    state: ListingState,
+    remote: dict[str, Any],
+    published: bool = False,
+) -> dict[str, Any]:
+    """Listing depois da escrita confirmada pelo GET do canal.
+
+    Grava o id remoto, o status lido e ``remote_version``, que conta as escritas
+    confirmadas (o Mercado Livre não expõe versão do anúncio); ``last_publish_at``
+    só na criação.
+    """
+    item_id = str(remote["item_id"])
+    now = _now()
+    others = [ref for ref in current.get("remote_ids") or [] if ref != item_id]
+    data = {
+        **current,
+        "state": state.value,
+        "external_listing_id": item_id,
+        "remote_ids": [item_id, *others],
+        "remote_version": int(current.get("remote_version") or 0) + 1,
+        "remote_status": remote.get("status"),
+        "last_sync_at": now,
+        "last_error": None,
+    }
+    if published:
+        data["last_publish_at"] = now
+    return data
 
 
 def validate_category(channel: str, product: dict[str, Any]) -> None:
@@ -769,6 +870,35 @@ def prepare_listing(
             "DRAFT_BLOCKED_BY_CEO",
             product["sku"],
             {"channel": channel.value, "external_write": False},
+        )
+        return result
+    from .commercial_config import is_watch, watch_channel_blockers
+
+    if is_watch(product):
+        from .watch_sheet import default_sheet, model_id
+
+        sheet = default_sheet()
+        if sheet is not None:
+            # O anúncio já sai com o que o fundador confirmou na ficha.
+            payload = {
+                **payload,
+                "ficha": sheet.listing_attributes(model_id(product)),
+            }
+    # Relógio sobe: o rascunho é preparado já, e o que falta (foto real,
+    # envio do Brasil, campos da ficha) fica listado até o fundador preencher.
+    # Publicar continua bloqueado pelo ExternalWriteGuard enquanto faltar algo.
+    if pending := watch_channel_blockers(product, channel.value):
+        result = store.upsert_listing(
+            product["sku"],
+            channel.value,
+            ListingState.DRAFT,
+            payload={**payload, "pending_info": pending},
+            error="PENDENTE:" + ",".join(pending),
+        )
+        store.event(
+            "DRAFT_PENDING_INFO",
+            product["sku"],
+            {"channel": channel.value, "pending": pending, "external_write": False},
         )
         return result
     key = f"{channel.value}:{product['sku']}:CREATE_DRAFT:{product.get('updated_at', '1')}"
@@ -801,9 +931,9 @@ def make_marketplace_store(
     return MarketplaceStore(path)
 
 
+# Sem custo: ele fica no Product Master (banco), nunca no código.
 FOUNDER_CONFIRMED_DEFAULTS: dict[str, Any] = {
     "price_brl": "289.90",
-    "cost_brl": "65.00",
     "material": "stainless_steel",
     "category": "accessories",
     "subcategory": "watches",
@@ -862,3 +992,376 @@ def apply_founder_confirmed_defaults(
     merged["supplier_visibility"] = "PRIVATE"
     merged["field_sources"] = sources
     return merged, conflicts
+
+
+# -- Mercado Livre: sincronia de preço e estoque e escrita do anúncio --------------
+
+MERCADO_LIVRE = Marketplace.MERCADO_LIVRE.value
+# Diferença entre o Product Master e o anúncio lido de volta.
+SYNC_FIELDS = {"price": "PRICE_MISMATCH", "available_quantity": "STOCK_MISMATCH"}
+# Estado que a sincronia não troca por UPDATE_PENDING (só registra o conflito).
+_KEEP_STATE = {"UPDATE_PENDING", "PAUSED", "REMOVED", "BLOCKED", "PUBLISHING"}
+# Nunca no texto do anúncio: custo, fornecedor, margem.
+_PRIVATE_WORDS = re.compile(
+    r" (?:fornecedor\w*|supplier\w*|custo\w*|cost|margem|margin) "
+)
+# Uma escrita por vez neste processo: dois cliques não criam dois anúncios.
+_WRITE_LOCK = Lock()
+# Do catálogo público para o anúncio: preço, texto e o que ainda não foi verificado.
+_PUBLIC_FIELDS = (
+    "collection",
+    "sale_price",
+    "price_source",
+    "name",
+    "description",
+    "unverified_attributes",
+)
+
+
+def public_listing_view(product: dict[str, Any]) -> dict[str, Any]:
+    """O produto como o cliente vê: preço, texto e ``unverified_attributes`` da
+    entrada pública do catálogo (joias de revenda incluídas) sobre o Product
+    Master, que segue dono do SKU, do status e do teto do canal."""
+    from .listing_content import find_catalog_entry
+
+    entry = find_catalog_entry(product) or {}
+    return {**product, **{key: entry[key] for key in _PUBLIC_FIELDS if key in entry}}
+
+
+def listing_price(product: dict[str, Any]) -> str | None:
+    """Preço público do anúncio. Peça que não é relógio e não tem a entrada
+    pública (coleção e preço com fonte) fica sem preço: o preço dos relógios
+    nunca vale para joia."""
+    from .catalog import public_price
+    from .commercial_config import is_watch
+
+    if not product.get("collection") and not is_watch(product):
+        return None
+    return public_price(product)
+
+
+def confirmed_channel_stock(product: dict[str, Any]) -> int | None:
+    """Estoque que o anúncio pode mostrar, nunca acima do ``channel_stock_cap``.
+
+    Relógio: o estoque CONFIRMADO na ficha do modelo. Peça sob encomenda
+    (ON_DEMAND, como as joias de revenda): o teto do canal, que nasce 0. Sem
+    nenhum dos dois, ``None``: a sincronia não mexe no estoque remoto.
+    """
+    from .commercial_config import is_watch
+
+    cap = product.get("channel_stock_cap")
+    cap = None if cap in (None, "") else max(0, int(cap))
+    if not is_watch(product):
+        return cap if product.get("inventory_mode") == "ON_DEMAND" else None
+    from .watch_sheet import default_sheet, model_id
+
+    sheet = default_sheet()
+    stock = sheet.confirmed("estoque", model_id(product)) if sheet else None
+    if stock is None:
+        return None
+    stock = max(0, int(stock))
+    return stock if cap is None else min(stock, cap)
+
+
+def _words(text: str) -> str:
+    from .meta_webhooks import normalize_text
+
+    return " " + " ".join(re.findall(r"[a-z0-9]+", normalize_text(text))) + " "
+
+
+def listing_copy_issues(
+    product: dict[str, Any], title: str, description: str
+) -> list[str]:
+    """Título e descrição só com o produto público.
+
+    Barra custo, fornecedor, margem, ``supplier_ref`` e cada item que o produto
+    marca em ``unverified_attributes`` (material, medidas da ficha de origem...):
+    o texto que cita um deles não sobe.
+    """
+    issues = []
+    if not title.strip() or not description.strip():
+        issues.append("COPY_MISSING")
+    if len(title) > 60:
+        issues.append("TITLE_TOO_LONG")
+    text = _words(f"{title} {description}")
+    private = [
+        _words(str(product[key]))
+        for key in ("supplier_ref", "supplier_name", "cost_brl", "cost")
+        if product.get(key) not in (None, "")
+    ]
+    if _PRIVATE_WORDS.search(text) or any(
+        value.strip() and value in text for value in private
+    ):
+        issues.append("COPY_PRIVATE_DATA")
+    unverified = [
+        _words(str(item)) for item in product.get("unverified_attributes") or []
+    ]
+    if any(term.strip() and term in text for term in unverified):
+        issues.append("COPY_UNVERIFIED_ATTRIBUTE")
+    return issues
+
+
+def _same(field: str, local: Any, remote: Any) -> bool:
+    if field != "price":
+        return str(local) == str(remote)
+    try:
+        cents = Decimal("0.01")
+        return Decimal(str(local)).quantize(cents) == Decimal(str(remote)).quantize(
+            cents
+        )
+    except (InvalidOperation, ValueError):
+        return False
+
+
+def plan_mercado_livre_item(
+    store: MarketplaceStore,
+    listing: dict[str, Any],
+    product: dict[str, Any],
+    remote: dict[str, Any],
+    *,
+    stock_of: Callable[[dict[str, Any]], int | None] | None = None,
+) -> dict[str, Any]:
+    """Compara o anúncio lido de volta com o preço público e o estoque confirmado.
+
+    Diferença vira SyncConflict PRICE_MISMATCH/STOCK_MISMATCH e o listing fica
+    UPDATE_PENDING; o que voltou a bater é resolvido. Estoque não confirmado fica
+    fora da conta. Dry-run: só o store local muda, o canal não.
+    """
+    sku = listing["sku"]
+    view = public_listing_view(product)
+    local = {
+        "price": listing_price(view),
+        "available_quantity": (stock_of or confirmed_channel_stock)(view),
+    }
+    changes = {
+        field: {"local": str(local[field]), "remote": str(remote.get(field))}
+        for field in SYNC_FIELDS
+        if local[field] is not None
+        and not _same(field, local[field], remote.get(field))
+    }
+    for field, change in changes.items():
+        store.record_sync_conflict(
+            SyncConflict(
+                SYNC_FIELDS[field],
+                sku,
+                MERCADO_LIVRE,
+                change["local"],
+                change["remote"],
+                _now(),
+                "aplicar pelo publish, com a aprovação do fundador",
+            )
+        )
+    settled = [
+        kind
+        for field, kind in SYNC_FIELDS.items()
+        if field not in changes and local[field] is not None
+    ]
+    if settled:
+        store.resolve_sync_conflicts(MERCADO_LIVRE, sku, settled)
+    state = listing["state"]
+    if changes and state not in _KEEP_STATE:
+        state = store.upsert_listing(sku, MERCADO_LIVRE, ListingState.UPDATE_PENDING)[
+            "state"
+        ]
+    return {
+        "sku": sku,
+        "item_id": remote.get("item_id"),
+        "status": "UPDATE_PENDING" if changes else "IN_SYNC",
+        "changes": changes,
+        "stock_confirmed": local["available_quantity"] is not None,
+        "state": state,
+    }
+
+
+def _blocked(*reasons: str) -> dict[str, Any]:
+    return {"status": "BLOCKED", "reasons": list(reasons), "external_write": False}
+
+
+def mercado_livre_guard_reasons(
+    store: MarketplaceStore, product: dict[str, Any]
+) -> list[str]:
+    """O ExternalWriteGuard do publish para o Mercado Livre (aprovação do
+    fundador, papel com PUBLISH, canal e flags ligados, ficha); vazio = liberado."""
+    from types import SimpleNamespace
+
+    request_id = f"publish_{MERCADO_LIVRE}_{product.get('sku') or product.get('id')}"
+    approval = next(
+        (item for item in store.approvals() if item["request_id"] == request_id),
+        None,
+    )
+    _, reasons = ExternalWriteGuard(store).check(
+        MERCADO_LIVRE,
+        product,
+        approval=SimpleNamespace(status=approval["status"]) if approval else None,
+        publish_enabled=os.getenv("PUBLISH_ENABLED", "false").lower() == "true",
+    )
+    return reasons
+
+
+def _write_blockers(store: MarketplaceStore, writer: Any, product: dict) -> list[str]:
+    """Guard e flags do cliente também aqui: quem chama a escrita sem passar pela
+    rota é barrado do mesmo jeito, antes de qualquer rede."""
+    reasons = [*mercado_livre_guard_reasons(store, product), *writer.blockers()]
+    return list(dict.fromkeys(reasons))
+
+
+def _ml_category(writer: Any, current: str, title: str) -> str:
+    """Categoria confirmada do rascunho (MLB...) ou, sem ela, a do preditor do
+    Mercado Livre (``domain_discovery``). A conferir na hora de ligar."""
+    if current.startswith("MLB") and current[3:].isdigit():
+        return current
+    for item in writer.reader.discover_categories(title):
+        category = str(item.get("external_category_id") or "")
+        if category.startswith("MLB") and category[3:].isdigit():
+            return category
+    return ""
+
+
+def write_mercado_livre_listing(
+    store: MarketplaceStore,
+    writer: Any,
+    product: dict[str, Any],
+    *,
+    base_url: str,
+    stock_of: Callable[[dict[str, Any]], int | None] | None = None,
+) -> dict[str, Any]:
+    """Cria ou atualiza o anúncio no Mercado Livre e grava a leitura de volta.
+
+    Só depois do ExternalWriteGuard aprovado (rota de publish) e com as flags de
+    escrita: sem elas, nada sai. Sem id remoto, cria (``POST /items``); com id,
+    aplica o preço público, o estoque confirmado (nunca acima do teto do canal) e
+    a descrição. Vale o ``GET /items/{id}``: id, versão remota e data no listing.
+    """
+    from .marketplace_clients import MarketplaceApiError, mercado_livre_item_body
+
+    if reasons := _write_blockers(store, writer, product):
+        return _blocked(*reasons)
+    sku = str(product.get("sku") or product.get("id") or "")
+    listing = store.listing(MERCADO_LIVRE, sku)
+    view = public_listing_view(product)
+    price = listing_price(view)
+    stock = (stock_of or confirmed_channel_stock)(view)
+    if listing is None:
+        return _blocked("DRAFT_MISSING")
+    if price is None:
+        return _blocked("PUBLIC_PRICE_MISSING")
+    payload = listing.get("payload") or {}
+    # O texto do rascunho; se ele não passa, o do produto público, ou nada sobe.
+    draft = (str(payload.get("title") or ""), str(payload.get("description") or ""))
+    public = (str(view.get("name") or ""), str(view.get("description") or ""))
+    issues = listing_copy_issues(view, *draft)
+    if issues and listing_copy_issues(view, *public):
+        return _blocked(*issues)
+    title, description = public if issues else draft
+    item_id = listing.get("external_listing_id")
+    with _WRITE_LOCK:
+        if item_id:
+            writer.update_item(item_id, price=Decimal(price), available_quantity=stock)
+            remote = writer.set_description(item_id, description)
+        else:
+            # Queda no meio do POST anterior: o anúncio pode existir. O fundador
+            # confere no painel (ou refaz o rascunho) antes de criar de novo.
+            if listing["state"] == ListingState.PUBLISHING.value:
+                return _blocked("PUBLISH_IN_DOUBT")
+            if not stock:
+                return _blocked(
+                    "STOCK_NOT_CONFIRMED" if stock is None else "STOCK_ZERO"
+                )
+            body, missing = mercado_livre_item_body(
+                {
+                    **payload,
+                    "title": title,
+                    "description": description,
+                    "category_id": _ml_category(
+                        writer, str(payload.get("category_id") or ""), title
+                    ),
+                    "images": payload.get("images") or product.get("images"),
+                },
+                sku=sku,
+                price=price,
+                quantity=stock,
+                base_url=base_url,
+            )
+            if missing:
+                return _blocked(*missing)
+            store.upsert_listing(sku, MERCADO_LIVRE, ListingState.PUBLISHING)
+            try:
+                remote = writer.create_item(body)
+            except MarketplaceApiError as exc:
+                # 4xx (fora o 408): o canal recusou e nada foi criado. Rede, 5xx
+                # ou POST sem id deixam PUBLISHING: a criação fica em dúvida.
+                if 400 <= (exc.http_status or 0) < 500 and exc.http_status != 408:
+                    store.upsert_listing(
+                        sku, MERCADO_LIVRE, ListingState.FAILED, error=exc.code
+                    )
+                raise
+    published = not item_id
+    in_sync = _same("price", price, remote.get("price")) and (
+        stock is None
+        or _same("available_quantity", stock, remote.get("available_quantity"))
+    )
+    state = (
+        ListingState.PAUSED
+        if remote.get("status") == "paused"
+        else ListingState.PUBLISHED
+        if in_sync
+        else ListingState.UPDATE_PENDING
+    )
+    saved = store.record_readback(
+        MERCADO_LIVRE, sku, state=state, remote=remote, published=published
+    )
+    if in_sync:
+        store.resolve_sync_conflicts(MERCADO_LIVRE, sku, list(SYNC_FIELDS.values()))
+    store.event(
+        "LISTING_PUBLISHED" if published else "LISTING_UPDATED",
+        sku,
+        {
+            "channel": MERCADO_LIVRE,
+            "external_write": True,
+            "remote_status": remote.get("status"),
+        },
+    )
+    return {
+        "status": "PUBLISHED" if published else "UPDATED",
+        "listing": saved,
+        "remote": remote,
+        "external_write": True,
+    }
+
+
+def pause_mercado_livre_listing(
+    store: MarketplaceStore, writer: Any, product: dict[str, Any]
+) -> dict[str, Any]:
+    """Pausa o anúncio no canal (``PUT status=paused``) e grava a leitura de volta.
+
+    Passa pelo mesmo ExternalWriteGuard do publish; sem ele e as flags, nada sai.
+    """
+    if reasons := _write_blockers(store, writer, product):
+        return _blocked(*reasons)
+    sku = str(product.get("sku") or product.get("id") or "")
+    item_id = (store.listing(MERCADO_LIVRE, sku) or {}).get("external_listing_id")
+    if not item_id:
+        return _blocked("REMOTE_LISTING_MISSING")
+    with _WRITE_LOCK:
+        remote = writer.pause_item(item_id)
+    paused = remote.get("status") == "paused"
+    saved = store.record_readback(
+        MERCADO_LIVRE,
+        sku,
+        state=ListingState.PAUSED if paused else ListingState.SYNC_CONFLICT,
+        remote=remote,
+    )
+    store.event(
+        "LISTING_PAUSED",
+        sku,
+        {
+            "channel": MERCADO_LIVRE,
+            "external_write": True,
+            "remote_status": remote.get("status"),
+        },
+    )
+    return {
+        "status": "PAUSED" if paused else "PAUSE_NOT_CONFIRMED",
+        "listing": saved,
+        "external_write": True,
+    }

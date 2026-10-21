@@ -1,7 +1,9 @@
 from decimal import Decimal
 
 OFFICIAL_SALE_PRICE_BRL = Decimal("289.90")
-OFFICIAL_PRODUCT_COST_BRL = Decimal("65.00")
+# O custo do produto não fica no código (repositório público): vem do Product
+# Master (banco) ou da chamada, como em channel_economics. Sem custo, o lucro
+# fica vazio.
 OFFICIAL_MATERIAL = "stainless_steel"
 OFFICIAL_MATERIAL_LABEL = "Aço inoxidável"
 OFFICIAL_CATEGORY = "accessories"
@@ -73,8 +75,10 @@ FOUNDER_DECISIONS = {
     ),
 }
 # O que o agente de vendas pode afirmar ao cliente. A chave é o evidence_ref
-# exigido pelo gate (veratus_agents/policy.py) em cada commercial_claim.
-CONFIRMED_SALES_FACTS = {
+# exigido pelo gate (veratus_agents/policy.py) em cada commercial_claim. A fonte
+# é knowledge/fatos.yaml (só status CONFIRMED); estes são os fatos embutidos
+# usados se o arquivo faltar, com os mesmos evidence_ref.
+_BUILTIN_SALES_FACTS = {
     "preco-relogios": {
         "claim_type": "price",
         "scope": "watches",
@@ -101,9 +105,18 @@ CONFIRMED_SALES_FACTS = {
         "text": "O cliente pode desistir em até 7 dias após o recebimento.",
     },
 }
+
+
+def _load_sales_facts() -> dict[str, dict[str, str]]:
+    from .knowledge import confirmed_sales_facts
+
+    return confirmed_sales_facts(_BUILTIN_SALES_FACTS)
+
+
+CONFIRMED_SALES_FACTS = _load_sales_facts()
 SALES_MUST_CONFIRM_WITH_TEAM = (
     "disponibilidade real do modelo",
-    "formas e condições de pagamento",
+    "número de parcelas e condições do parcelado",
     "preço e material das joias",
     "garantia",
     "especificações técnicas (movimento, resistência à água, medidas)",
@@ -143,16 +156,14 @@ STOREFRONT_BLOCKERS = (
 )
 
 # EconomicsSnapshot dos relógios. Os três custos UNVERIFIED mantêm o status
-# INCOMPLETE; nenhum CPA de equilíbrio é final até que tenham fonte.
+# INCOMPLETE; nenhum CPA de equilíbrio é final até que tenham fonte. O custo
+# unitário é PRODUCT_MASTER: o valor só existe no banco.
 WATCH_ECONOMICS_SNAPSHOT = {
     "scope": "watches",
     "recorded_at": FOUNDER_CONFIRMED_AT,
     "fields": {
         "price": {"value": f"{OFFICIAL_SALE_PRICE_BRL:.2f}", "status": "CONFIRMED"},
-        "unit_cost": {
-            "value": f"{OFFICIAL_PRODUCT_COST_BRL:.2f}",
-            "status": "CONFIRMED",
-        },
+        "unit_cost": {"value": None, "status": "PRODUCT_MASTER"},
         "customer_shipping": {
             "value": f"{CUSTOMER_SHIPPING_BRL:.2f}",
             "status": "FOUNDER_CONFIRMED",
@@ -168,17 +179,129 @@ WATCH_ECONOMICS_SNAPSHOT = {
 }
 
 
-def calculate_official_economics() -> dict[str, str]:
-    gross_profit = OFFICIAL_SALE_PRICE_BRL - OFFICIAL_PRODUCT_COST_BRL
-    gross_margin = gross_profit / OFFICIAL_SALE_PRICE_BRL * 100
-    markup = gross_profit / OFFICIAL_PRODUCT_COST_BRL * 100
+def _cost(value: Decimal | str | float | None) -> Decimal | None:
+    return None if value in (None, "") else Decimal(str(value))
+
+
+def calculate_official_economics(
+    cost: Decimal | str | float | None = None,
+) -> dict[str, str | None]:
+    """Margem bruta do relógio com o custo do Product Master ou da chamada.
+
+    Sem custo, custo, lucro, margem e markup ficam vazios (``None``).
+    """
+    cost_value = _cost(cost)
+    profit = None if cost_value is None else OFFICIAL_SALE_PRICE_BRL - cost_value
     return {
         "sale_price_brl": f"{OFFICIAL_SALE_PRICE_BRL:.2f}",
-        "product_cost_brl": f"{OFFICIAL_PRODUCT_COST_BRL:.2f}",
-        "gross_profit_brl": f"{gross_profit:.2f}",
-        "gross_margin_percent": f"{gross_margin:.2f}",
-        "markup_percent": f"{markup:.2f}",
+        "product_cost_brl": None if cost_value is None else f"{cost_value:.2f}",
+        "gross_profit_brl": None if profit is None else f"{profit:.2f}",
+        "gross_margin_percent": (
+            None if profit is None else f"{profit / OFFICIAL_SALE_PRICE_BRL * 100:.2f}"
+        ),
+        "markup_percent": (
+            f"{profit / cost_value * 100:.2f}"
+            if profit is not None and cost_value
+            else None
+        ),
         "channel_fee_estimate": "NOT_AVAILABLE",
         "contribution_margin": "NOT_CALCULATED_WITHOUT_CHANNEL_COSTS",
         "maximum_sustainable_cpa": "NOT_CALCULATED_WITHOUT_OPERATIONAL_COSTS",
+    }
+
+
+def origin_confirmed() -> bool:
+    """O fundador confirmou na ficha que o relógio sai de dentro do Brasil?
+
+    O campo é ``geral.envio_do_brasil`` em ``catalog/ficha-relogios.yaml``.
+    Enquanto não for ``true`` com ``CONFIRMADO``, o rascunho de marketplace fica
+    pendente (ORIGIN_UNCONFIRMED) e a economia por canal marca os marketplaces
+    como BLOCKED_BY_ORIGIN. Ao confirmar, os dois liberam sem mudar código.
+    """
+    from .watch_sheet import default_sheet
+
+    sheet = default_sheet()
+    return bool(sheet and sheet.origin_confirmed())
+
+
+def is_watch(product: dict) -> bool:
+    text = " ".join(
+        str(product.get(name) or "")
+        for name in ("category", "subcategory", "collection", "product_type")
+    ).casefold()
+    return any(token in text for token in ("watch", "relog", "relóg"))
+
+
+# Marketplaces que exigem envio de dentro do Brasil para relógio.
+DOMESTIC_ORIGIN_MARKETPLACES = frozenset(
+    {"mercado-livre", "mercado_livre", "shopee", "tiktok-shop", "tiktok_shop", "amazon"}
+)
+
+
+def watch_channel_blockers(product: dict, channel: str | None = None) -> list[str]:
+    """O que ainda falta para o relógio entrar no canal; vazio = liberado.
+
+    Vazio para joias. Os códigos são ``NEEDS_REAL_PHOTO`` (foto real pelo
+    importador), ``ORIGIN_UNCONFIRMED`` (``envio_do_brasil`` na ficha) e
+    ``FICHA:<campo>`` (campo pendente em ``catalog/ficha-relogios.yaml``).
+    Site, WhatsApp e Direct não esperam nada: o relógio já está à venda. Sem
+    canal informado, vale a regra mais exigente (marketplace).
+    """
+    if not is_watch(product):
+        return []
+    from .watch_sheet import default_sheet, model_id
+
+    real_photo = product.get("image_status") == "REAL_PHOTO"
+    channel = channel or "mercado_livre"
+    sheet = default_sheet()
+    if sheet is None:
+        # Ficha ausente ou com erro: posts esperam a foto e marketplaces, a ficha.
+        reasons = [] if real_photo else ["NEEDS_REAL_PHOTO"]
+        if channel in DOMESTIC_ORIGIN_MARKETPLACES:
+            reasons += ["ORIGIN_UNCONFIRMED", "FICHA:invalida"]
+        return reasons
+    return sheet.missing(model_id(product), channel, real_photo=real_photo)
+
+
+def watch_economics_snapshot(
+    channel: str = "direct_pix", config=None, cost=None
+) -> dict:
+    """EconomicsSnapshot dos relógios a partir do motor por canal (tipo ``watch``).
+
+    Frete direto de R$ 25 é ASSUMPTION; enquanto frete, pagamento e tributo não
+    forem confirmados, o status não é COMPLETE e o worker de mídia paga segue em
+    SHADOW. O custo vem do Product Master ou da chamada; sem ele, INCOMPLETE.
+    """
+    from .channel_economics import PAID_MEDIA_FIELDS, evaluate
+
+    cost_value = _cost(cost)
+    result = evaluate(
+        channel,
+        "watch",
+        OFFICIAL_SALE_PRICE_BRL,
+        cost=cost_value,
+        config=config,
+    )
+    rank = {"SOURCED": 0, "CONFIRMED": 0, "ASSUMPTION": 1, "UNVERIFIED": 2}
+    fields = {
+        name: dict(item) for name, item in WATCH_ECONOMICS_SNAPSHOT["fields"].items()
+    }
+    if cost_value is not None:
+        fields["unit_cost"] = {"value": f"{cost_value:.2f}", "status": "CONFIRMED"}
+    for item in result["items"]:
+        name = PAID_MEDIA_FIELDS[item["kind"]]
+        current = fields.get(name)
+        if current is None or current["value"] is None:
+            fields[name] = {"value": item["amount"], "status": item["status"]}
+            continue
+        total = f"{Decimal(current['value']) + Decimal(item['amount']):.2f}"
+        worst = max(current["status"], item["status"], key=lambda s: rank.get(s, 2))
+        fields[name] = {"value": total, "status": worst}
+    return {
+        "scope": "watches",
+        "channel": channel,
+        "engine": "channel_economics",
+        "status": result["status"],
+        "status_reasons": result["status_reasons"],
+        "fields": fields,
     }

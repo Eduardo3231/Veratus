@@ -210,6 +210,107 @@ def _safe_error(response: requests.Response) -> MarketplaceApiError:
     return MarketplaceApiError("REMOTE_API_ERROR", http_status=response.status_code)
 
 
+def _shipment_id(value: str) -> str:
+    """Id do envio só com dígitos: nada além dele entra no caminho da URL."""
+    text = str(value).strip()
+    if not (text.isascii() and text.isdigit() and len(text) <= 20):
+        raise MarketplaceApiError("INVALID_SHIPMENT_ID")
+    return text
+
+
+def _numeric_id(value: Any, code: str) -> str | None:
+    """Id numérico do Mercado Livre (pedido, pack); ``None`` se vier vazio."""
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    if not (text.isascii() and text.isdigit() and len(text) <= 20):
+        raise MarketplaceApiError(code)
+    return text
+
+
+def _item_id(value: Any) -> str:
+    """Id do anúncio (``MLB123``): nada além dele entra no caminho da URL."""
+    text = str(value or "").strip()
+    prefix, digits = text[:3], text[3:]
+    if not (
+        text.isascii()
+        and prefix.isalpha()
+        and prefix.isupper()
+        and digits.isdigit()
+        and len(digits) <= 15
+    ):
+        raise MarketplaceApiError("INVALID_ITEM_ID")
+    return text
+
+
+def _item_state(data: dict[str, Any]) -> dict[str, Any]:
+    """Anúncio lido de volta: só o que a sincronia compara (sem descrição nem foto)."""
+    sku = next(
+        (
+            attribute["value_name"]
+            for attribute in data.get("attributes") or []
+            if attribute.get("id") == "SELLER_SKU" and attribute.get("value_name")
+        ),
+        None,
+    ) or data.get("seller_custom_field")
+    return {
+        "item_id": data.get("id"),
+        "status": data.get("status"),
+        "price": data.get("price"),
+        "available_quantity": data.get("available_quantity"),
+        "seller_sku": str(sku)[:80] if sku else None,
+        "last_updated": data.get("last_updated"),
+    }
+
+
+# Valor do rascunho que o fundador ainda não confirmou com a conta.
+_UNCONFIRMED = ("CONFIRMAR_COM_CONTA", "PENDING_")
+
+
+def mercado_livre_item_body(
+    payload: dict[str, Any],
+    *,
+    sku: str,
+    price: str,
+    quantity: int,
+    base_url: str,
+) -> tuple[dict[str, Any], list[str]]:
+    """Corpo do ``POST /items`` a partir do rascunho aprovado, e o que falta nele.
+
+    Sem título, descrição, categoria, tipo de anúncio e foto pública confirmados,
+    nada é montado. Atributos obrigatórios da categoria (marca, modelo, GTIN) e
+    logística: a conferir na hora de ligar.
+    """
+    missing = []
+    for field in ("title", "description", "category_id", "listing_type_id"):
+        value = str(payload.get(field) or "")
+        if not value or value.startswith(_UNCONFIRMED):
+            missing.append(f"{field.upper()}_UNCONFIRMED")
+    base = base_url.rstrip("/")
+    pictures = [
+        {"source": f"{base}/{path}"}
+        for path in map(str, payload.get("images") or [])
+        if path.startswith("assets/")
+    ]
+    if not base.startswith("https://") or not pictures:
+        missing.append("PICTURES_UNAVAILABLE")
+    if missing:
+        return {}, missing
+    return {
+        "title": payload["title"],
+        "category_id": payload["category_id"],
+        "price": float(price),
+        "currency_id": "BRL",
+        "available_quantity": int(quantity),
+        "buying_mode": "buy_it_now",
+        "condition": payload.get("condition") or "new",
+        "listing_type_id": payload["listing_type_id"],
+        "pictures": pictures[:10],
+        "attributes": [{"id": "SELLER_SKU", "value_name": sku}],
+        "description": {"plain_text": payload["description"]},
+    }, []
+
+
 class MercadoLivreReadOnlyClient:
     BASE_URL = "https://api.mercadolibre.com"
 
@@ -299,6 +400,110 @@ class MercadoLivreReadOnlyClient:
             "total": data.get("paging", {}).get("total", 0),
         }
 
+    def get_shipment(self, shipment_id: str) -> dict[str, Any]:
+        """Envio do Mercado Envios: só status e rastreio, nunca endereço ou comprador.
+
+        Atrás de ``MERCADO_LIVRE_SYNC_ENABLED`` (false): desligada, nada sai.
+        Campos do formato atual de ``GET /shipments/{id}``: a conferir na hora de
+        ligar (cabeçalho ``x-format-new``).
+        """
+        from .meta_webhooks import env_flag
+
+        if not env_flag("MERCADO_LIVRE_SYNC_ENABLED"):
+            raise MarketplaceApiError("SYNC_DISABLED")
+        ref = _shipment_id(shipment_id)
+        data = self._get(f"/shipments/{ref}")
+        return {
+            "shipment_id": ref,
+            # Liga o envio ao pedido do ledger (ml-<order_id>).
+            "order_id": str(data.get("order_id") or "") or None,
+            "status": data.get("status"),
+            "substatus": data.get("substatus"),
+            "tracking_number": data.get("tracking_number"),
+            "tracking_method": data.get("tracking_method"),
+        }
+
+    def get_order(self, order_id: str) -> dict[str, Any]:
+        """Pedido (``GET /orders/{id}``): só ids, SKU, quantidade, valores e status.
+
+        Comprador, pagador, CPF/CNPJ e endereço ficam de fora. O status do
+        pagamento vale por esta leitura, nunca pelo corpo da notificação. Atrás de
+        ``MERCADO_LIVRE_SYNC_ENABLED``: desligada, nada sai. A conferir na hora de
+        ligar.
+        """
+        from .meta_webhooks import env_flag
+
+        if not env_flag("MERCADO_LIVRE_SYNC_ENABLED"):
+            raise MarketplaceApiError("SYNC_DISABLED")
+        ref = _numeric_id(order_id, "INVALID_ORDER_ID")
+        if ref is None:
+            raise MarketplaceApiError("INVALID_ORDER_ID")
+        data = self._get(f"/orders/{ref}")
+        items = []
+        for row in data.get("order_items") or []:
+            item = row.get("item") or {}
+            sku = item.get("seller_sku") or item.get("seller_custom_field")
+            items.append(
+                {
+                    "item_id": str(item.get("id") or ""),
+                    "seller_sku": str(sku)[:80] if sku else None,
+                    "quantity": row.get("quantity"),
+                    "unit_price": row.get("unit_price"),
+                }
+            )
+        return {
+            "order_id": ref,
+            "status": data.get("status"),
+            "date_created": data.get("date_created"),
+            "total_amount": data.get("total_amount"),
+            "currency_id": data.get("currency_id"),
+            "pack_id": _numeric_id(data.get("pack_id"), "INVALID_PACK_ID"),
+            "items": items,
+        }
+
+    def get_item(self, item_id: str) -> dict[str, Any]:
+        """Anúncio (``GET /items/{id}``) para a sincronia: preço, estoque e status.
+
+        Atrás de ``MERCADO_LIVRE_SYNC_ENABLED``: desligada, nada sai.
+        """
+        from .meta_webhooks import env_flag
+
+        if not env_flag("MERCADO_LIVRE_SYNC_ENABLED"):
+            raise MarketplaceApiError("SYNC_DISABLED")
+        ref = _item_id(item_id)
+        return _item_state(
+            self._get(f"/items/{ref}", params={"include_attributes": "all"})
+        )
+
+    def get_shipment_label(
+        self, shipment_id: str, *, response_type: str = "pdf"
+    ) -> bytes:
+        """Etiqueta do envio (``GET /shipment_labels``), atrás de
+        ``MERCADO_LIVRE_LABELS_ENABLED`` (false). Traz nome e endereço do comprador:
+        vai direto ao fundador, nunca para log, evento ou Git. A conferir na hora de
+        ligar (só sai com o envio em ``ready_to_ship``).
+        """
+        from .meta_webhooks import env_flag
+
+        if not env_flag("MERCADO_LIVRE_LABELS_ENABLED"):
+            raise MarketplaceApiError("LABELS_DISABLED")
+        if response_type not in ("pdf", "zpl2"):
+            raise MarketplaceApiError("INVALID_LABEL_FORMAT")
+        manager = getattr(self, "token_manager", None)
+        token = manager.access_token() if manager is not None else self._token
+        response = self.session.get(
+            f"{self.BASE_URL}/shipment_labels",
+            headers={"Authorization": f"Bearer {token}"},
+            params={
+                "shipment_ids": _shipment_id(shipment_id),
+                "response_type": response_type,
+            },
+            timeout=self.timeout,
+        )
+        if not response.ok:
+            raise _safe_error(response)
+        return response.content
+
     @staticmethod
     def exchange_authorization_code(
         *,
@@ -351,6 +556,89 @@ class MercadoLivreReadOnlyClient:
         if not response.ok:
             raise _safe_error(response)
         return response.json()
+
+
+class MercadoLivreWriteClient:
+    """Escrita de anúncio no Mercado Livre: criar, preço e estoque, pausar, descrição.
+
+    Quem chama passa antes pelo ``ExternalWriteGuard`` (aprovação do fundador,
+    papel com PUBLISH, ficha completa). Aqui dentro, de novo: só com
+    ``MARKETPLACE_MODE=LIVE``, ``PUBLISH_ENABLED`` e ``MERCADO_LIVRE_PUBLISH_ENABLED``;
+    sem elas, nenhuma chamada de rede. Toda escrita termina na leitura de volta
+    (``GET /items/{id}``). Corpos do POST e do PUT: a conferir na hora de ligar.
+    """
+
+    def __init__(self, reader: MercadoLivreReadOnlyClient) -> None:
+        self.reader = reader
+
+    @staticmethod
+    def blockers() -> list[str]:
+        from .meta_webhooks import env_flag
+
+        reasons = []
+        if os.getenv("MARKETPLACE_MODE", "LOCAL").strip().upper() != "LIVE":
+            reasons.append("MARKETPLACE_MODE_LOCAL")
+        if not env_flag("PUBLISH_ENABLED"):
+            reasons.append("GLOBAL_PUBLISH_DISABLED")
+        if not env_flag("MERCADO_LIVRE_PUBLISH_ENABLED"):
+            reasons.append("CHANNEL_PUBLISH_DISABLED")
+        return reasons
+
+    def _write(self, method: str, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        if self.blockers():
+            raise MarketplaceApiError("PUBLISH_DISABLED")
+        manager = getattr(self.reader, "token_manager", None)
+        token = manager.access_token() if manager is not None else self.reader._token
+        response = self.reader.session.request(
+            method,
+            f"{self.reader.BASE_URL}{path}",
+            headers={"Authorization": f"Bearer {token}"},
+            json=body,
+            timeout=self.reader.timeout,
+        )
+        if not response.ok:
+            raise _safe_error(response)
+        try:
+            data = response.json()
+        except ValueError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def read_back(self, item_id: str) -> dict[str, Any]:
+        """``GET /items/{id}`` depois da escrita: vale o que o canal diz."""
+        return _item_state(self.reader._get(f"/items/{_item_id(item_id)}"))
+
+    def create_item(self, body: dict[str, Any]) -> dict[str, Any]:
+        created = self._write("POST", "/items", body)
+        return self.read_back(created.get("id") or "")
+
+    def update_item(
+        self,
+        item_id: str,
+        *,
+        price: Any = None,
+        available_quantity: int | None = None,
+    ) -> dict[str, Any]:
+        ref = _item_id(item_id)
+        body: dict[str, Any] = {}
+        if price is not None:
+            body["price"] = float(price)
+        if available_quantity is not None:
+            body["available_quantity"] = int(available_quantity)
+        if not body:
+            raise MarketplaceApiError("NOTHING_TO_UPDATE")
+        self._write("PUT", f"/items/{ref}", body)
+        return self.read_back(ref)
+
+    def pause_item(self, item_id: str) -> dict[str, Any]:
+        ref = _item_id(item_id)
+        self._write("PUT", f"/items/{ref}", {"status": "paused"})
+        return self.read_back(ref)
+
+    def set_description(self, item_id: str, text: str) -> dict[str, Any]:
+        ref = _item_id(item_id)
+        self._write("PUT", f"/items/{ref}/description", {"plain_text": text})
+        return self.read_back(ref)
 
 
 class MercadoLivreOAuthTokenManager:
@@ -585,10 +873,11 @@ CLIENT_CAPABILITIES = {
         "category_discovery": "IMPLEMENTED",
         "attribute_discovery": "IMPLEMENTED",
         "listing_lookup": "IMPLEMENTED",
-        "listing_create": "MISSING",
-        "listing_update": "MISSING",
-        "listing_pause": "MISSING",
-        "read_back": "PARTIAL",
+        # MercadoLivreWriteClient: só depois do ExternalWriteGuard e das flags.
+        "listing_create": "IMPLEMENTED_BEHIND_GUARD",
+        "listing_update": "IMPLEMENTED_BEHIND_GUARD",
+        "listing_pause": "IMPLEMENTED_BEHIND_GUARD",
+        "read_back": "IMPLEMENTED",
         "error_normalization": "IMPLEMENTED",
         "rate_limits": "PARTIAL",
     },
@@ -599,17 +888,17 @@ CLIENT_CAPABILITIES = {
         "health_check": "IMPLEMENTED",
         "category_discovery": "IMPLEMENTED",
         "attribute_discovery": "MISSING",
-        "listing_lookup": "MISSING",
+        "listing_lookup": "PARTIAL",
         "listing_create": "MISSING",
         "listing_update": "MISSING",
         "listing_pause": "MISSING",
-        "read_back": "MISSING",
+        "read_back": "PARTIAL",
         "error_normalization": "IMPLEMENTED",
         "rate_limits": "PARTIAL",
     },
     "tiktok-shop": {
         "authentication": "IMPLEMENTED",
-        "token_refresh": "MISSING",
+        "token_refresh": "IMPLEMENTED",
         "account_identity": "IMPLEMENTED",
         "health_check": "IMPLEMENTED",
         "category_discovery": "IMPLEMENTED",
@@ -650,11 +939,13 @@ CLIENT_CAPABILITIES = {
             "listing_create",
             "listing_update",
             "listing_pause",
-            "read_back",
             "error_normalization",
             "rate_limits",
         )
-    },
+    }
+    # Leitura de volta do catálogo (meta_catalog.MetaCatalogReadOnlyClient), atrás
+    # de META_CATALOG_READBACK_ENABLED; formato a conferir na hora de ligar.
+    | {"read_back": "PARTIAL"},
 }
 
 
@@ -674,6 +965,18 @@ def connection_status() -> dict[str, Any]:
                 from .mercado_livre_oauth import persisted_credentials_available
 
                 if persisted_credentials_available():
+                    credentials = "PRESENT"
+            except (ImportError, RuntimeError):
+                pass
+        if channel == "tiktok-shop" and credentials == "MISSING":
+            # Loja autorizada pelo OAuth: o token fica no banco, não no env.
+            try:
+                from .mercado_livre_oauth import persisted_credentials_available
+
+                keys = ("TIKTOK_SHOP_APP_KEY", "TIKTOK_SHOP_APP_SECRET")
+                if all(os.getenv(name, "").strip() for name in keys) and (
+                    persisted_credentials_available("tiktok-shop")
+                ):
                     credentials = "PRESENT"
             except (ImportError, RuntimeError):
                 pass

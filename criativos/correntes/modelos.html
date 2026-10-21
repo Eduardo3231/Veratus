@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Veratus · criativos das correntes</title>
+<style>
+@font-face{font-family:"Cormorant Garamond";font-weight:500;src:url("__BASE__/fontes/cormorant-garamond-latin-500-normal.woff2")}
+@font-face{font-family:"Cormorant Garamond";font-weight:600;src:url("__BASE__/fontes/cormorant-garamond-latin-600-normal.woff2")}
+@font-face{font-family:"Cormorant Garamond";font-weight:500;font-style:italic;src:url("__BASE__/fontes/cormorant-garamond-latin-500-italic.woff2")}
+@font-face{font-family:"Jost";font-weight:400;src:url("__BASE__/fontes/jost-latin-400-normal.woff2")}
+@font-face{font-family:"Jost";font-weight:500;src:url("__BASE__/fontes/jost-latin-500-normal.woff2")}
+@font-face{font-family:"Jost";font-weight:600;src:url("__BASE__/fontes/jost-latin-600-normal.woff2")}
+:root{
+  --obs:#0B0B0B; --char:#2B2B2B; --ash:#8A867F; --ivo:#F6F4F0; --gold:#C8A56A;
+  --gold-hi:#E8D3A2; --gold-lo:#9C7A44; --line:rgba(200,165,106,.55);
+  --serif:"Cormorant Garamond",Georgia,serif; --sans:Jost,"Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1a1a;display:flex;flex-direction:column;gap:40px;padding:40px;align-items:flex-start}
+.peca{position:relative;overflow:hidden;background:var(--obs);color:var(--ivo);font-family:var(--sans)}
+.feed{width:1080px;height:1350px}
+.story{width:1080px;height:1920px}
+/* materiais */
+.marmore{position:absolute;inset:0;width:100%;height:100%;opacity:.16;mix-blend-mode:screen;pointer-events:none}
+.grao{position:absolute;inset:0;width:100%;height:100%;opacity:.07;mix-blend-mode:overlay;pointer-events:none}
+.luz{position:absolute;border-radius:50%;pointer-events:none;background:radial-gradient(closest-side,rgba(200,165,106,.16),rgba(200,165,106,0))}
+.vinheta{position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 45%,rgba(0,0,0,0) 55%,rgba(0,0,0,.6) 100%);pointer-events:none}
+.moldura{position:absolute;inset:34px;border:1px solid rgba(200,165,106,.35);pointer-events:none}
+.moldura::after{content:"";position:absolute;inset:8px;border:1px solid rgba(200,165,106,.16)}
+/* marca */
+.emblema{display:block;border-radius:50%;box-shadow:0 18px 40px rgba(0,0,0,.65),0 2px 6px rgba(0,0,0,.6)}
+.nome{font-family:var(--serif);font-weight:600;letter-spacing:.2em;line-height:1;
+  background:linear-gradient(180deg,var(--gold-hi) 0%,var(--gold) 48%,var(--gold-lo) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.fio{height:1px;background:linear-gradient(90deg,rgba(200,165,106,0),var(--gold),rgba(200,165,106,0))}
+.fio.esq{background:linear-gradient(90deg,var(--gold),rgba(200,165,106,0))}
+/* tipografia */
+.titulo{font-family:var(--serif);font-weight:500;line-height:1.02;letter-spacing:-.01em;text-wrap:balance}
+.titulo em{font-style:italic;color:var(--gold-hi)}
+.texto{font-size:26px;line-height:1.5;color:rgba(246,244,240,.84);font-weight:400}
+.rotulo{font-size:17px;letter-spacing:.24em;text-transform:uppercase;color:var(--ash);font-weight:500}
+/* janela em arco e detalhes */
+.arco{position:absolute;overflow:hidden;border-radius:999px 999px 4px 4px;background:#111;
+  box-shadow:0 40px 80px rgba(0,0,0,.65),0 8px 18px rgba(0,0,0,.5)}
+.arco img,.detalhe img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.arco-borda{position:absolute;border:1px solid var(--line);border-radius:999px 999px 6px 6px;pointer-events:none}
+.detalhe{position:absolute;overflow:hidden;background:#0c0c0c;outline:1px solid var(--line);outline-offset:7px;
+  box-shadow:0 22px 40px rgba(0,0,0,.6)}
+.legenda{position:absolute;font-size:16px;letter-spacing:.26em;text-transform:uppercase;color:var(--ash);font-weight:500;text-align:center}
+.solta{position:absolute;mix-blend-mode:lighten}
+.solta img{display:block;width:100%;height:100%;object-fit:contain}
+/* fatos */
+.fatos{display:flex;flex-direction:column;gap:30px}
+.fato{display:grid;grid-template-columns:52px 1fr;column-gap:22px;align-items:center}
+.fato svg{width:52px;height:52px}
+.fato b{display:block;font-weight:500;font-size:23px;letter-spacing:.14em;text-transform:uppercase;color:var(--ivo)}
+.fato span{display:block;font-size:21px;color:var(--ash);margin-top:4px;letter-spacing:.01em}
+.faixa{position:absolute;left:72px;right:72px;display:flex;justify-content:space-between;align-items:center;
+  border-top:1px solid rgba(200,165,106,.28);padding-top:30px}
+.faixa div{display:flex;align-items:center;gap:16px;font-size:18px;letter-spacing:.16em;text-transform:uppercase;color:rgba(246,244,240,.86);font-weight:500;line-height:1.35}
+.faixa svg{width:40px;height:40px;flex:none}
+.faixa i{width:1px;height:44px;background:rgba(200,165,106,.35)}
+.assina{position:absolute;text-align:right}
+.assina .s1{font-family:var(--serif);font-style:italic;font-weight:500;font-size:46px;color:var(--gold);line-height:1}
+.assina .s2{margin-top:10px;font-size:15px;letter-spacing:.34em;text-transform:uppercase;color:var(--ash)}
+.cta{position:absolute;display:flex;align-items:center;justify-content:center;gap:18px;border-radius:999px;
+  background:linear-gradient(180deg,#DFC28A,#B58B4C);color:var(--obs);font-weight:600;letter-spacing:.06em;
+  box-shadow:0 16px 36px rgba(0,0,0,.55),0 0 0 1px rgba(255,240,210,.35) inset}
+.cta svg{width:40px;height:40px}
+.num{position:absolute;text-align:center;font-weight:500;letter-spacing:.14em;color:var(--ivo)}
+</style>
+</head>
+<body>
+<!-- ícones desenhados (um traço, uma espessura) -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <filter id="veios" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="turbulence" baseFrequency="0.0011 0.0032" numOctaves="4" seed="19" result="t"/>
+      <feColorMatrix in="t" type="matrix" values="0 0 0 0 0.84  0 0 0 0 0.72  0 0 0 0 0.52  -16 0 0 0 1.0"/>
+    </filter>
+    <filter id="grao" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+    <symbol id="i-frete" viewBox="0 0 48 48"><g fill="none" stroke="#C8A56A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h24v19H4z"/><path d="M28 19h8l6 7v6h-14"/><circle cx="12" cy="34" r="3.5"/><circle cx="35" cy="34" r="3.5"/><path d="M4 21h9M4 26h6"/></g></symbol>
+    <symbol id="i-prazo" viewBox="0 0 48 48"><g fill="none" stroke="#C8A56A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="10" width="34" height="31" rx="2"/><path d="M7 18h34M16 6v8M32 6v8"/><path d="M17 29l5 5 9-10"/></g></symbol>
+    <symbol id="i-taxa" viewBox="0 0 48 48"><g fill="none" stroke="#C8A56A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5h26v38l-4.3-3-4.4 3-4.3-3-4.3 3-4.4-3L11 43z"/><path d="M18 16h12M18 23h12M18 30h7"/></g></symbol>
+    <symbol id="i-volta" viewBox="0 0 48 48"><g fill="none" stroke="#C8A56A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 20a15 15 0 1 1 1.5 13"/><path d="M9 11v9h9"/></g></symbol>
+    <symbol id="i-pagar" viewBox="0 0 48 48"><g fill="none" stroke="#C8A56A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="38" height="26" rx="3"/><path d="M5 18h38M11 29h8M25 29h4"/></g></symbol>
+    <symbol id="i-conversa" viewBox="0 0 48 48"><g fill="none" stroke="#C8A56A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10h32a3 3 0 0 1 3 3v17a3 3 0 0 1-3 3H21l-9 7v-7H8a3 3 0 0 1-3-3V13a3 3 0 0 1 3-3z"/><path d="M14 20h20M14 25h12"/></g></symbol>
+    <symbol id="i-conversa-escura" viewBox="0 0 48 48"><g fill="none" stroke="#0B0B0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10h32a3 3 0 0 1 3 3v17a3 3 0 0 1-3 3H21l-9 7v-7H8a3 3 0 0 1-3-3V13a3 3 0 0 1 3-3z"/><path d="M14 20h20M14 25h12"/></g></symbol>
+  </defs>
+</svg>
+
+<!-- 1 · Clássico (a mesma família da referência) -->
+<section class="peca feed" id="classico">
+  <svg class="marmore"><rect width="100%" height="100%" filter="url(#veios)"/></svg>
+  <div class="luz" style="left:420px;top:-80px;width:860px;height:1100px"></div>
+  <img class="emblema" src="__BASE__/emblema-circular.png" alt="" style="position:absolute;left:72px;top:72px;width:150px">
+  <div class="nome" style="position:absolute;left:72px;top:262px;font-size:72px">VERATUS</div>
+  <div class="texto" style="position:absolute;left:74px;top:350px;font-size:23px;letter-spacing:.06em">Correntes em tom prateado</div>
+  <div class="fio esq" style="position:absolute;left:74px;top:404px;width:120px"></div>
+  <div class="fatos" style="position:absolute;left:74px;top:452px;width:420px">
+    <div class="fato"><svg><use href="#i-frete"/></svg><div><b>Frete grátis</b><span>Sem custo de envio para você</span></div></div>
+    <div class="fato"><svg><use href="#i-prazo"/></svg><div><b>Até 7 dias</b><span>Prazo de entrega do pedido</span></div></div>
+    <div class="fato"><svg><use href="#i-taxa"/></svg><div><b>Sem taxa extra</b><span>Nenhuma taxa adicional</span></div></div>
+  </div>
+  <h1 class="titulo" style="position:absolute;left:72px;top:800px;width:440px;font-size:76px">Clássico é sempre <em>atual.</em></h1>
+  <div class="fio esq" style="position:absolute;left:74px;top:986px;width:72px"></div>
+  <p class="texto" style="position:absolute;left:74px;top:1010px;width:420px">Elo a elo, uma corrente para usar sozinha ou com o seu pingente.</p>
+
+  <div class="arco-borda" style="left:540px;top:58px;width:484px;height:836px"></div>
+  <div class="arco" style="left:554px;top:72px;width:456px;height:808px"><img src="__BASE__/fotos/corrente-busto-frente.png" alt="" style="object-position:50% 40%"></div>
+  <div class="detalhe" style="left:574px;top:928px;width:196px;height:196px"><img src="__BASE__/fotos/corrente-plana.png" alt="" style="transform:scale(3.1);transform-origin:3.5% 90.6%"></div>
+  <div class="detalhe" style="left:806px;top:928px;width:196px;height:196px"><img src="__BASE__/fotos/corrente-plana.png" alt="" style="transform:scale(2.4);transform-origin:56% 52%"></div>
+  <div class="legenda" style="left:574px;top:1146px;width:196px">O fecho</div>
+  <div class="legenda" style="left:806px;top:1146px;width:196px">O elo</div>
+  <div class="faixa" style="top:1202px">
+    <div><svg><use href="#i-pagar"/></svg>Pix ou link<br>Mercado Pago</div><i></i>
+    <div><svg><use href="#i-volta"/></svg>Desistência<br>em até 7 dias</div><i></i>
+    <div><svg><use href="#i-conversa"/></svg>Atendimento<br>no WhatsApp</div>
+  </div>
+  <div class="vinheta"></div>
+  <svg class="grao"><rect width="100%" height="100%" filter="url(#grao)"/></svg>
+</section>
+
+<!-- 2 · Símbolo (crucifixo) -->
+<section class="peca feed" id="simbolo">
+  <svg class="marmore"><rect width="100%" height="100%" filter="url(#veios)"/></svg>
+  <div class="luz" style="left:-60px;top:120px;width:820px;height:1000px"></div>
+  <div class="moldura"></div>
+  <img class="emblema" src="__BASE__/emblema-circular.png" alt="" style="position:absolute;left:84px;top:84px;width:112px">
+  <div class="nome" style="position:absolute;left:220px;top:118px;font-size:50px">VERATUS</div>
+  <div class="solta" style="left:90px;top:176px;width:540px;height:772px"><img src="__BASE__/fotos/crucifixo.png" alt=""></div>
+  <div class="arco-borda" style="left:704px;top:134px;width:296px;height:404px"></div>
+  <div class="arco" style="left:716px;top:146px;width:272px;height:380px"><img src="__BASE__/fotos/crucifixo-busto.png" alt="" style="object-position:50% 60%"></div>
+  <div class="legenda" style="left:704px;top:560px;width:296px">Na corrente</div>
+  <div class="detalhe" style="left:716px;top:640px;width:272px;height:340px"><img src="__BASE__/fotos/crucifixo-mao.png" alt="" style="object-position:50% 55%"></div>
+  <div class="legenda" style="left:704px;top:1004px;width:296px">Na palma da mão</div>
+  <h1 class="titulo" style="position:absolute;left:84px;top:1004px;width:600px;font-size:68px">Um símbolo que <em>acompanha.</em></h1>
+  <p class="texto" style="position:absolute;left:86px;top:1160px;width:600px;font-size:23px">Pingente em tom prateado para a sua corrente.</p>
+  <div class="faixa" style="top:1222px;left:84px;right:84px;border-top:0;padding-top:0;justify-content:flex-end;gap:26px">
+    <div style="font-size:15px"><svg style="width:34px;height:34px"><use href="#i-frete"/></svg>Frete<br>grátis</div><i style="height:36px"></i>
+    <div style="font-size:15px"><svg style="width:34px;height:34px"><use href="#i-conversa"/></svg>Atendimento<br>no WhatsApp</div>
+  </div>
+  <div class="vinheta"></div>
+  <svg class="grao"><rect width="100%" height="100%" filter="url(#grao)"/></svg>
+</section>
+
+<!-- 3 · Presença (rosto) -->
+<section class="peca feed" id="presenca">
+  <svg class="marmore"><rect width="100%" height="100%" filter="url(#veios)"/></svg>
+  <div class="luz" style="left:140px;top:120px;width:800px;height:900px"></div>
+  <div class="moldura"></div>
+  <img class="emblema" src="__BASE__/emblema-circular.png" alt="" style="position:absolute;left:480px;top:82px;width:120px">
+  <div class="solta" style="left:285px;top:228px;width:510px;height:709px"><img src="__BASE__/fotos/rosto.png" alt=""></div>
+  <h1 class="titulo" style="position:absolute;left:0;right:0;top:960px;text-align:center;font-size:108px;font-style:italic;color:var(--gold-hi)">Presença</h1>
+  <div class="rotulo" style="position:absolute;left:0;right:0;top:1086px;text-align:center;color:rgba(246,244,240,.86);letter-spacing:.34em;font-size:18px">em cada detalhe</div>
+  <div class="detalhe" style="left:832px;top:560px;width:156px;height:156px;border-radius:50%;outline-offset:6px"><img src="__BASE__/fotos/rosto.png" alt="" style="transform:scale(2.7);transform-origin:50% 30%;border-radius:50%"></div>
+  <div class="legenda" style="left:805px;top:742px;width:210px">De perto</div>
+  <div class="faixa" style="top:1166px;left:96px;right:96px">
+    <div><svg><use href="#i-frete"/></svg>Frete<br>grátis</div><i></i>
+    <div><svg><use href="#i-prazo"/></svg>Entrega em<br>até 7 dias</div><i></i>
+    <div><svg><use href="#i-conversa"/></svg>Atendimento<br>no WhatsApp</div>
+  </div>
+  <div class="vinheta"></div>
+  <svg class="grao"><rect width="100%" height="100%" filter="url(#grao)"/></svg>
+</section>
+
+<!-- 4 · Elo a elo (corrente plana) -->
+<section class="peca feed" id="elo">
+  <div style="position:absolute;left:0;top:0;width:1080px;height:909px;
+    -webkit-mask-image:linear-gradient(180deg,#000 62%,transparent 100%);mask-image:linear-gradient(180deg,#000 62%,transparent 100%)">
+    <img src="__BASE__/fotos/corrente-plana.png" alt="" style="width:100%;height:100%;object-fit:cover;filter:brightness(.9) contrast(1.06)">
+  </div>
+  <svg class="marmore" style="top:860px;height:490px;-webkit-mask-image:linear-gradient(180deg,transparent,#000 30%);mask-image:linear-gradient(180deg,transparent,#000 30%)"><rect width="100%" height="100%" filter="url(#veios)"/></svg>
+  <img class="emblema" src="__BASE__/emblema-circular.png" alt="" style="position:absolute;left:72px;top:72px;width:112px">
+  <h1 class="titulo" style="position:absolute;left:72px;top:776px;font-size:150px;font-style:italic;color:var(--ivo)">Elo a <em>elo.</em></h1>
+  <div class="fio esq" style="position:absolute;left:76px;top:960px;width:140px"></div>
+  <p class="texto" style="position:absolute;left:76px;top:990px;width:470px">Corrente em tom prateado, para usar sozinha ou com o seu pingente favorito.</p>
+  <div class="arco-borda" style="left:742px;top:742px;width:266px;height:404px"></div>
+  <div class="arco" style="left:754px;top:754px;width:242px;height:380px"><img src="__BASE__/fotos/corrente-busto-angulo.png" alt="" style="object-position:50% 45%"></div>
+  <div class="legenda" style="left:742px;top:1166px;width:266px">No busto</div>
+  <div class="faixa" style="top:1206px;right:380px">
+    <div><svg><use href="#i-frete"/></svg>Frete<br>grátis</div><i></i>
+    <div><svg><use href="#i-taxa"/></svg>Sem taxa<br>extra</div>
+  </div>
+  <div class="vinheta"></div>
+  <svg class="grao"><rect width="100%" height="100%" filter="url(#grao)"/></svg>
+</section>
+
+<!-- 5 · Story (9:16), Clássico com chamada -->
+<section class="peca story" id="story">
+  <svg class="marmore" style="opacity:.09"><rect width="100%" height="100%" filter="url(#veios)"/></svg>
+  <div class="luz" style="left:60px;top:260px;width:960px;height:1200px"></div>
+  <img class="emblema" src="__BASE__/emblema-circular.png" alt="" style="position:absolute;left:470px;top:196px;width:140px">
+  <div class="arco-borda" style="left:236px;top:366px;width:608px;height:900px"></div>
+  <div class="arco" style="left:250px;top:380px;width:580px;height:872px"><img src="__BASE__/fotos/corrente-busto-frente.png" alt="" style="object-position:50% 40%"></div>
+  <div class="detalhe" style="left:150px;top:1104px;width:184px;height:184px"><img src="__BASE__/fotos/corrente-plana.png" alt="" style="transform:scale(3.1);transform-origin:3.5% 90.6%"></div>
+  <div class="detalhe" style="left:746px;top:1104px;width:184px;height:184px"><img src="__BASE__/fotos/corrente-plana.png" alt="" style="transform:scale(2.4);transform-origin:56% 52%"></div>
+  <h1 class="titulo" style="position:absolute;left:0;right:0;top:1334px;text-align:center;font-size:80px">Clássico é sempre <em>atual.</em></h1>
+  <div class="faixa" style="top:1446px;left:120px;right:120px">
+    <div style="font-size:16px"><svg style="width:36px;height:36px"><use href="#i-frete"/></svg>Frete<br>grátis</div><i></i>
+    <div style="font-size:16px"><svg style="width:36px;height:36px"><use href="#i-prazo"/></svg>Até<br>7 dias</div><i></i>
+    <div style="font-size:16px"><svg style="width:36px;height:36px"><use href="#i-taxa"/></svg>Sem taxa<br>extra</div>
+  </div>
+  <div class="cta" style="left:190px;top:1540px;width:700px;height:116px;font-size:38px"><svg><use href="#i-conversa-escura"/></svg>Chame no WhatsApp</div>
+  <div class="num" style="left:0;right:0;top:1678px;font-size:34px">(11) 95832-3612</div>
+  <div class="vinheta"></div>
+  <svg class="grao"><rect width="100%" height="100%" filter="url(#grao)"/></svg>
+</section>
+<script>
+Promise.all([document.fonts.ready, ...[...document.images].map((i) => i.decode().catch(() => { window.erro = "imagem ausente: " + i.src; }))])
+  .then(() => { window.pronto = true; });
+</script>
+</body>
+</html>

@@ -22,7 +22,32 @@ MUST_BE_FALSE = {
     "PAID_MEDIA_LIVE_WRITES",
     "META_PURCHASE_EVENT_VERIFIED",
     "WHATSAPP_SEND_ENABLED",
+    "WHATSAPP_TEMPLATES_ENABLED",
+    "WHATSAPP_READ_RECEIPTS_ENABLED",
+    "WHATSAPP_INTERACTIVE_ENABLED",
+    "WHATSAPP_MEDIA_ENABLED",
+    "FOUNDER_ALERT_WHATSAPP_ENABLED",
     "INSTAGRAM_DM_ENABLED",
+    "INSTAGRAM_MESSAGING_ENABLED",
+    "MERCADO_LIVRE_ANSWERS_ENABLED",
+    "MERCADO_LIVRE_SYNC_ENABLED",
+    "MERCADO_LIVRE_LABELS_ENABLED",
+    "PAYMENT_LINKS_ENABLED",
+    "SOCIAL_PUBLISH_ENABLED",
+    "SOCIAL_INSIGHTS_ENABLED",
+    "FACEBOOK_COMMENTS_ENABLED",
+    "CONVERSATION_AUTOPROCESS_ENABLED",
+    "FACEBOOK_MESSAGING_ENABLED",
+    "FACEBOOK_CLOSE_ON_WHATSAPP",
+    "META_CATALOG_FEED_ENABLED",
+    "META_CATALOG_READBACK_ENABLED",
+    "CEP_LOOKUP_ENABLED",
+    "CHATWOOT_SYNC_ENABLED",
+    "TWENTY_SYNC_ENABLED",
+    "SHOPEE_SYNC_ENABLED",
+    "TIKTOK_SHOP_SYNC_ENABLED",
+    "AMAZON_SYNC_ENABLED",
+    "TIKTOK_CONTENT_ENABLED",
     *CHANNEL_FLAGS,
 }
 # Platform/container settings live only in the Blueprint; the MailerLite key is
@@ -65,6 +90,7 @@ def test_external_write_flags_are_explicitly_false_everywhere() -> None:
     assert render["MARKETPLACE_MODE"] == example["MARKETPLACE_MODE"] == "LOCAL"
     assert render["PAID_MEDIA_AUTONOMY_MODE"] == "SHADOW"
     assert example["PAID_MEDIA_AUTONOMY_MODE"] == "SHADOW"
+    assert render["SOCIAL_COMMENTS_MODE"] == example["SOCIAL_COMMENTS_MODE"] == "SHADOW"
 
 
 def test_absent_flags_resolve_to_blocked(
@@ -157,3 +183,26 @@ def test_safety_factor_above_one_blocks_instead_of_raising_cpa(
     monkeypatch.setenv("PAID_MEDIA_SAFETY_FACTOR", raw)
 
     assert PaidMediaConfig.from_env().safety_factor == Decimal(expected)
+
+
+def test_every_conversation_channel_starts_in_shadow() -> None:
+    render, example = _render_env(), _example_env()
+    channels = (
+        "WHATSAPP",
+        "INSTAGRAM",
+        "MERCADO_LIVRE",
+        "SHOPEE",
+        "TIKTOK_SHOP",
+        "AMAZON",
+    )
+    for channel in channels:
+        name = f"CONVERSATION_MODE_{channel}"
+        assert render[name] == "SHADOW" and example[name] == "SHADOW", name
+    assert render["DISCOUNT_LIMIT_BRL"] == example["DISCOUNT_LIMIT_BRL"] == "0"
+    assert render["PAYMENT_INSTALLMENTS_INTEREST"] == "buyer"
+    for secret in (
+        "FOUNDER_ALERT_WHATSAPP",
+        "MERCADO_PAGO_ACCESS_TOKEN",
+        "MERCADO_PAGO_WEBHOOK_SECRET",
+    ):
+        assert render[secret] is None and example[secret] == "", secret

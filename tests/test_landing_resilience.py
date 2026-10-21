@@ -24,7 +24,7 @@ class _LinkCollector(HTMLParser):
         values = {key: value or "" for key, value in attrs}
         if self._catalog_depth:
             self._catalog_depth += 1
-        elif values.get("id") == "catalog-rail":
+        elif values.get("id") == "relogios":
             self._catalog_depth = 1
         if tag == "a" and "purchase-link" in values.get("class", "").split():
             self.links.append(values)
@@ -40,41 +40,46 @@ def _css() -> str:
     return (LANDING / "styles.css").read_text(encoding="utf-8")
 
 
-def _css_rules() -> list[tuple[str, str]]:
-    return re.findall(r"([^{}]+)\{([^{}]*)\}", _css())
-
-
-def _keyframes(name: str) -> str:
-    match = re.search(rf"@keyframes {name} \{{(.*?)\}}\s*\}}", _css(), re.DOTALL)
-    assert match, f"@keyframes {name} não encontrado"
-    return match.group(1)
-
-
 def _html_links() -> _LinkCollector:
     parser = _LinkCollector()
     parser.feed((LANDING / "index.html").read_text(encoding="utf-8"))
     return parser
 
 
-def test_scroll_reveal_never_starts_invisible() -> None:
-    assert not HIDDEN_OPACITY.search(_keyframes("reveal-by-view"))
-    for selector, body in _css_rules():
-        if "scroll-reveal" in selector:
-            assert not HIDDEN_OPACITY.search(body), (selector.strip(), body)
-
-
-def test_intro_gate_leaves_without_javascript() -> None:
-    assert any(
-        "intro-failsafe" in body
-        for selector, body in _css_rules()
-        if selector.strip() == ".intro-gate"
+def test_only_the_watch_view_entrance_starts_invisible() -> None:
+    """Page content never waits for an animation; only the view a click opens fades in."""
+    keyframes = dict(
+        re.findall(r"@keyframes ([\w-]+) \{(.*?)\}\s*\}", _css(), re.DOTALL)
     )
-    assert "visibility: hidden" in _keyframes("intro-failsafe")
+    hiding = {name for name, body in keyframes.items() if HIDDEN_OPACITY.search(body)}
+
+    assert hiding == {"palco-entrada"}
+    # "backwards": once the entrance ends, nothing stays applied.
+    assert "palco-entrada 1.1s cubic-bezier(.2, .75, .2, 1) backwards" in _css()
 
 
-def test_catalog_keeps_whatsapp_fallback_before_hydration() -> None:
+def test_page_opens_without_an_intro_gate() -> None:
+    html = (LANDING / "index.html").read_text(encoding="utf-8")
+    assert "intro-gate" not in html and "intro-gate" not in _css()
+
+
+def test_page_is_built_from_the_public_catalog() -> None:
+    from scripts.build_landing import render
+
+    catalog = json.loads((LANDING / "catalog.json").read_text(encoding="utf-8"))
+    html = (LANDING / "index.html").read_text(encoding="utf-8")
+    assert html == render(catalog), "rode python scripts/build_landing.py"
+
+
+def test_watch_orders_work_before_the_script_runs() -> None:
     links = _html_links()
-    assert links.catalog_links, "#catalog-rail precisa de CTA estático"
+    watches = [
+        item
+        for item in json.loads((LANDING / "catalog.json").read_text(encoding="utf-8"))
+        if item["collection"] == "watches"
+    ]
+    orders = [link for link in links.catalog_links if link.get("data-order") == "1"]
+    assert {link["data-product-id"] for link in orders} == {w["id"] for w in watches}
     assert all(link["href"].startswith(WHATSAPP) for link in links.catalog_links)
 
 
@@ -105,7 +110,9 @@ def _visit_reference(source: str = "site-direto") -> str:
     return f"VT-{reference}"
 
 
-def _default_whatsapp_link(product_name: str = "", product_id: str = "") -> str:
+def _default_whatsapp_link(
+    product_name: str = "", product_id: str = "", order: bool = False
+) -> str:
     """What createWhatsAppLink() in site.js returns for a visit without UTMs."""
     opening = (
         f"Olá! Vim pelo site da Veratus e tenho interesse em {product_name}."
@@ -115,7 +122,12 @@ def _default_whatsapp_link(product_name: str = "", product_id: str = "") -> str:
     reference = f"Referência da visita: {_visit_reference()}"
     if product_id:
         reference += f" | produto={product_id}"
-    message = f"{opening}\nGostaria de confirmar disponibilidade e valor.\n{reference}"
+    intent = (
+        "Quero fazer o pedido e confirmar a disponibilidade."
+        if order
+        else "Gostaria de confirmar disponibilidade e valor."
+    )
+    message = f"{opening}\n{intent}\n{reference}"
     # Characters encodeURIComponent() leaves as they are.
     unreserved = "-_.!~*'()"
     return f"{WHATSAPP}?text={quote(message, safe=unreserved)}"
@@ -131,7 +143,9 @@ def test_every_static_whatsapp_link_carries_the_visit_reference() -> None:
             name = re.search(r'data-product-name="([^"]*)"', tag)
             product = re.search(r'data-product-id="([^"]*)"', tag)
             expected = _default_whatsapp_link(
-                name.group(1) if name else "", product.group(1) if product else ""
+                name.group(1) if name else "",
+                product.group(1) if product else "",
+                order='data-order="1"' in tag,
             )
             assert href == expected, (page, tag)
 
@@ -140,9 +154,10 @@ def test_site_js_builds_the_same_default_message() -> None:
     script = (LANDING / "site.js").read_text(encoding="utf-8")
 
     assert "'Gostaria de confirmar disponibilidade e valor.'" in script
+    assert "'Quero fazer o pedido e confirmar a disponibilidade.'" in script
     assert "'site-direto'" in script
     assert "hash = Math.imul(hash, 16777619)" in script
-    # The dialog CTA is rewritten too, so no WhatsApp link lacks a reference.
+    # The watch view CTA is rewritten too, so no WhatsApp link lacks a reference.
     assert "document.querySelectorAll('.purchase-link').forEach" in script
 
 
@@ -173,17 +188,18 @@ def test_every_image_has_alternative_text() -> None:
             assert alt.group(1).strip() or 'aria-hidden="true"' in tag, (page, tag)
 
 
-def test_3d_brand_chapter_only_moves_and_respects_reduced_motion() -> None:
+def test_watch_stage_only_turns_and_stops_for_reduced_motion() -> None:
     html = (LANDING / "index.html").read_text(encoding="utf-8")
-    css = (LANDING / "styles.css").read_text(encoding="utf-8")
-    turn = re.search(r"@keyframes brand-3d-turn \{(.*?)\}\s*\}", css, re.DOTALL)
-
-    assert 'id="inspection-image" class="brand-3d__face"' in html
-    assert html.count('class="brand-3d__layer"') >= 5
-    assert turn and "opacity" not in turn.group(1)
-    assert "animation-timeline: view()" in css
+    css = _css()
+    script = (LANDING / "site.js").read_text(encoding="utf-8")
     reduced = "".join(css.split("@media (prefers-reduced-motion: reduce)")[1:])
-    assert ".brand-3d__body { animation: none !important;" in reduced
+
+    # The 3D logo chapter left the site (founder, 14/10); the watch turns instead.
+    assert "brand-3d" not in html and "inspection" not in html
+    assert "data-stage" in html
+    assert ".palco__giro { transform: rotateY(var(--giro, 0deg))" in css
+    assert ".palco.is-entrando .palco__entrada { animation: none; }" in reduced
+    assert "if (reducedMotion) return;" in script
 
 
 UNVERIFIED_MATERIAL = re.compile(
@@ -193,22 +209,27 @@ UNVERIFIED_MATERIAL = re.compile(
 )
 
 
-def test_jewelry_editorial_mirrors_the_product_master() -> None:
+def test_jewelry_chapter_mirrors_the_product_master() -> None:
     html = (LANDING / "index.html").read_text(encoding="utf-8")
-    section = html.split('id="feminino"', 1)[1].split("</section>", 1)[0]
+    section = html.split('id="joias"', 1)[1].split('id="como-comprar"', 1)[0]
     catalog = {
         item["id"]: item
         for item in json.loads((LANDING / "catalog.json").read_text(encoding="utf-8"))
     }
-    ids = re.findall(r'data-product-id="([a-z-]+)"', section)
+    published = {
+        product_id
+        for product_id, item in catalog.items()
+        if item["collection"] == "feminine" and item.get("site_visibility") == "PREVIEW"
+    }
+    ids = re.findall(r'<li class="joia" data-item data-product-id="([a-z-]+)"', section)
 
-    assert len(ids) == 3 and "noir-clover" not in ids
+    # Noir Clover waits for its resemblance alert (docs/HANDOFF.md).
+    assert set(ids) == published - {"noir-clover"} and "noir-clover" not in section
     for product_id in ids:
         item = catalog[product_id]
-        assert item["collection"] == "feminine" and item["site_visibility"] == "PREVIEW"
         assert f'src="{item["primary_image"]}" alt="{item["alt"]}"' in section
-        assert f"<b>{item['name']}</b>" in section
+        assert f"<h4>{item['name']}</h4>" in section
         assert f"produto%3D{product_id}" in section
-    assert section.count("Refer%C3%AAncia%20da%20visita%3A%20VT-") == 3
+    assert section.count("Refer%C3%AAncia%20da%20visita%3A%20VT-") == len(ids)
     assert not UNVERIFIED_MATERIAL.search(re.sub(r"<[^>]+>", " ", section))
     assert "R$" not in section

@@ -1,0 +1,12 @@
+# Só ofertas ACTIVE dentro da validade chegam ao Sales Agent.
+# Kit sem desconto mostra a soma dos preços (DISCOUNT_LIMIT_BRL=0).
+schema: veratus.offers/v1
+offers:
+  - id: kit-dois-relogios
+    status: DRAFT
+    valid_from: 2026-10-20
+    valid_until: 2026-11-03
+    kind: kit
+    items: [ocean-blue, arctic-white]
+    discount_brl: "0.00"
+    text: Dois relógios Veratus no mesmo pedido, com frete grátis.

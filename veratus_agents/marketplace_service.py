@@ -19,6 +19,17 @@ from .marketplace_ops import (
 )
 
 
+def listing_sku(store: MarketplaceStore, channel: str, remote_id: str) -> str | None:
+    """SKU do anúncio remoto pelo id gravado no listing (``set_remote_ids``)."""
+    if not remote_id:
+        return None
+    for listing in store.listings(channel):
+        ids = listing.get("remote_ids") or [listing.get("external_listing_id")]
+        if remote_id in ids:
+            return str(listing["sku"])
+    return None
+
+
 class MarketplaceConnectionService:
     """Read-only orchestration layer used by marketplace agents."""
 
@@ -55,12 +66,10 @@ class MarketplaceConnectionService:
 
     @staticmethod
     def _tiktok_client() -> TikTokShopReadOnlyClient:
-        return TikTokShopReadOnlyClient(
-            os.environ["TIKTOK_SHOP_APP_KEY"],
-            os.environ["TIKTOK_SHOP_APP_SECRET"],
-            os.environ["TIKTOK_SHOP_ACCESS_TOKEN"],
-            shop_cipher=os.getenv("TIKTOK_SHOP_SHOP_CIPHER"),
-        )
+        # Token da autorização guardada (OAuth); sem ela, o do env.
+        from .tiktok_shop import tiktok_shop_client
+
+        return tiktok_shop_client()
 
     @staticmethod
     def _shopee_client() -> Any:
@@ -180,6 +189,10 @@ class MarketplaceConnectionService:
             for product in products:
                 sku = str(product.get("sku") or product.get("id"))
                 remote[sku] = client.lookup_listing(str(account["id"]), sku)
+                # O id do anúncio liga pergunta e pedido do canal ao SKU.
+                self.store.set_remote_ids(
+                    "mercado-livre", sku, remote[sku].get("remote_ids") or []
+                )
             report["api_reads"].append("GET /users/{user_id}/items/search?seller_sku")
             report.update(
                 category_discovery="HEALTHY",
@@ -458,3 +471,44 @@ class MarketplaceConnectionService:
                     }
                 )
         return None
+
+    def sync_plan(
+        self,
+        product_of: Callable[[str], dict[str, Any] | None],
+        *,
+        stock_of: Callable[[dict[str, Any]], int | None] | None = None,
+    ) -> dict[str, Any]:
+        """Dry-run da sincronia de preço e estoque no Mercado Livre, só leitura.
+
+        Lê cada anúncio com id remoto (``GET /items/{id}``) e compara com o preço
+        público e o estoque confirmado (``plan_mercado_livre_item``). Nada é escrito
+        no canal: aplicar é o publish, atrás do ExternalWriteGuard. Sem
+        ``MERCADO_LIVRE_SYNC_ENABLED``, nenhuma chamada de rede.
+        """
+        from .marketplace_ops import MERCADO_LIVRE, plan_mercado_livre_item
+        from .meta_webhooks import env_flag
+
+        result: dict[str, Any] = {"plan": [], "external_write": False}
+        if not env_flag("MERCADO_LIVRE_SYNC_ENABLED"):
+            return {**result, "status": "BLOCKED", "reason": "SYNC_DISABLED"}
+        try:
+            client = self.mercado_factory()
+        except Exception:  # noqa: BLE001 - sem conta conectada, nada sai
+            return {**result, "status": "BLOCKED", "reason": "NOT_CONNECTED"}
+        for listing in self.store.listings(MERCADO_LIVRE):
+            product = product_of(listing["sku"])
+            if not listing.get("external_listing_id") or product is None:
+                continue
+            try:
+                remote = client.get_item(listing["external_listing_id"])
+            except MarketplaceApiError as exc:
+                result["plan"].append(
+                    {"sku": listing["sku"], "status": "BLOCKED", "reason": exc.code}
+                )
+                continue
+            result["plan"].append(
+                plan_mercado_livre_item(
+                    self.store, listing, product, remote, stock_of=stock_of
+                )
+            )
+        return {**result, "status": "DRY_RUN"}

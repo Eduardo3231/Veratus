@@ -1,0 +1,74 @@
+# Fatos que o Sales Agent pode afirmar. Só status CONFIRMED vai para o cliente;
+# o resto vira "a equipe confirma" e entra na fila do fundador.
+# O id é o evidence_ref exigido pelo gate (veratus_agents/policy.py).
+# Material, movimento, medidas, garantia e envio dos relógios ficam na ficha
+# catalog/ficha-relogios.yaml: ao confirmar lá, viram fatos aqui sozinhos.
+# Um fato pode ter gate_issue (ex.: "material não validado") para liberar no
+# gate exatamente o texto dele.
+schema: veratus.facts/v1
+facts:
+  - id: preco-relogios
+    status: CONFIRMED
+    claim_type: price
+    scope: watches
+    text: Todos os relógios Veratus custam R$ 289,90.
+    evidence: FOUNDER_CONFIRMED 2026-09-26
+  - id: sem-taxas
+    status: CONFIRMED
+    claim_type: price
+    scope: all
+    text: Nenhuma taxa adicional é cobrada do cliente.
+    evidence: FOUNDER_CONFIRMED 2026-09-26
+  - id: frete-gratis
+    status: CONFIRMED
+    claim_type: shipping
+    scope: all
+    text: Frete grátis para o cliente.
+    evidence: FOUNDER_CONFIRMED 2026-09-26
+  - id: entrega-7-dias
+    status: CONFIRMED
+    claim_type: delivery
+    scope: all
+    text: Entrega em até 7 dias.
+    evidence: FOUNDER_CONFIRMED 2026-09-26
+  - id: desistencia-7-dias
+    status: CONFIRMED
+    claim_type: returns
+    scope: all
+    text: O cliente pode desistir em até 7 dias após o recebimento.
+    evidence: FOUNDER_CONFIRMED 2026-09-26
+  - id: relogios-modelos
+    status: CONFIRMED
+    claim_type: specification
+    scope: watches
+    text: >-
+      Os relógios Veratus têm nove modelos: Arctic White, Ocean Blue, Black GMT,
+      Royal Blue, Platinum Classic, Emerald Signature, Silver Prestige, Polar Blue
+      e Bronze Heritage.
+    evidence: catalog/products.json, vitrine publicada em 2026-09-27
+  - id: relogios-sem-marca-de-terceiros
+    status: CONFIRMED
+    claim_type: authenticity
+    scope: watches
+    text: Os relógios Veratus não levam marca de terceiros.
+    evidence: FOUNDER_CONFIRMED 2026-09-27
+  - id: formas-pagamento
+    status: CONFIRMED
+    claim_type: payment
+    scope: all
+    text: >-
+      O pagamento é por Pix ou pelo link do Mercado Pago; no parcelado, os juros
+      são do cliente.
+    evidence: FOUNDER_CONFIRMED 2026-10-13 (seção 0 do prompt de canais)
+  - id: joias-preco
+    status: PENDING
+    claim_type: price
+    scope: feminine
+    text: Preço das joias.
+    evidence: NEEDS_PRICING
+  - id: garantia
+    status: PENDING
+    claim_type: warranty
+    scope: all
+    text: Garantia.
+    evidence: aguardando o fundador
