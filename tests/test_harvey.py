@@ -193,6 +193,28 @@ def test_instagram_takes_price_and_order_to_whatsapp_with_product_and_origin(
     assert [e["result"] for e in led] == ["SEND", "SEND"]
 
 
+def test_facebook_closes_on_whatsapp_only_with_the_flag_and_marketplaces_never(
+    tmp_path, monkeypatch
+):
+    def ask(channel, folder):
+        engine, adapter, _ = _auto(tmp_path / folder, channel)
+        engine.handle(InboundText(channel, "c1", "m1", "quanto custa o Ocean Blue?"))
+        engine.handle(InboundText(channel, "c1", "m2", "quero comprar"))
+        return engine, adapter.sent
+
+    _, sent = ask("facebook", "off")
+    assert not any("wa.me/" in text for text in sent)  # padrão: vende no Messenger
+
+    monkeypatch.setenv("FACEBOOK_CLOSE_ON_WHATSAPP", "true")
+    engine, sent = ask("facebook", "on")
+    assert "R$ 289,90" in sent[0] and "wa.me/" in sent[1]
+    assert (
+        engine.store.get("facebook", "c1")["awaiting_data"] == 0
+    )  # sem pedir endereço
+    _, sent = ask("mercado_livre", "ml")
+    assert not any("wa.me/" in text for text in sent)  # marketplace: dentro do anúncio
+
+
 def test_story_reply_is_marked_and_its_link_says_stories(tmp_path):
     from veratus_agents.channel_adapters import (
         DirectInbox,

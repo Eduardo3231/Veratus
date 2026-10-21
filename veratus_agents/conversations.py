@@ -1020,12 +1020,12 @@ class TemplateSalesModel:
             if delivery.get("status") == "FOUND"
             else ""
         )
-        from .harvey import CLOSE_ON_WHATSAPP
+        from .harvey import closes_on_whatsapp
 
         special = _marketplace_reply(request, name) if marketplace else None
         profile = (
             _profile_reply(request, name, is_watch)
-            if request.channel in CLOSE_ON_WHATSAPP
+            if closes_on_whatsapp(request.channel)
             else None
         )
         if special is not None:
@@ -2114,7 +2114,8 @@ class ConversationEngine:
         if trigger:
             return self._handoff(key, channel, mode, trigger, inbound, intent)
 
-        from .harvey import CLOSE_ON_WHATSAPP, WHATSAPP_NEXT_STEP_INTENTS, introduce
+        from .harvey import WHATSAPP_NEXT_STEP_INTENTS, introduce
+        from .harvey import closes_on_whatsapp as _closes_on_whatsapp
 
         risk = INTENT_RISK.get(intent, 9)
         try:
@@ -2135,7 +2136,7 @@ class ConversationEngine:
             origin=dict(inbound.origin or stored_origin or {}),
             tracking_code=tracking_code,
         )
-        closes_on_whatsapp = channel in CLOSE_ON_WHATSAPP
+        closes_on_whatsapp = _closes_on_whatsapp(channel)
         if (
             intent == "fechamento"
             and product

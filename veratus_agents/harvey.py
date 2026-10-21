@@ -19,6 +19,7 @@ existe aqui. ``report`` é o "aprender": só contagens, sem dado de cliente.
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 from urllib.parse import quote
 
@@ -28,6 +29,22 @@ INTRO = "Olá! Aqui é o Harvey, assistente virtual da Veratus."
 WHATSAPP_NUMBER = "5511958323612"
 # Kit de perfil: do Instagram, o fechamento vai para o WhatsApp.
 CLOSE_ON_WHATSAPP = frozenset({"instagram"})
+
+
+def closes_on_whatsapp(channel: str) -> bool:
+    """O Instagram sempre leva ao WhatsApp; o Facebook só com a chave do fundador.
+
+    Marketplace (Mercado Livre, Shopee, TikTok Shop, Amazon) nunca entra: as regras
+    dessas plataformas não deixam tirar o comprador de dentro do anúncio.
+    """
+    if channel in CLOSE_ON_WHATSAPP:
+        return True
+    return (
+        channel == "facebook"
+        and os.getenv("FACEBOOK_CLOSE_ON_WHATSAPP", "false").strip().lower() == "true"
+    )
+
+
 # "Enviar ao WhatsApp apenas quando a conversa pedir valores, disponibilidade ou
 # atendimento" (social/auditoria-e-estrategia.md).
 WHATSAPP_NEXT_STEP_INTENTS = frozenset(

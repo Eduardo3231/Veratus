@@ -295,6 +295,9 @@ services:
         value: "false"
       - key: FACEBOOK_MESSAGING_ENABLED
         value: "false"
+      # Facebook responde e leva o cliente ao WhatsApp para fechar (como o Instagram).
+      - key: FACEBOOK_CLOSE_ON_WHATSAPP
+        value: "false"
       - key: META_CATALOG_FEED_ENABLED
         value: "false"
       - key: META_CATALOG_READBACK_ENABLED
