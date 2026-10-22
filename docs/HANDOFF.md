@@ -1,6 +1,6 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 19/10/2026 (tarde), Claude Code: correntes e joias de revenda (modelo de importação e rascunhos nos 5 marketplaces), rodada 3 dos marketplaces (Mercado Livre, Shopee, TikTok Shop, Amazon, TikTok conteúdo) e revisão da empresa pela simulação. Nada foi ligado, publicado ou mandado para a `main`. PR #1 aberto pelo fundador a partir desta branch.
+**Última atualização:** 22/10/2026, Claude Code: **PR #1 mergeado na `main` (9022d24) a pedido do fundador e deploy do Render conferido**: `/health` 200, `/agent/health` com `external_sending_enabled=false`, `/integrations/facebook/webhook` agora responde 403 com token errado (antes 404) e `/feeds/meta-catalog.csv` responde 404 em JSON (feed desligado por `META_CATALOG_FEED_ENABLED=false`). Nenhuma chave foi ligada e nada foi enviado a cliente: toda flag nova segue `false` e as conversas em `SHADOW`. Falta, só com o fundador: chaves da Meta no Render, webhook do Messenger no app da Meta e ligar uma chave por vez (lista na seção "Render, Meta e Facebook até o WhatsApp").
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
 
 ## Correntes e joias de revenda (19/10)
