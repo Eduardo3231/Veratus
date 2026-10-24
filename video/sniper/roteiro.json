@@ -1,0 +1,77 @@
+{
+  "largura": 1080,
+  "altura": 1920,
+  "fps": 30,
+  "duracao": 35.0,
+  "abertura": {
+    "atirador": {"t0": 0.0, "t1": 2.2, "texto": "1.250 METROS."},
+    "alvo": {"t0": 2.2, "t1": 3.6, "texto": "UM ALVO."},
+    "mira": {
+      "t0": 3.6,
+      "t1": 5.8,
+      "texto": "UM TIRO.",
+      "t_texto": 4.7,
+      "cliques": [3.95, 4.2, 4.45, 4.7],
+      "silencio": 5.45
+    },
+    "disparo": {"t0": 5.8, "t1": 6.6}
+  },
+  "bala": {
+    "t0": 6.6,
+    "contato": 15.6,
+    "congela": 16.6,
+    "distancia_m": 1250,
+    "velocidade_ms": 850,
+    "folga_m": 0.002,
+    "macro_m": 0.35,
+    "frases": [
+      {"texto": "SIGA A BALA.", "t0": 6.8, "t1": 9.1},
+      {"texto": "QUANTO MAIS PERTO…", "t0": 9.4, "t1": 11.9},
+      {"texto": "…MAIS DEVAGAR.", "t0": 12.1, "t1": 15.4}
+    ]
+  },
+  "gancho": {
+    "t0": 16.6,
+    "t1": 20.0,
+    "linha": "Você viu como esse vídeo te prendeu?",
+    "t_linha": 16.9,
+    "sub": "Uma boa peça faz o mesmo com quem olha para você.",
+    "t_sub": 18.1
+  },
+  "emblema": {
+    "t0": 20.0,
+    "t1": 22.0,
+    "marca": "VERATUS",
+    "sub": "Correntes e pingentes.",
+    "t_marca": 21.15,
+    "t_sub": 21.45
+  },
+  "tomadas": [
+    {"foto": "corrente-busto-frente", "t0": 22.0, "t1": 23.7, "titulo": "Elo a elo.", "sub": "Correntes em tom prateado."},
+    {"foto": "crucifixo", "t0": 23.7, "t1": 25.2, "titulo": "Pingentes que completam.", "sub": "Para usar sozinho ou combinar."},
+    {"foto": "corrente-plana", "t0": 25.2, "t1": 26.6, "titulo": "Cada detalhe, de perto.", "sub": ""}
+  ],
+  "como": {
+    "t0": 26.6,
+    "t1": 30.6,
+    "foto": "corrente-busto-angulo",
+    "titulo": "Como a Veratus trabalha",
+    "itens": [
+      {"texto": "Atendimento no WhatsApp", "sub": "com o Harvey, nosso assistente virtual", "t": 27.0},
+      {"texto": "Frete grátis e nenhuma taxa extra", "sub": "", "t": 27.6},
+      {"texto": "Entrega em até 7 dias", "sub": "", "t": 28.2},
+      {"texto": "Desistência em até 7 dias após o recebimento", "sub": "", "t": 28.8}
+    ],
+    "rodape": "Pix ou link do Mercado Pago."
+  },
+  "final": {
+    "t0": 30.6,
+    "marca": "VERATUS",
+    "linha": "Qual peça está na sua mira?",
+    "botao": "Chame no WhatsApp",
+    "numero": "(11) 95832-3612",
+    "t_marca": 31.1,
+    "t_linha": 31.9,
+    "t_botao": 32.6
+  }
+}

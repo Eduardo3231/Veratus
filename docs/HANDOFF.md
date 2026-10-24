@@ -1,7 +1,19 @@
 # HANDOFF — leia antes de editar, atualize antes de sair
 
-**Última atualização:** 19/10/2026 (tarde), Claude Code: correntes e joias de revenda (modelo de importação e rascunhos nos 5 marketplaces), rodada 3 dos marketplaces (Mercado Livre, Shopee, TikTok Shop, Amazon, TikTok conteúdo) e revisão da empresa pela simulação. Nada foi ligado, publicado ou mandado para a `main`. PR #1 aberto pelo fundador a partir desta branch.
+**Última atualização:** 24/10/2026, Claude Code: vídeo do sniper (`video/sniper/`), prévia sem as fotos. Nada foi ligado, publicado ou mandado para a `main`.
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
+
+## Vídeo do sniper (24/10)
+
+Pedido do fundador: vídeo propaganda com um atirador de elite na montanha, um tiro que se ouve a quilômetros, a câmera seguindo a bala até um alvo que chame a atenção e a bala cada vez mais lenta conforme se aproxima; no impacto, "você viu como esse vídeo te prendeu?" como gancho para apresentar a Veratus, os modelos e como a empresa trabalha. Mesma lógica da esfera do vídeo das correntes.
+
+- **Onde**: `video/sniper/` (`roteiro.json`, `cena.html`, `render.py`, `audio.py`, README com o roteiro por segundo) e `tests/test_video_sniper.py`. Saída em `runtime/video/sniper/` (fora do Git).
+- **Alvo**: ampulheta de vidro com areia dourada (tempo = atenção; a areia vira o V da Veratus). Trocável no roteiro; atirar numa peça ficou de fora (sugere resistência, que não é fato confirmado).
+- **Desaceleração**: velocidade real até ~550 m e, dali, proporcional à distância que falta (a distância cai dez vezes a cada 1,5 s); painel com distância e velocidade; contato em 15,6 s, congelamento em 16,6 s. A curva é a mesma no `cena.html` e no `audio.py`.
+- **Som** sintetizado: vento, respiração, coração, cliques da torre, silêncio, disparo com seis ecos nas montanhas, assobio que desce de tom, corte no congelamento com o vidro vibrando.
+- **Textos** só com fatos CONFIRMED (frete grátis, nenhuma taxa extra, entrega e desistência em até 7 dias, Pix ou link do Mercado Pago); arma sem marca; o teste barra marca de arma e munição.
+- **Feito nesta sessão**: prévia completa (`render.py --previa`) com quadros marcados no lugar das fotos, porque as fotos das correntes não estão neste contêiner (ficam em `runtime/`, fora do Git).
+- **Pendências do fundador**: mandar de novo as 4 fotos (`corrente-busto-frente`, `crucifixo`, `corrente-plana`, `corrente-busto-angulo`) para o corte final; aprovar o vídeo e o alvo; `approve-media` antes de publicar; prazo de entrega das joias (mesma pendência do vídeo das correntes). Anúncio pago com arma tende a ser barrado na Meta e no TikTok: este corte é para o orgânico. Versão realista com o Higgsfield só com confirmação (créditos pagos).
 
 ## Correntes e joias de revenda (19/10)
 
