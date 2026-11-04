@@ -10,3 +10,4 @@
   - `interview-me` e `idea-refine`: o fundador prefere respostas curtas e objetivas; só use quando ele pedir para detalhar uma ideia.
   - `documentation-and-adrs`: decisões e rodadas vão para `docs/HANDOFF.md`.
 - Custo: cada skill instalada põe a descrição na lista do início da sessão. Se o contexto apertar, apague as pastas que não usa.
+- **Uso (decisão do fundador, 04/11/2026):** nenhuma skill foi removida; as regras e os fluxos delas só entram quando o fundador pedir. As "Regras que não mudam" do `CLAUDE.md` continuam valendo sempre.
