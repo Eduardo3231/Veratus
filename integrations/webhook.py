@@ -1867,9 +1867,110 @@ def _operational_runtime():
             product_source=discover_products,
             marketplace_store=store,
             connection_service=MarketplaceConnectionService(store),
+            analysis_source=_channel_analysis_data,
         )
     _operational_runtime_instance.engine.refresh()
     return _operational_runtime_instance
+
+
+def _channel_analysis_data():
+    """Dados de cada canal para a equipe de análise (só leitura; cada loja é opcional)."""
+    from veratus_agents.channel_analysis import coletar
+    from veratus_agents.data_discovery import discover_products
+
+    def available(factory):
+        try:
+            return factory()
+        except Exception:  # noqa: BLE001 - loja fora do ar: a análise segue sem ela
+            return None
+
+    engine = available(_conversation_engine)
+    return coletar(
+        conversation_store=engine.store if engine is not None else None,
+        ledger=available(_order_ledger),
+        marketplace_store=available(_marketplace_store),
+        social_store=available(_social_store),
+        products=discover_products,
+    )
+
+
+@app.route("/os/canais/analise", methods=["GET"])
+def os_channel_analysis():
+    """Gestão, marketing, contabilidade e vendas de cada canal (só leitura)."""
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.channel_analysis import analisar_todos
+
+    return jsonify(_json_safe(analisar_todos(_channel_analysis_data()))), 200
+
+
+# Horas de São Paulo em que o expediente também revisa a empresa e analisa os canais.
+EXPEDIENTE_AUDIT_HOURS = frozenset({8, 12, 18})
+EXPEDIENTE_ANALYSIS_HOURS = frozenset({8, 18})
+
+
+@app.route("/os/expediente", methods=["POST"])
+def os_expediente():
+    """O dia de trabalho sem ninguém apertar botão (agendado de hora em hora).
+
+    A cada chamada: conversas pendentes de cada canal, pedidos dos marketplaces e
+    posts que venceram. Às 8, 12 e 18 h (São Paulo), a revisão da empresa; às 8 e
+    18 h, a análise dos canais. Cada passo respeita a própria chave e um passo que
+    falha não para os outros. Rodar de novo na mesma hora não duplica nada.
+    """
+    denied = _admin_required()
+    if denied:
+        return denied
+    from veratus_agents.conversations import CHANNELS
+    from veratus_agents.marketplace_orders import sync_orders
+    from veratus_agents.social_scheduler import run_due_from_env
+
+    now = time.gmtime(time.time() - 3 * 3600)  # São Paulo, sem horário de verão
+    hour_key = time.strftime("%Y%m%d%H", now)
+    steps = {}
+
+    def step(name, action):
+        try:
+            steps[name] = action()
+        except Exception as exc:  # noqa: BLE001 - um passo não derruba o expediente
+            app.logger.error(
+                "expediente_step_failed step=%s error_type=%s", name, type(exc).__name__
+            )
+            steps[name] = {"status": "error", "error": type(exc).__name__}
+
+    engine, _error = _engine_or_error()
+    if engine is not None:
+        for channel in CHANNELS:
+            if channel not in PASTE_CHANNELS:
+                step(
+                    f"conversas:{channel}",
+                    lambda c=channel: {"processadas": len(_process_channel(engine, c))},
+                )
+    for channel in ("shopee", "tiktok-shop", "amazon"):
+        step(
+            f"pedidos:{channel}",
+            lambda c=channel: sync_orders(c, _order_ledger(), hours=48),
+        )
+    step("redes", lambda: run_due_from_env(_social_store(), _runtime()))
+    runtime = _operational_runtime()
+    if now.tm_hour in EXPEDIENTE_AUDIT_HOURS:
+        step(
+            "revisao",
+            lambda: runtime.execute(
+                "Gerente, analise o estado atual da Veratus, os produtos ativos e as conexões dos marketplaces.",
+                idempotency_key=f"expediente-revisao:{hour_key}",
+            )["status"],
+        )
+    if now.tm_hour in EXPEDIENTE_ANALYSIS_HOURS:
+        step(
+            "analise",
+            lambda: runtime.execute(
+                "Gerente, faça a análise de todos os canais.",
+                idempotency_key=f"expediente-analise:{hour_key}",
+            )["status"],
+        )
+    return jsonify({"status": "ok", "hora": hour_key, "passos": _json_safe(steps)}), 200  # fmt: skip
 
 
 def _paid_media_worker():

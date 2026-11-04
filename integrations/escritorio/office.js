@@ -15,7 +15,7 @@
   const TW = 60;
   const TH = 30;
   const ZH = 26;
-  const FLOOR = { w: 24, d: 17 };
+  const FLOOR = { w: 24, d: 22.4 };
   const WALL = 3.4;
   const PAD = { left: 20, top: 46, right: 20, bottom: 24 };
   const OX = FLOOR.d * (TW / 2) + PAD.left;
@@ -32,6 +32,7 @@
     { id: 'expedicao', label: 'Expedição', x: 20.4, y: 5.8, w: 3.2, d: 5.0, kind: 'floor' },
     { id: 'produto', label: 'Produto', x: 0.4, y: 11.6, w: 12.6, d: 5.0, kind: 'floor' },
     { id: 'copa', label: 'Copa e reunião', x: 13.6, y: 11.6, w: 10.0, d: 5.0, kind: 'wood' },
+    { id: 'analise', label: 'Análise', x: 0.4, y: 17.2, w: 12.6, d: 4.8, kind: 'floor' },
   ];
 
   // Mesa de cada papel do AGENT_REGISTRY (x, y = canto da mesa; a pessoa senta atrás).
@@ -48,6 +49,7 @@
     'tiktok-shop-agent': { x: 4.4, y: 9.4, monitors: 2, sign: 'TIKTOK SHOP' },
     'amazon-agent': { x: 7.4, y: 9.4, monitors: 2, sign: 'AMAZON' },
     'sync-monitor-agent': { x: 10.4, y: 9.4, monitors: 2, sign: 'ESTOQUE' },
+    'orders-agent': { x: 1.4, y: 9.4, monitors: 2, sign: 'PEDIDOS' },
     'social-media-worker': { x: 14.4, y: 7.4, monitors: 2, sign: 'INSTAGRAM · TIKTOK' },
     'paid-acquisition-worker': { x: 17.4, y: 7.4, monitors: 2, sign: 'MÍDIA PAGA' },
     'product-supervisor': { x: 1.4, y: 12.8, monitors: 1 },
@@ -56,6 +58,11 @@
     'creative-agent': { x: 10.4, y: 12.8, monitors: 2 },
     'pricing-agent': { x: 4.4, y: 15.0, monitors: 1 },
     'quality-agent': { x: 7.4, y: 15.0, monitors: 1 },
+    'analysis-supervisor': { x: 1.4, y: 18.4, monitors: 2 },
+    'management-analyst': { x: 4.4, y: 18.4, monitors: 2, sign: 'GESTÃO' },
+    'marketing-analyst': { x: 7.4, y: 18.4, monitors: 2, sign: 'MARKETING' },
+    'accounting-agent': { x: 10.4, y: 18.4, monitors: 2, sign: 'CONTABILIDADE' },
+    'sales-analyst': { x: 4.4, y: 20.6, monitors: 2, sign: 'VENDAS' },
   };
   const DESK = { w: 1.9, d: 0.9, h: 0.72 };
   const SPOTS = {

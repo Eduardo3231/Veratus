@@ -52,7 +52,7 @@ def test_paid_acquisition_command_is_not_misrouted_to_catalogue_drafts():
 
 
 def test_registry_has_nineteen_operational_agents():
-    assert len(AGENT_REGISTRY) == 19
+    assert len(AGENT_REGISTRY) == 25
     assert AGENT_REGISTRY["amazon-agent"].external_write is False
     assert AGENT_REGISTRY["general-manager"].level == 1
     assert AGENT_REGISTRY["shopee-agent"].external_write is False
@@ -167,6 +167,12 @@ NEW_ROLES = {
     "sales-agent": (3, "customer-supervisor"),
     "aftersales-agent": (3, "customer-supervisor"),
     "social-media-worker": (2, "general-manager"),
+    "analysis-supervisor": (2, "general-manager"),
+    "management-analyst": (3, "analysis-supervisor"),
+    "marketing-analyst": (3, "analysis-supervisor"),
+    "accounting-agent": (3, "analysis-supervisor"),
+    "sales-analyst": (3, "analysis-supervisor"),
+    "orders-agent": (3, "distribution-supervisor"),
 }
 
 
@@ -196,6 +202,18 @@ def test_new_roles_follow_the_founder_approved_table():
             "READ_INSIGHTS",
             "REPORT",
         },
+        # Aprovados em 2026-11-04: leem e relatam; o de pedidos grava no ledger.
+        "analysis-supervisor": {
+            "READ_PRODUCT",
+            "READ_ORDERS",
+            "READ_INSIGHTS",
+            "REPORT",
+        },
+        "management-analyst": {"READ_PRODUCT", "READ_ORDERS", "REPORT"},
+        "marketing-analyst": {"READ_INSIGHTS", "READ_ORDERS", "REPORT"},
+        "accounting-agent": {"READ_ORDERS", "READ_COST", "REPORT"},
+        "sales-analyst": {"READ_ORDERS", "READ_PRODUCT", "REPORT"},
+        "orders-agent": {"READ_ORDERS", "SYNC_ORDERS", "REPORT"},
     }
     for agent_id, (level, parent) in NEW_ROLES.items():
         definition = AGENT_REGISTRY[agent_id]
