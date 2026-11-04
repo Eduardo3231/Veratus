@@ -393,6 +393,63 @@ AGENT_REGISTRY: dict[str, AgentDefinition] = {
             }
         ),
     ),
+    # Papéis aprovados pelo fundador em 2026-11-04: cada canal com análise de
+    # gestão, marketing, contabilidade e vendas, e um dono para os pedidos dos
+    # marketplaces. Todos só leem e relatam; o agente de pedidos grava no ledger.
+    "analysis-supervisor": AgentDefinition(
+        "analysis-supervisor",
+        "Analysis Supervisor",
+        2,
+        "intelligence",
+        "general-manager",
+        frozenset({"READ_PRODUCT", "READ_ORDERS", "READ_INSIGHTS", "REPORT"}),
+        mission="coordenar a análise de cada canal e entregar o relatório ao gerente",
+    ),
+    "management-analyst": AgentDefinition(
+        "management-analyst",
+        "Management Analyst",
+        3,
+        "intelligence",
+        "analysis-supervisor",
+        frozenset({"READ_PRODUCT", "READ_ORDERS", "REPORT"}),
+        mission="ler chaves, modo da conversa, anúncios e pendências de cada canal",
+    ),
+    "marketing-analyst": AgentDefinition(
+        "marketing-analyst",
+        "Marketing Analyst",
+        3,
+        "intelligence",
+        "analysis-supervisor",
+        frozenset({"READ_INSIGHTS", "READ_ORDERS", "REPORT"}),
+        mission="medir leads, origem, posts e tempo de resposta de cada canal",
+    ),
+    "accounting-agent": AgentDefinition(
+        "accounting-agent",
+        "Accounting Agent",
+        3,
+        "intelligence",
+        "analysis-supervisor",
+        frozenset({"READ_ORDERS", "READ_COST", "REPORT"}),
+        mission="fechar receita confirmada, taxas, frete e margem de cada canal",
+    ),
+    "sales-analyst": AgentDefinition(
+        "sales-analyst",
+        "Sales Analyst",
+        3,
+        "intelligence",
+        "analysis-supervisor",
+        frozenset({"READ_ORDERS", "READ_PRODUCT", "REPORT"}),
+        mission="medir conversão, ticket, pedidos perdidos e motivos de cada canal",
+    ),
+    "orders-agent": AgentDefinition(
+        "orders-agent",
+        "Orders Agent",
+        3,
+        "distribution",
+        "distribution-supervisor",
+        frozenset({"READ_ORDERS", "SYNC_ORDERS", "REPORT"}),
+        mission="trazer os pedidos dos marketplaces para o Orders Ledger, sem duplicar",
+    ),
 }
 
 # Permissões que dependem de um estado externo ao registro.
@@ -404,7 +461,18 @@ FORBIDDEN_FOR_NEW_ROLES = frozenset(
 # Os papéis de 2026-10-13: mesmo com o registro alterado, nunca recebem as
 # permissões de FORBIDDEN_FOR_NEW_ROLES em tempo de execução.
 NEW_ROLE_IDS = frozenset(
-    {"customer-supervisor", "sales-agent", "aftersales-agent", "social-media-worker"}
+    {
+        "customer-supervisor",
+        "sales-agent",
+        "aftersales-agent",
+        "social-media-worker",
+        "analysis-supervisor",
+        "management-analyst",
+        "marketing-analyst",
+        "accounting-agent",
+        "sales-analyst",
+        "orders-agent",
+    }
 )
 
 
@@ -1266,6 +1334,7 @@ class OperationalRuntime:
         | None = None,
         marketplace_store: Any | None = None,
         connection_service: Any | None = None,
+        analysis_source: Callable[[], dict[str, Any]] | None = None,
         external_writes_enabled: bool = False,
     ) -> None:
         if external_writes_enabled:
@@ -1274,6 +1343,8 @@ class OperationalRuntime:
         self.product_source = product_source
         self.marketplace_store = marketplace_store
         self.connection_service = connection_service
+        # Dados de cada canal para a análise (channel_analysis.coletar).
+        self.analysis_source = analysis_source
         self.external_writes_enabled = False
 
     @staticmethod
@@ -1293,6 +1364,11 @@ class OperationalRuntime:
             return ParsedCommand(
                 "operational_audit", tuple(OperationalRuntime.CHANNEL_AGENTS)
             )
+        if any(
+            token in normalized
+            for token in ("analise", "análise", "analisar", "relatório", "relatorio")
+        ) and any(token in normalized for token in ("canal", "canais")):
+            return ParsedCommand("channel_analysis")
         # Paid media has its own worker: a planning order such as "prepare um
         # plano Meta Ads" must not fall through to marketplace catalogue drafts.
         # Questions ("quais...", "pendentes") keep their read-only handlers.
@@ -1409,6 +1485,8 @@ class OperationalRuntime:
                 self._execute_feminine_intake(command)
             elif parsed.handler == "prepare_feminine":
                 self._execute_feminine_distribution(command, parsed.channels)
+            elif parsed.handler == "channel_analysis":
+                self._execute_channel_analysis(command)
             else:
                 self._execute_report(command, parsed)
             command.status = TaskStatus.COMPLETED
@@ -1444,6 +1522,107 @@ class OperationalRuntime:
             if str(item.get("status", "ACTIVE")).upper()
             not in {"PAUSED", "OUT_OF_STOCK"}
         ]
+
+    def _analysis_audit_tasks(self, command: Command, manager: Task) -> list[Task]:
+        """Na auditoria, a equipe de análise lê os canais e diz o que pesa."""
+        from .channel_analysis import analisar_todos
+
+        relatorio = analisar_todos(
+            self.analysis_source() if self.analysis_source else {}
+        )
+        supervisor = self._run_task(
+            command,
+            "analysis-supervisor",
+            "AUDIT_CHANNEL_ANALYSIS",
+            "all-channels",
+            relatorio["total"],
+            parent_task_id=manager.task_id,
+        )
+        resumo = {
+            "management-analyst": ("gestao", "pendencias"),
+            "marketing-analyst": ("marketing", "leads"),
+            "accounting-agent": ("contabilidade", "receita_confirmada"),
+            "sales-analyst": ("vendas", "pagos"),
+        }
+        return [
+            supervisor,
+            *(
+                self._run_task(
+                    command,
+                    agent,
+                    "AUDIT_CHANNEL_" + section.upper(),
+                    "all-channels",
+                    {item["canal"]: item[section][key] for item in relatorio["canais"]},
+                    parent_task_id=supervisor.task_id,
+                )
+                for agent, (section, key) in resumo.items()
+            ),
+        ]
+
+    def _execute_channel_analysis(self, command: Command) -> None:
+        """Gestão, marketing, contabilidade e vendas de cada canal, só leitura."""
+        from .channel_analysis import CHANNELS, analisar_todos
+
+        dados = self.analysis_source() if self.analysis_source else {}
+        relatorio = analisar_todos(dados)
+        canais = relatorio["canais"]
+        manager = self._run_task(
+            command,
+            "general-manager",
+            "PLAN_CHANNEL_ANALYSIS",
+            "all-channels",
+            {"channels": list(CHANNELS), "external_writes": "BLOCKED"},
+        )
+        supervisor = self._run_task(
+            command,
+            "analysis-supervisor",
+            "COORDINATE_CHANNEL_ANALYSIS",
+            "all-channels",
+            {"analysts": 4, "channels": len(CHANNELS)},
+            parent_task_id=manager.task_id,
+            depends_on=[manager.task_id],
+        )
+        sections = (
+            ("management-analyst", "ANALYZE_CHANNEL_MANAGEMENT", "gestao"),
+            ("marketing-analyst", "ANALYZE_CHANNEL_MARKETING", "marketing"),
+            ("accounting-agent", "ANALYZE_CHANNEL_ACCOUNTING", "contabilidade"),
+            ("sales-analyst", "ANALYZE_CHANNEL_SALES", "vendas"),
+        )
+        analysts = [
+            self._run_task(
+                command,
+                agent,
+                action,
+                "all-channels",
+                {item["canal"]: item[section] for item in canais},
+                parent_task_id=supervisor.task_id,
+                depends_on=[supervisor.task_id],
+            )
+            for agent, action, section in sections
+        ]
+        consolidated = self._run_task(
+            command,
+            "analysis-supervisor",
+            "CONSOLIDATE_CHANNEL_ANALYSIS",
+            "all-channels",
+            {
+                "total": relatorio["total"],
+                "recomendacoes": {
+                    item["canal"]: item["recomendacoes"] for item in canais
+                },
+            },
+            parent_task_id=supervisor.task_id,
+            depends_on=[task.task_id for task in analysts],
+        )
+        self._run_task(
+            command,
+            "general-manager",
+            "CONSOLIDATE_MANAGER_REPORT",
+            "channel-analysis",
+            {"status": "COMPLETED", **relatorio["total"]},
+            parent_task_id=manager.task_id,
+            depends_on=[consolidated.task_id],
+        )
 
     def _run_task(
         self,
@@ -2370,6 +2549,26 @@ class OperationalRuntime:
                 },
                 parent_task_id=manager.task_id,
             ),
+            self._run_task(
+                command,
+                "orders-agent",
+                "AUDIT_ORDER_SYNC",
+                "marketplaces",
+                {
+                    **{
+                        channel: "ENABLED" if env_flag(flag) else "DISABLED"
+                        for channel, flag in (
+                            ("mercado-livre", "MERCADO_LIVRE_SYNC_ENABLED"),
+                            ("shopee", "SHOPEE_SYNC_ENABLED"),
+                            ("tiktok-shop", "TIKTOK_SHOP_SYNC_ENABLED"),
+                            ("amazon", "AMAZON_SYNC_ENABLED"),
+                        )
+                    },
+                    "external_write": False,
+                },
+                parent_task_id=distribution.task_id,
+            ),
+            *self._analysis_audit_tasks(command, manager),
         ]
         next_actions = []
         if blocked:

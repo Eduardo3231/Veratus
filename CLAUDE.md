@@ -24,6 +24,8 @@ Leia o topo de `docs/HANDOFF.md` antes de editar: é o diário das rodadas e das
 - O fundador só entra quando o cliente pede uma pessoa ou ameaça ação jurídica.
 - WhatsApp comercial: +55 11 95832-3612 (`harvey.WHATSAPP_NUMBER`, `scripts/build_landing.py`).
 - Foco em correntes e joias de revenda (19/10): fotos do fornecedor com autorização de uso declarada pelo fundador; preço por multiplicador sobre o custo, definido pelo fundador em `JEWELRY_PRICE_RULE` (fora do Git). Importação: `scripts/importar_joias.py`; o fornecedor nunca aparece no que é público.
+- **Autonomia (04/11/2026):** o fundador deu autonomia total para ligar chaves, fazer merge na `main` e deploy. Ligue um canal por vez, comece em `AUTO_SAFE`, confira na produção e registre cada ação no HANDOFF. As demais regras desta página (fatos confirmados, sem DM fria, pagamento só pelo provedor, segredo fora do Git) continuam.
+- **25 agentes (04/11/2026):** os 19 de antes mais a equipe de análise (supervisora, gestão, marketing, contabilidade, vendas) e o agente de pedidos dos marketplaces. Cada canal tem a análise das quatro áreas (`veratus_agents/channel_analysis.py`, `GET /os/canais/analise`); `POST /os/expediente` roda o dia sozinho.
 - Poucos testes: só os que provam a regra. Economize token.
 
 ## Mapa do código

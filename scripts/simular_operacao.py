@@ -132,6 +132,7 @@ EXPEDIENTE: list[tuple[str, str, dict[str, Any]]] = [
     ("12:00", "Sincronize os marketplaces", {}),
     ("15:00", "Sincronize os marketplaces", {}),
     ("16:00", "GET /os/paid-media/status", {"ator": "paid-acquisition-worker"}),
+    ("17:30", "Faça a análise de todos os canais", {"reuniao": True}),
     ("18:00", "Quais aprovações pendentes?", {"reuniao": True}),
     ("18:05", "Quais erros?", {}),
 ]

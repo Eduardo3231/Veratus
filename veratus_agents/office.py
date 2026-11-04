@@ -28,13 +28,19 @@ STAFF: tuple[dict[str, str], ...] = (
     {"id": "customer-supervisor", "nome": "Beatriz", "cargo": "Supervisora de atendimento", "sala": "atendimento"},
     {"id": "sales-agent", "nome": "Harvey", "cargo": "Vendas", "sala": "atendimento"},
     {"id": "aftersales-agent", "nome": "Clara", "cargo": "Pós-venda", "sala": "atendimento"},
-    {"id": "distribution-supervisor", "nome": "Rafael", "cargo": "Supervisor de marketplaces", "sala": "marketplaces"},
+    {"id": "distribution-supervisor", "nome": "Vicente", "cargo": "Supervisor de marketplaces", "sala": "marketplaces"},
     {"id": "meta-agent", "nome": "Otávio", "cargo": "Facebook e catálogo da Meta", "sala": "marketplaces"},
-    {"id": "mercado-livre-agent", "nome": "Diego", "cargo": "Mercado Livre", "sala": "marketplaces"},
+    {"id": "mercado-livre-agent", "nome": "Iago", "cargo": "Mercado Livre", "sala": "marketplaces"},
     {"id": "shopee-agent", "nome": "Yumi", "cargo": "Shopee", "sala": "marketplaces"},
     {"id": "tiktok-shop-agent", "nome": "Nina", "cargo": "TikTok Shop", "sala": "marketplaces"},
     {"id": "amazon-agent", "nome": "Sérgio", "cargo": "Amazon", "sala": "marketplaces"},
     {"id": "sync-monitor-agent", "nome": "Paula", "cargo": "Estoque e sincronia", "sala": "marketplaces"},
+    {"id": "orders-agent", "nome": "Igor", "cargo": "Pedidos dos marketplaces", "sala": "marketplaces"},
+    {"id": "analysis-supervisor", "nome": "Renata", "cargo": "Supervisora de análise", "sala": "analise"},
+    {"id": "management-analyst", "nome": "Elisa", "cargo": "Análise de gestão", "sala": "analise"},
+    {"id": "marketing-analyst", "nome": "Júlia", "cargo": "Análise de marketing", "sala": "analise"},
+    {"id": "accounting-agent", "nome": "Rogério", "cargo": "Contabilidade", "sala": "analise"},
+    {"id": "sales-analyst", "nome": "Tânia", "cargo": "Análise de vendas", "sala": "analise"},
     {"id": "social-media-worker", "nome": "Luana", "cargo": "Redes sociais", "sala": "redes"},
     {"id": "paid-acquisition-worker", "nome": "Fábio", "cargo": "Mídia paga", "sala": "redes"},
     {"id": "product-supervisor", "nome": "Helena", "cargo": "Supervisora de produto", "sala": "produto"},
@@ -59,6 +65,12 @@ MISSIONS: dict[str, str] = {
     "tiktok-shop-agent": "Prepara os anúncios da TikTok Shop.",
     "amazon-agent": "Prepara os anúncios da Amazon.",
     "sync-monitor-agent": "Compara estoque, preço e anúncios entre os canais.",
+    "orders-agent": "Traz os pedidos de Mercado Livre, Shopee, TikTok Shop e Amazon para o ledger.",
+    "analysis-supervisor": "Coordena a análise de cada canal e entrega o relatório ao gerente.",
+    "management-analyst": "Lê chaves, modo do Harvey, anúncios e pendências de cada canal.",
+    "marketing-analyst": "Mede leads, origem, posts e tempo de resposta de cada canal.",
+    "accounting-agent": "Fecha receita confirmada, taxas, frete e margem de cada canal.",
+    "sales-analyst": "Mede conversão, ticket, pedidos perdidos e motivos de cada canal.",
     "social-media-worker": "Monta o calendário, pede sua aprovação e publica só o aprovado.",
     "paid-acquisition-worker": "Planeja campanhas em rascunho pausado, sem gastar sem você.",
     "product-supervisor": "Coordena cadastro, textos, fotos, preço e qualidade.",
@@ -81,6 +93,7 @@ KEYS: dict[str, tuple[str, ...]] = {
     "shopee-agent": ("SHOPEE_SYNC_ENABLED", "SHOPEE_PUBLISH_ENABLED"),
     "tiktok-shop-agent": ("TIKTOK_SHOP_SYNC_ENABLED", "TIKTOK_SHOP_PUBLISH_ENABLED"),
     "amazon-agent": ("AMAZON_SYNC_ENABLED", "AMAZON_PUBLISH_ENABLED"),
+    "orders-agent": ("MERCADO_LIVRE_SYNC_ENABLED", "SHOPEE_SYNC_ENABLED", "TIKTOK_SHOP_SYNC_ENABLED", "AMAZON_SYNC_ENABLED"),
 }  # fmt: skip
 
 _CHANNEL = {
@@ -161,6 +174,31 @@ def _connection(result: Mapping[str, Any]) -> str:
 
 # O que cada tarefa do runtime operacional quer dizer, em uma linha.
 TASK_TEXT: dict[str, Callable[[Mapping[str, Any]], str]] = {
+    "PLAN_CHANNEL_ANALYSIS": lambda r: (
+        f"Pediu a análise de {len(r.get('channels', []))} canais"
+    ),
+    "COORDINATE_CHANNEL_ANALYSIS": lambda r: (
+        "Distribuiu gestão, marketing, contabilidade e vendas"
+    ),
+    "ANALYZE_CHANNEL_MANAGEMENT": lambda r: (
+        "Gestão: chaves, anúncios e pendências de cada canal"
+    ),
+    "ANALYZE_CHANNEL_MARKETING": lambda r: (
+        f"Marketing: {sum(v.get('leads', 0) for v in r.values())} leads nos canais"
+    ),
+    "ANALYZE_CHANNEL_ACCOUNTING": lambda r: (
+        "Contabilidade: receita, taxas e margem de cada canal"
+    ),
+    "ANALYZE_CHANNEL_SALES": lambda r: (
+        f"Vendas: {sum(v.get('pagos', 0) for v in r.values())} pedidos pagos nos canais"
+    ),
+    "CONSOLIDATE_CHANNEL_ANALYSIS": lambda r: (
+        f"Relatório dos canais: R$ {r.get('total', {}).get('receita_confirmada', '0.00')} confirmados"
+    ),
+    "AUDIT_CHANNEL_ANALYSIS": lambda r: (
+        f"Revisão dos canais: {r.get('leads', 0)} leads, {r.get('pagos', 0)} pagos"
+    ),
+    "AUDIT_ORDER_SYNC": lambda r: "Conferiu a sincronia de pedidos dos marketplaces",
     "PLAN_OPERATIONAL_AUDIT": lambda r: (
         f"Abriu a revisão do dia: {r.get('products_total', 0)} produtos, sem escrita externa"
     ),

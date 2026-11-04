@@ -66,6 +66,6 @@ def test_office_routes_need_the_token_and_the_page_carries_no_data(tmp_path):
         )
         page = client.get("/os/escritorio/painel")
     assert denied.status_code in (401, 403)
-    assert live.status_code == 200 and len(live.json["funcionarios"]) == 20
+    assert live.status_code == 200 and len(live.json["funcionarios"]) == 26
     assert page.status_code == 200 and "VeratusOffice" in page.text
     assert "Augusto" not in page.text  # a página só lê com o token
