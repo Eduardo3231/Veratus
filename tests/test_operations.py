@@ -303,3 +303,25 @@ def test_new_roles_never_get_forbidden_permissions_at_runtime(monkeypatch, agent
         )
         with pytest.raises(PermissionError):
             engine.authorize(agent_id, permission)
+
+
+def test_igor_registra_a_sincronia_de_pedidos_sem_dado_de_cliente(tmp_path):
+    from veratus_agents.operations import OperationalRuntime
+
+    runtime = OperationalRuntime(str(tmp_path / "rt.sqlite3"), product_source=list)
+    resultados = {
+        "shopee": {"status": "SYNCED", "orders_read": 2, "counts": {"PAID": 2}},
+        "amazon": {"status": "BLOCKED", "reason": "SYNC_DISABLED"},
+    }
+    report = runtime.registrar_sincronia_pedidos(resultados, idempotency_key="h1")
+    again = runtime.registrar_sincronia_pedidos(resultados, idempotency_key="h1")
+    assert report["status"] == again["status"] == "COMPLETED"
+    tasks = [
+        t for t in runtime.engine.tasks.tasks.values() if t.action == "SYNC_ORDERS"
+    ]
+    assert len(tasks) == 1 and tasks[0].agent == "orders-agent"
+    assert tasks[0].result["pedidos_lidos"] == 2
+    assert tasks[0].result["canais"]["amazon"] == {
+        "status": "BLOCKED",
+        "reason": "SYNC_DISABLED",
+    }

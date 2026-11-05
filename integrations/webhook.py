@@ -1954,6 +1954,17 @@ def os_expediente():
         )
     step("redes", lambda: run_due_from_env(_social_store(), _runtime()))
     runtime = _operational_runtime()
+    pedidos = {
+        name.split(":", 1)[1]: value
+        for name, value in steps.items()
+        if name.startswith("pedidos:") and isinstance(value, dict)
+    }
+    step(
+        "pedidos:registro",
+        lambda: runtime.registrar_sincronia_pedidos(
+            pedidos, idempotency_key=f"expediente-pedidos:{hour_key}"
+        )["status"],
+    )
     if now.tm_hour in EXPEDIENTE_AUDIT_HOURS:
         step(
             "revisao",

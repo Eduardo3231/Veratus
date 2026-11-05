@@ -199,6 +199,9 @@ TASK_TEXT: dict[str, Callable[[Mapping[str, Any]], str]] = {
         f"Revisão dos canais: {r.get('leads', 0)} leads, {r.get('pagos', 0)} pagos"
     ),
     "AUDIT_ORDER_SYNC": lambda r: "Conferiu a sincronia de pedidos dos marketplaces",
+    "SYNC_ORDERS": lambda r: (
+        f"Leu {r.get('pedidos_lidos', 0)} pedidos dos marketplaces"
+    ),
     "PLAN_OPERATIONAL_AUDIT": lambda r: (
         f"Abriu a revisão do dia: {r.get('products_total', 0)} produtos, sem escrita externa"
     ),
