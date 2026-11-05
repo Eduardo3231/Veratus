@@ -3,6 +3,15 @@
 **Última atualização:** 22/10/2026, Claude Code: **PR #1 mergeado na `main` (9022d24) a pedido do fundador e deploy do Render conferido**: `/health` 200, `/agent/health` com `external_sending_enabled=false`, `/integrations/facebook/webhook` agora responde 403 com token errado (antes 404) e `/feeds/meta-catalog.csv` responde 404 em JSON (feed desligado por `META_CATALOG_FEED_ENABLED=false`). Nenhuma chave foi ligada e nada foi enviado a cliente: toda flag nova segue `false` e as conversas em `SHADOW`. Falta, só com o fundador: chaves da Meta no Render, webhook do Messenger no app da Meta e ligar uma chave por vez (lista na seção "Render, Meta e Facebook até o WhatsApp").
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
 
+## Chaves do Render (05/11)
+
+Pedido do fundador: ver o que falta no Render e completar. A chave nova da API do Render (a anterior foi apagada por ter ficado exposta) fica só como variável do ambiente "Veratus"; a leitura e a escrita foram feitas por sessões-filhas nesse ambiente. Nenhum valor secreto foi impresso nem gravado.
+
+- **Leitura** (17:13 UTC, só GET): serviço `srv-da6265rbc2fs73amld10` no ar, deploy `eaf668a`. Só 15 das 171 variáveis do `render.yaml` existiam. Presentes: `META_ACCESS_TOKEN`, 3 do Mercado Livre (`CLIENT_ID`, `CLIENT_SECRET`, `REDIRECT_URI`), `OPENAI_API_KEY`, `DATABASE_URL`, os `VERATUS_*` de segredo, `PUBLISH_ENABLED=false`. Fora do `render.yaml`: `BROWSER_USE_API_KEY`, `MAILERLITE_*`, `VERATUS-LEADS` (nome com hífen, a revisar).
+- **Aplicação** (17:17 UTC): 89 variáveis não secretas do `render.yaml` gravadas uma a uma (HTTP 200, releitura confirmada, `/health` 200): todos os `*_ENABLED` em `false`, `CONVERSATION_MODE_*` em `SHADOW`, `MARKETPLACE_MODE=LOCAL`, `PUBLIC_BASE_URL`, `CONVERSATION_MODEL=live`, limites do agente. Puladas de propósito: `PORT` (a Render gerencia) e `PAID_MEDIA_WORKER_ENABLED`, `PAID_MEDIA_RECONCILIATION_REQUIRED`, `PAID_MEDIA_CIRCUIT_BREAKER_ENABLED` (`true` no yaml, que já é o padrão do código, e são travas de segurança).
+- **Tokens de verificação** (`WHATSAPP_`, `FACEBOOK_`, `INSTAGRAM_VERIFY_TOKEN`): gerados aleatórios e gravados direto no Render, sem passar pelo chat. O fundador lê o valor no painel do Render (Environment) para colar no app da Meta.
+- **Falta, só com o fundador (segredos)**: `WHATSAPP_ACCESS_TOKEN`, `_PHONE_NUMBER_ID`, `_BUSINESS_ACCOUNT_ID`, `_APP_SECRET`; `META_PAGE_ACCESS_TOKEN`, `META_PAGE_ID`, `META_BUSINESS_ID`, `META_CATALOG_ID`, `META_AD_ACCOUNT_ID`, `META_PIXEL_ID`, `META_DATASET_ID`, `META_IG_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID`, `INSTAGRAM_APP_SECRET`, `FACEBOOK_APP_SECRET`; `MERCADO_PAGO_ACCESS_TOKEN`, `MERCADO_PAGO_WEBHOOK_SECRET`; Mercado Livre (tokens e `SELLER_ID` via OAuth), Shopee, TikTok Shop, Amazon; `JEWELRY_PRICE_RULE`. Nenhum canal está ligado.
+
 ## Documentação unificada (05/11)
 
 Pedido do fundador: confirmar a autonomia total e atualizar tudo que estava desatualizado.
