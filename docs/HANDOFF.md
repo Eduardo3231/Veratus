@@ -11,6 +11,7 @@ Pedido do fundador: confirmar a autonomia total e atualizar tudo que estava desa
 - **README.md** reescrito para o estado atual (25 agentes, Harvey, análise por canal, expediente, escritório, estrutura real de pastas; saíram os links quebrados para `marketing/` e `requirements/`).
 - **START_HERE.md**: 25 papéis, verificações atuais, a simulação do dia, o que está pronto, o que depende de chave ou credencial, o que falta e o expediente sem agendador.
 - **integrations/agent_api.md**: novo "Mapa das rotas" com todas as rotas de `/os`, `/integrations` e `/feeds`, a autenticação e como agendar o expediente. `tests/test_docs_rotas.py` falha se uma rota nova não for documentada.
+- **Merge** (05/11, 16:16 UTC): PR #3 na `main` (eaf668a), depois de duas falhas do GitHub (502 e 500) no merge e de uma nova tentativa; o teste `verify` estava verde. Produção conferida: `/health` 200, `/agent/health` com envio externo desligado, `/os/canais/analise` 401 sem token. Nenhuma chave foi ligada.
 - **Catálogo**: o fundador cuida da análise e dos valores e vai enviar pelo chat; nada foi mexido em `catalog/products.json`.
 
 ## Auditoria do estado atual (05/11)
