@@ -1,4 +1,6 @@
-# Entrada do Sales Agent V1
+# API do Veratus OS
+
+O início deste arquivo descreve a entrada do Sales Agent V1 (`/agent/*`). O mapa completo das rotas de hoje, com os 25 agentes, o Harvey, os marketplaces, as redes sociais e o expediente, está em "Mapa das rotas", no fim.
 
 O serviço Flask existente agora expõe uma camada protegida para o agente. Ela é intencionalmente separada do `/webhook` público de captação.
 
@@ -107,3 +109,71 @@ POST  /os/products/<sku>/override
 GET   /os/products/<sku>/events
 POST  /os/pricing/calculate
 ```
+
+## Mapa das rotas (atualizado em 05/11/2026)
+
+Autenticação: toda rota `/os/*` e as rotas de status, verificação e OAuth de `/integrations/*` exigem o cabeçalho `X-Veratus-Admin-Token` (sem ele, 401). Os webhooks (`.../webhook`, `/integrations/shopee/push`) não usam o token: conferem a assinatura ou o token de verificação da plataforma (sem ela, 401 ou 403). Nenhuma rota devolve segredo, custo por peça ou dado pessoal de cliente. Envio e escrita externos obedecem a uma chave própria de cada canal (`render.yaml`); desligada, a rota responde com a prévia ou `BLOCKED`.
+
+### Agentes, comandos, auditoria e escritório
+
+| Rota | Para que serve |
+|---|---|
+| `GET /os/agents`, `GET /os/agents/<id>` | Os 25 papéis: nível, supervisor, permissões e estado. |
+| `GET,POST /os/commands` | Ordem em linguagem natural ao gerente geral ("Prepare os relógios para os marketplaces", "Faça a análise de todos os canais"). |
+| `GET /os/tasks`, `GET /os/tasks/<id>`, `GET /os/audit` | Tarefas dos agentes e o registro de auditoria. |
+| `GET /os/approvals`, `POST /os/approvals/<id>/approve`, `.../reject` | Aprovações pendentes de operações sensíveis. |
+| `GET /os/escritorio`, `GET /os/escritorio/painel` | O escritório virtual: cada agente como funcionário, sem dado de cliente. A página pede o token e lê a rota. |
+| `GET /os/canais/analise` | Gestão, marketing, contabilidade e vendas de cada canal e o total da empresa (só leitura). |
+| `POST /os/expediente` | O dia de trabalho sem ninguém apertar botão: conversas pendentes, pedidos dos marketplaces e posts vencidos a cada chamada; revisão às 8, 12 e 18 h e análise às 8 e 18 h (São Paulo). Chame de hora em hora, por exemplo um Cron Job do Render com `curl -X POST -H "X-Veratus-Admin-Token: $TOKEN" https://veratus.onrender.com/os/expediente`. Repetir na mesma hora não duplica. |
+| `GET /os/status`, `GET /os/readiness`, `GET /os/flow`, `GET /os/data-quality` | Estado geral, prontidão, fluxo de vendas por canal e qualidade dos dados. |
+
+### Produto, preço e anúncios
+
+| Rota | Para que serve |
+|---|---|
+| `/os/products`, `/os/products/<sku>` (+ `/events`, `/override`, `/transition`) | Product Master: cadastro, ficha, histórico, bloqueio do fundador e mudança de estado. |
+| `POST /os/pricing/calculate`, `GET /os/pricing/channel-plan/<sku>` (+ `/request`), `GET /os/economics/<sku>`, `POST /os/economics/simulate` | Preço e margem por canal com as taxas de `config/channel_fees`. |
+| `GET /os/watches/readiness` | O que falta na ficha dos relógios, por modelo e por canal. |
+| `POST /os/distribution/drafts/<sku>`, `GET /os/listings`, `GET /os/listings/<canal>/<sku>`, `POST .../prepare`, `.../publish`, `.../pause` | Rascunho, leitura e (com todas as chaves e o papel certos) publicação e pausa de anúncio por canal; Mercado Livre confere o resultado depois de escrever. |
+| `GET /os/publish-plans`, `GET /os/sync/conflicts`, `POST /os/sync`, `POST /os/sync/mercado-livre/plan` | Planos de publicação, conflitos de preço e estoque e o plano de sincronia (só leitura). |
+| `GET /os/channels`, `GET /os/channels/<canal>`, `POST /os/connections/refresh` | Estado e prontidão de cada marketplace. |
+| `GET /os/meta-catalog`, `POST /os/meta-catalog/readback`, `GET /feeds/meta-catalog.csv` | Catálogo da Meta: prontidão peça a peça, leitura de volta e o feed que o Commerce Manager busca. |
+
+### Atendimento (Harvey) e pedidos
+
+| Rota | Para que serve |
+|---|---|
+| `GET /os/conversations`, `/metrics`, `/alerts`, `/readiness`, `/adapters` | Conversas e indicadores do motor de atendimento. |
+| `POST /os/conversations/process` | Passa as mensagens pendentes de um canal pelo motor. |
+| `GET /os/conversations/queue`, `POST /os/conversations/queue/<id>/<decisão>` | Fila de rascunhos do Harvey para aprovar ou recusar. |
+| `POST /os/conversations/<canal>/<id>/state` | Passa a conversa ao fundador ou devolve ao Harvey. |
+| `POST /os/conversations/<canal>/inbound` | Pergunta do comprador colada do painel (Shopee, TikTok Shop, Amazon). |
+| `GET /os/harvey` | O que o Harvey aprendeu: canais do perfil e objeções. |
+| `GET,POST /os/orders`, `GET /os/orders/<id>`, `POST /os/orders/<id>/status` | Orders Ledger: o pagamento só muda de estado pela confirmação do provedor. |
+| `GET /os/whatsapp/health` | Só leitura na Meta: número, nome, qualidade, app assinado e modelos de mensagem. |
+| `GET /os/crm/twenty`, `POST /os/crm/twenty/sync` | Funil no Twenty (prévia; envio só com a chave ligada). |
+
+### Redes sociais e mídia paga
+
+| Rota | Para que serve |
+|---|---|
+| `GET /os/social/posts`, `POST /os/social/request-approval`, `.../posts/<id>/edit`, `.../reject` | Calendário de posts e a aprovação do fundador. |
+| `POST /os/social/run-due`, `POST /os/social/insights` | Publica o que venceu e mede; chave desligada, só prévia. |
+| `GET /os/social/comments`, `POST /os/social/comments/<id>/<ação>/<decisão>` | Triagem de comentários e aprovação da resposta pública. |
+| `/os/paid-media/*` (`status`, `accounts`, `plan`, `approve`, `execute`, `sync`, `creative-review`, `experiments`, `incidents`, `shift-report`) | Mídia paga em rascunho, com limites financeiros e aprovação humana. |
+
+### Integrações e webhooks
+
+| Rota | Para que serve |
+|---|---|
+| `GET,POST /integrations/whatsapp/webhook` | WhatsApp: verificação e mensagens. `/integrations/whatsapp/conversations` (+ `/<id>`, `/send`, `/state`) é a caixa de entrada humana; `/integrations/whatsapp/drafts/process` está aposentada (use `/os/conversations/process`). |
+| `GET,POST /integrations/facebook/webhook` | Messenger da Página (canal principal). |
+| `GET,POST /integrations/instagram/webhook`, `/integrations/instagram/replies`, `.../replies/process`, `/integrations/instagram/token/status`, `.../token/refresh` | Instagram Direct, resposta privada a comentário e ciclo de vida do token. |
+| `POST /integrations/mercado-pago/webhook` | Confirmação de pagamento (assinatura validada e leitura de volta). |
+| `/integrations/mercado-livre/*` (`oauth/start`, `oauth/callback`, `status`, `notifications`) | Mercado Livre: login da loja, status e fila de notificações. |
+| `/integrations/shopee/*` (`oauth/start`, `oauth/callback/<state>`, `status`, `check`, `push`) | Shopee: login, status, checagem e push assinado. |
+| `/integrations/tiktok-shop/*` (`oauth/start`, `oauth/callback`, `status`, `check`, `webhook`) | TikTok Shop: login, status, checagem e webhook assinado. |
+| `/integrations/tiktok/*` (`oauth/start`, `oauth/callback`, `status`, `check`) | TikTok conteúdo: mídia aprovada para a caixa de entrada do criador. |
+| `/integrations/amazon/status`, `/integrations/amazon/check` | Amazon: status e checagem. |
+| `POST /integrations/<shopee\|amazon\|tiktok-shop>/orders/sync` | Importa os pedidos pagos do marketplace para o Orders Ledger. |
+| `POST /integrations/chatwoot/webhook` | A resposta do fundador no Chatwoot sai pelo canal. |

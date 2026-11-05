@@ -3,6 +3,16 @@
 **Última atualização:** 22/10/2026, Claude Code: **PR #1 mergeado na `main` (9022d24) a pedido do fundador e deploy do Render conferido**: `/health` 200, `/agent/health` com `external_sending_enabled=false`, `/integrations/facebook/webhook` agora responde 403 com token errado (antes 404) e `/feeds/meta-catalog.csv` responde 404 em JSON (feed desligado por `META_CATALOG_FEED_ENABLED=false`). Nenhuma chave foi ligada e nada foi enviado a cliente: toda flag nova segue `false` e as conversas em `SHADOW`. Falta, só com o fundador: chaves da Meta no Render, webhook do Messenger no app da Meta e ligar uma chave por vez (lista na seção "Render, Meta e Facebook até o WhatsApp").
 **Trava:** `python scripts/agent_lock.py status`. Só edite com a trava em seu nome (regra no `AGENTS.md`).
 
+## Documentação unificada (05/11)
+
+Pedido do fundador: confirmar a autonomia total e atualizar tudo que estava desatualizado.
+
+- **Decisão registrada**: o fundador confirmou **autonomia total** para o agente (ligar chaves, criar cron e webhook, merge na `main` por PR, atuar nos canais). `CLAUDE.md` foi unificado: a regra de "não ligar chave, não fazer merge, não criar cron" saiu das "Regras que não mudam" e virou a regra de autonomia com as condições (um canal por vez, começar em `SUPERVISED` ou `AUTO_SAFE`, conferir na produção, registrar no HANDOFF, dizer ao fundador o que falta habilitar). `AGENTS.md` deixou de exigir confirmação a cada publicação ou orçamento; o limite financeiro e o guarda de escrita externa do código continuam. As regras de fatos confirmados, sem mensagem fria, pagamento só pelo provedor, segredo fora do Git, quarentena e dado de cliente fora do Git seguem.
+- **README.md** reescrito para o estado atual (25 agentes, Harvey, análise por canal, expediente, escritório, estrutura real de pastas; saíram os links quebrados para `marketing/` e `requirements/`).
+- **START_HERE.md**: 25 papéis, verificações atuais, a simulação do dia, o que está pronto, o que depende de chave ou credencial, o que falta e o expediente sem agendador.
+- **integrations/agent_api.md**: novo "Mapa das rotas" com todas as rotas de `/os`, `/integrations` e `/feeds`, a autenticação e como agendar o expediente. `tests/test_docs_rotas.py` falha se uma rota nova não for documentada.
+- **Catálogo**: o fundador cuida da análise e dos valores e vai enviar pelo chat; nada foi mexido em `catalog/products.json`.
+
 ## Auditoria do estado atual (05/11)
 
 Feita a pedido do fundador antes de novas implementações. Só leitura e testes; nada foi ligado, publicado nem enviado. `main` = 7074e65 (PR #2).

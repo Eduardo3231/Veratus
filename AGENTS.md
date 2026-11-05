@@ -18,7 +18,7 @@
 - Customer-facing claims about product origin, authenticity, authorization, warranty, technical specs, stock, freight, price, and delivery must be supported for the exact item.
 - Do not put personal data, credentials, payment information, leads, or verification codes in the site, Git history, campaign copy, or screenshots.
 - Test mobile layout, CTA links, legal links, and the complete contact/purchase handoff before recommending a paid launch.
-- Use a paused campaign draft by default. Publishing—even a paused item, which submits it to Meta review—deleting, activating, increasing budget, or setting a spending cap always needs a final explicit confirmation at action time.
+- Use a paused campaign draft by default. **Autonomy (founder, 2026-11-04):** the agent may publish, activate, change budget and set caps on its own judgment; each such action is recorded in `docs/HANDOFF.md`, stays inside the financial limits the code enforces (`PAID_MEDIA_*`, `ExternalWriteGuard`, approval records), and is checked in the live system afterwards. Where this file and `CLAUDE.md` differ on confirmation, `CLAUDE.md` prevails.
 
 ## Verification
 
