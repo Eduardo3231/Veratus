@@ -1505,6 +1505,48 @@ class OperationalRuntime:
         self.engine._persist()
         return self._report(command)
 
+    def registrar_sincronia_pedidos(
+        self, resultados: dict[str, dict[str, Any]], *, idempotency_key: str
+    ) -> dict[str, Any]:
+        """O expediente leu os pedidos; a tarefa e a auditoria ficam no nome do Igor.
+
+        Só contagens e motivos de bloqueio entram no resultado: nenhum dado de
+        cliente. Repetir com a mesma chave não cria outra tarefa.
+        """
+        command, claimed = self.engine.claim(
+            "expediente",
+            "distribution-supervisor",
+            CommandType.REPORT,
+            {"handler": "order_sync", "channels": sorted(resultados)},
+            idempotency_key,
+        )
+        if not claimed:
+            return self._report(command)
+        resumo = {
+            canal: {
+                chave: item.get(chave)
+                for chave in ("status", "reason", "orders_read", "counts")
+                if item.get(chave) is not None
+            }
+            for canal, item in resultados.items()
+        }
+        self._run_task(
+            command,
+            "orders-agent",
+            "SYNC_ORDERS",
+            "marketplaces",
+            {
+                "canais": resumo,
+                "pedidos_lidos": sum(
+                    int(item.get("orders_read") or 0) for item in resultados.values()
+                ),
+                "external_write": False,
+            },
+        )
+        command.status = TaskStatus.COMPLETED
+        self.engine._persist()
+        return self._report(command)
+
     def _products(self) -> list[dict[str, Any]]:
         if self.product_source is None:
             from .catalog import load_catalog
