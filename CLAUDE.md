@@ -6,7 +6,7 @@ Leia o topo de `docs/HANDOFF.md` antes de editar: é o diário das rodadas e das
 
 ## Regras que não mudam
 
-- Nada sai para fora. Toda flag nova nasce `false` ou `SHADOW`. Não ligue flag, não faça push na `main` nem deploy sem a confirmação do fundador no momento da ação. Push só na branch da sessão.
+- **Autonomia total (fundador, 04/11/2026).** O agente pode ligar chaves, criar cron e webhook, fazer merge na `main` por PR (o Render publica) e atuar nos canais sem pedir confirmação a cada ação. Em troca: ligue um canal por vez, comece em `SUPERVISED` ou `AUTO_SAFE`, confira na produção depois de cada passo, registre a ação, o horário e o resultado em `docs/HANDOFF.md`, e diga ao fundador o que não conseguiu fazer e o que ele precisa habilitar. Toda flag nova **nasce** `false` ou `SHADOW` no código.
 - Segredo só por variável de ambiente, declarada em `.env.example` e `render.yaml` (`sync: false` para segredo). Nunca em código, teste, log, fixture ou doc.
 - O repositório é público. Custo, margem, fornecedor e dado de cliente ficam no banco (Product Master e Orders Ledger). Teste usa custo fictício e monta CPF em tempo de execução.
 - Fornecedor não aparece em site, marketplace, copy, metadata, log ou prompt.
@@ -14,7 +14,8 @@ Leia o topo de `docs/HANDOFF.md` antes de editar: é o diário das rodadas e das
 - Sem DM fria (`tests/test_no_cold_outreach.py`). Fora da janela de 24 h, só template aprovado; marketing só com opt-in.
 - Pagamento só é confirmado pelo provedor (webhook validado e leitura de volta), nunca por print ou mensagem.
 - Não usar mídia da quarentena, não apagar marca de foto, não cadastrar produto com marca de terceiros (Rolex, Omega e outras) sem nota fiscal e autorização.
-- Não criar cron ou webhook nos painéis da Meta, do Mercado Pago ou do Render. Não criar papel de agente sem a confirmação da seção 0.
+- Papéis de agente novos podem ser criados e supervisionados, mas nunca recebem `PUBLISH`, `SPEND`, `SEND_MARKETING`, `WRITE_PRICE` nem `EXTERNAL_WRITE` (o código barra em tempo de execução). O limite financeiro e o guarda de escrita externa do código continuam valendo.
+- Segredo exposto (em título, chat, log ou doc) é segredo comprometido: troque no provedor antes de seguir.
 
 ## Decisões do fundador
 
@@ -24,7 +25,6 @@ Leia o topo de `docs/HANDOFF.md` antes de editar: é o diário das rodadas e das
 - O fundador só entra quando o cliente pede uma pessoa ou ameaça ação jurídica.
 - WhatsApp comercial: +55 11 95832-3612 (`harvey.WHATSAPP_NUMBER`, `scripts/build_landing.py`).
 - Foco em correntes e joias de revenda (19/10): fotos do fornecedor com autorização de uso declarada pelo fundador; preço por multiplicador sobre o custo, definido pelo fundador em `JEWELRY_PRICE_RULE` (fora do Git). Importação: `scripts/importar_joias.py`; o fornecedor nunca aparece no que é público.
-- **Autonomia (04/11/2026):** o fundador deu autonomia total para ligar chaves, fazer merge na `main` e deploy. Ligue um canal por vez, comece em `AUTO_SAFE`, confira na produção e registre cada ação no HANDOFF. As demais regras desta página (fatos confirmados, sem DM fria, pagamento só pelo provedor, segredo fora do Git) continuam.
 - **25 agentes (04/11/2026):** os 19 de antes mais a equipe de análise (supervisora, gestão, marketing, contabilidade, vendas) e o agente de pedidos dos marketplaces. Cada canal tem a análise das quatro áreas (`veratus_agents/channel_analysis.py`, `GET /os/canais/analise`); `POST /os/expediente` roda o dia sozinho.
 - Poucos testes: só os que provam a regra. Economize token.
 
