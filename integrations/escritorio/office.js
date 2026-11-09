@@ -6,8 +6,13 @@
  * cliente: só nomes internos, cargos, status e o que cada um fez.
  *
  *   const office = VeratusOffice.create(canvas, { staff, onSelect });
- *   office.update({ agentes, quadro, movimentos, chamado }, { animar: true });
+ *   office.update({ agentes, quadro, movimentos, fluxos, chamado }, { animar: true });
  *   office.select('sales-agent');
+ *
+ * `fluxos` mostra o trabalho passando de uma mesa para outra: cada item
+ * { id, de, para, tom } desenha um arco com um ponto que viaja de `de` até `para`
+ * (id de funcionário ou um ponto fixo: caixa, expedicao, fundador, reuniao).
+ * `quadro.titulo` e `quadro.linha` trocam o título e a linha de contagens do quadro.
  */
 (function (global) {
   'use strict';
@@ -216,6 +221,10 @@
     let frame = null;
     let hover = null;
     const seenMoves = new Set();
+    const seenFlows = new Set();
+    let flows = [];
+    const FLOW_TRAVEL = 1500;
+    const FLOW_LIFE = 3200;
     canvas.style.aspectRatio = `${WIDTH} / ${HEIGHT}`;
 
     for (const member of opts.staff || []) {
@@ -358,13 +367,13 @@
         ctx.fillStyle = palette.screen; roundRect(ctx, 0, 0, w, h, 2); ctx.fill();
         ctx.fillStyle = palette.gold;
         ctx.font = '600 8px Jost, "Avenir Next", "Segoe UI", system-ui, sans-serif';
-        ctx.fillText('QUADRO DO DIA', 8, 12);
+        ctx.fillText(String(board.titulo || 'QUADRO DO DIA').toUpperCase(), 8, 12);
         ctx.fillStyle = palette.screenFg;
         ctx.font = '600 15px "JetBrains Mono", Menlo, Consolas, monospace';
         ctx.fillText(board.receita || 'R$ 0,00', 8, 31);
         ctx.font = '500 7.5px "JetBrains Mono", Menlo, Consolas, monospace';
         ctx.fillStyle = palette.muted;
-        ctx.fillText(`pedidos ${board.pedidos || 0}  pagos ${board.pagos || 0}  enviados ${board.enviados || 0}`, 8, 44);
+        ctx.fillText(board.linha || `pedidos ${board.pedidos || 0}  pagos ${board.pagos || 0}  enviados ${board.enviados || 0}`, 8, 44);
         // barras: pagamentos confirmados por hora
         const bars = board.por_hora || [];
         const max = Math.max(1, ...bars);
@@ -562,7 +571,7 @@
       box(ctx, 20.6, 15.3, 2.6, 0.25, 0.42, 0.5, { top: palette.chair, left: palette.chair, right: palette.chair });
       drawPlant(13.9, 15.9);
       drawPlant(23.0, 11.9);
-      drawPlant(0.7, 10.9);
+      drawPlant(12.4, 10.95);
       drawPlant(16.4, 0.7);
       // expedição: prateleira com caixas e a bancada de embalar
       box(ctx, 22.6, 6.2, 0.8, 4.2, 0, 1.5, { top: palette.monitor, left: palette.chair, right: palette.monitor });
@@ -634,6 +643,62 @@
       }
     }
 
+    // -- trilhas de trabalho entre mesas -------------------------------------------------------------
+    function anchor(id) {
+      const person = people.get(id);
+      if (person) { const [x, y] = iso(person.seat.x, person.seat.y, 1.95); return [x, y]; }
+      const spot = id === 'reuniao' ? { x: 17.2, y: 13.8 } : SPOTS[id];
+      if (!spot) return null;
+      const [x, y] = iso(spot.x, spot.y, 1.5);
+      return [x, y];
+    }
+    function applyFlows(list) {
+      const born = global.performance ? global.performance.now() : Date.now();
+      const current = new Set();
+      for (const flow of list || []) {
+        if (!flow || !flow.id) continue;
+        current.add(flow.id);
+        if (seenFlows.has(flow.id)) continue;
+        seenFlows.add(flow.id);
+        const from = anchor(flow.de);
+        const to = anchor(flow.para);
+        if (from && to) flows.push({ id: flow.id, from, to, tom: flow.tom || 'neutro', born });
+      }
+      // Sem animação, a trilha fica parada enquanto o item ainda vem no estado.
+      if (reducedMotion) flows = flows.filter((flow) => current.has(flow.id));
+    }
+    function drawFlows(now) {
+      if (!flows.length) return;
+      if (!reducedMotion) flows = flows.filter((flow) => now - flow.born < FLOW_LIFE);
+      for (const flow of flows) {
+        const age = reducedMotion ? FLOW_TRAVEL : Math.max(0, now - flow.born);
+        const t = Math.min(1, age / FLOW_TRAVEL);
+        const ease = 1 - Math.pow(1 - t, 3);
+        const fade = reducedMotion ? 0.9 : age < FLOW_TRAVEL ? 1 : Math.max(0, 1 - (age - FLOW_TRAVEL) / (FLOW_LIFE - FLOW_TRAVEL));
+        const [ax, ay] = flow.from;
+        const [bx, by] = flow.to;
+        const cx = (ax + bx) / 2;
+        const cy = Math.min(ay, by) - 40 - Math.abs(bx - ax) * 0.12;
+        const color = flow.tom === 'ganho' ? palette.ok : flow.tom === 'alerta' ? palette.alert : palette.gold;
+        const point = (k) => [(1 - k) * (1 - k) * ax + 2 * (1 - k) * k * cx + k * k * bx, (1 - k) * (1 - k) * ay + 2 * (1 - k) * k * cy + k * k * by];
+        ctx.save();
+        ctx.globalAlpha = 0.55 * fade;
+        ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.setLineDash([3, 4]);
+        ctx.beginPath(); ctx.moveTo(ax, ay);
+        const steps = 24;
+        for (let i = 1; i <= Math.round(steps * ease); i += 1) { const [px, py] = point(i / steps); ctx.lineTo(px, py); }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const [dx, dy] = point(ease);
+        ctx.globalAlpha = fade;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(dx, dy, 3.6, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.25 * fade;
+        ctx.beginPath(); ctx.arc(dx, dy, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+
     // -- quadro ---------------------------------------------------------------------------------------
     let last = 0;
     function tick(time) {
@@ -644,7 +709,7 @@
       for (const person of people.values()) moving = advance(person, dt) || moving;
       draw(time);
       const busy = !reducedMotion && [...people.keys()].some((id) => status(id) === 'trabalhando');
-      if (moving || busy) ensureLoop(); else last = 0;
+      if (moving || busy || (!reducedMotion && flows.length)) ensureLoop(); else last = 0;
     }
     function ensureLoop() {
       if (frame === null) frame = global.requestAnimationFrame(tick);
@@ -673,6 +738,7 @@
         else drawPerson(item.person, now);
       }
       for (const zone of ZONES) if (zone.kind === 'glass' && zone.id === 'fundador') drawGlassRoom(zone);
+      drawFlows(global.performance ? global.performance.now() : Date.now());
       for (const person of people.values()) drawTag(person);
     }
 
@@ -718,8 +784,10 @@
       width: WIDTH,
       height: HEIGHT,
       update(next, flags) {
-        snapshot = { agentes: {}, quadro: {}, movimentos: [], chamado: false, ...(next || {}) };
+        snapshot = { agentes: {}, quadro: {}, movimentos: [], fluxos: [], chamado: false, ...(next || {}) };
         applyMoves(snapshot.movimentos, Boolean(flags && flags.animar));
+        if (flags && flags.animar) applyFlows(snapshot.fluxos);
+        else for (const flow of snapshot.fluxos || []) if (flow && flow.id) seenFlows.add(flow.id);
         draw();
         ensureLoop();
       },
