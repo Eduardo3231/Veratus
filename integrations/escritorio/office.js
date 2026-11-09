@@ -13,6 +13,9 @@
  * { id, de, para, tom } desenha um arco com um ponto que viaja de `de` até `para`
  * (id de funcionário ou um ponto fixo: caixa, expedicao, fundador, reuniao).
  * `quadro.titulo` e `quadro.linha` trocam o título e a linha de contagens do quadro.
+ * `logo` (opção do create) é o endereço do símbolo oficial (V com trigo, fundo
+ * transparente); ele vai para a parede. Sem a imagem, a parede fica sem o símbolo:
+ * um desenho aproximado erraria a estrutura da marca.
  */
 (function (global) {
   'use strict';
@@ -220,6 +223,12 @@
     let scale = 1;
     let frame = null;
     let hover = null;
+    let logoImage = null;
+    if (opts.logo && global.Image) {
+      logoImage = new global.Image();
+      logoImage.onload = () => draw();
+      logoImage.src = opts.logo;
+    }
     const seenMoves = new Set();
     const seenFlows = new Set();
     let flows = [];
@@ -329,21 +338,9 @@
     }
 
     function drawLogo() {
-      onBackWall(ctx, scale, 7.3, 2.75, () => {
-        ctx.strokeStyle = palette.gold;
-        ctx.lineJoin = 'round';
-        ctx.lineWidth = 3.2;
-        ctx.beginPath(); ctx.moveTo(4, 4); ctx.lineTo(24, 44); ctx.lineTo(44, 4); ctx.stroke();
-        ctx.lineWidth = 1.6;
-        ctx.globalAlpha = 0.65;
-        ctx.beginPath(); ctx.moveTo(14, 4); ctx.lineTo(24, 24); ctx.lineTo(34, 4); ctx.stroke();
-        // espigas de trigo do símbolo
-        ctx.globalAlpha = 0.9;
-        for (let i = 0; i < 4; i += 1) {
-          ctx.beginPath(); ctx.ellipse(24 - 5, 30 - i * 6, 1.6, 3.4, -0.6, 0, Math.PI * 2); ctx.fillStyle = palette.gold; ctx.fill();
-          ctx.beginPath(); ctx.ellipse(24 + 5, 30 - i * 6, 1.6, 3.4, 0.6, 0, Math.PI * 2); ctx.fill();
-        }
-        ctx.globalAlpha = 1;
+      if (!logoImage || !logoImage.complete || !logoImage.naturalWidth) return;
+      onBackWall(ctx, scale, 7.0, 2.95, () => {
+        ctx.drawImage(logoImage, 0, 0, 56, 56);
       });
     }
 
@@ -391,11 +388,16 @@
     }
 
     function drawWordmark() {
-      onLeftWall(ctx, scale, 12.2, 2.4, () => {
+      // VERATUS em capitais com espaçamento largo, como no emblema da marca.
+      onLeftWall(ctx, scale, 11.4, 2.3, () => {
         ctx.fillStyle = palette.gold;
-        ctx.globalAlpha = 0.85;
-        ctx.font = '600 34px "Cormorant Garamond", Georgia, serif';
-        ctx.fillText('Veratus', 0, 0);
+        ctx.globalAlpha = 0.9;
+        ctx.font = '500 24px Cinzel, "Cormorant Garamond", Georgia, serif';
+        let x = 0;
+        for (const letter of 'VERATUS') {
+          ctx.fillText(letter, x, 0);
+          x += ctx.measureText(letter).width + 7;
+        }
         ctx.globalAlpha = 1;
       });
     }
