@@ -74,7 +74,7 @@ MISSIONS: dict[str, str] = {
     "social-media-worker": "Monta o calendário, pede sua aprovação e publica só o aprovado.",
     "paid-acquisition-worker": "Planeja campanhas em rascunho pausado, sem gastar sem você.",
     "product-supervisor": "Coordena cadastro, textos, fotos, preço e qualidade.",
-    "product-intake": "Confere a ficha de cada produto e importa as correntes e joias de revenda.",
+    "product-intake": "Confere a ficha de cada peça e cadastra os produtos novos no catálogo.",
     "copy-agent": "Escreve títulos e descrições só com fatos confirmados.",
     "creative-agent": "Confere fotos e criativos, fora da quarentena.",
     "pricing-agent": "Calcula o preço por canal com as taxas de cada um e a regra das joias.",

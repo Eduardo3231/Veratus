@@ -69,3 +69,12 @@ def test_office_routes_need_the_token_and_the_page_carries_no_data(tmp_path):
     assert live.status_code == 200 and len(live.json["funcionarios"]) == 26
     assert page.status_code == 200 and "VeratusOffice" in page.text
     assert "Augusto" not in page.text  # a página só lê com o token
+
+
+def test_the_panel_lists_every_room_of_the_office():
+    from pathlib import Path
+
+    page = Path("integrations/escritorio/painel.html").read_text(encoding="utf-8")
+    salas = {m["sala"] for m in office.STAFF}
+    for sala in salas:
+        assert f"{sala}:" in page, sala  # quem está numa sala sem nome some da lista
