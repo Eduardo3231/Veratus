@@ -169,6 +169,10 @@ services:
         sync: false
       - key: WHATSAPP_TEMPLATES_ENABLED
         value: "false"
+      - key: WHATSAPP_MARKETING_ENABLED
+        value: "false"
+      - key: WHATSAPP_INVITE_DAILY_LIMIT
+        value: "20"
       - key: WHATSAPP_READ_RECEIPTS_ENABLED
         value: "false"
       - key: WHATSAPP_INTERACTIVE_ENABLED

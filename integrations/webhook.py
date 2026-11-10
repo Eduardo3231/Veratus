@@ -2540,6 +2540,80 @@ def os_whatsapp_health():
     return jsonify(report), 200
 
 
+@app.route("/os/whatsapp/convites", methods=["POST"])
+def os_whatsapp_convites():
+    """Convite de conversa para contatos que autorizaram a Veratus a escrever.
+
+    Cada contato leva o número e a ``origem`` (onde e quando autorizou). Sai um
+    template de marketing aprovado; quando o cliente responde, o Harvey segue a
+    conversa. Com as chaves desligadas ou o template sem aprovação, volta a
+    prévia bloqueada e nada é enviado. O número nunca volta inteiro na resposta.
+    """
+    denied = _admin_required()
+    if denied:
+        return denied
+    data, error = _agent_json()
+    if error:
+        return jsonify({"status": "error", "message": error[0]}), error[1]
+    contacts = data.get("contatos")
+    template = data.get("template", "convite_conversa")
+    fields = {"numero", "origem", "produto"}
+    if (
+        set(data) - {"contatos", "template"}
+        or not isinstance(template, str)
+        or not isinstance(contacts, list)
+        or not 1 <= len(contacts) <= 50
+        or any(
+            not isinstance(item, dict)
+            or set(item) - fields
+            or any(not isinstance(value, str) for value in item.values())
+            for item in contacts
+        )
+    ):
+        return jsonify({"status": "error", "message": "invalid_request"}), 400
+    from veratus_agents.whatsapp import (
+        WhatsAppCloudClient,
+        WhatsAppConfigurationError,
+        invite_daily_limit,
+        marketing_enabled,
+        send_enabled,
+    )
+
+    results = []
+    try:
+        channel = _whatsapp_channel()
+        client = WhatsAppCloudClient.from_env()
+        for item in contacts:
+            started = channel.start_outbound(
+                item.get("numero"),
+                source=item.get("origem") or "",
+                product_id=item.get("produto") or None,
+            )
+            if started["status"] != "READY":
+                results.append(started)
+                continue
+            sent = channel.send_invitation(
+                started["conversation_id"],
+                template,
+                client=client,
+                enabled=send_enabled(),
+                marketing_enabled=marketing_enabled(),
+                daily_limit=invite_daily_limit(),
+            )
+            results.append({"contact": started["contact"], **sent})
+    except WhatsAppConfigurationError as exc:
+        return _whatsapp_unavailable(exc)
+    sent_count = sum(1 for item in results if item["status"] == "SENT")
+    return jsonify(
+        {
+            "status": "ok",
+            "enviados": sent_count,
+            "nao_enviados": len(results) - sent_count,
+            "resultados": results,
+        }
+    ), 200
+
+
 @app.route("/integrations/whatsapp/conversations", methods=["GET"])
 def whatsapp_conversations():
     denied = _admin_required()

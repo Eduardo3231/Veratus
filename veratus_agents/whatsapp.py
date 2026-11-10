@@ -54,6 +54,9 @@ IGNORED_FIELDS = ("history", "smb_app_state_sync")
 OPT_OUT_WORDS = ("parar", "pare", "sair", "stop", "descadastrar")
 # Só estes dois vão a cliente; ``alerta_fundador`` vai ao número do fundador.
 CUSTOMER_TEMPLATES = ("pedido_confirmado", "pedido_enviado")
+# Convite de conversa: template de marketing, só para quem autorizou o contato.
+MARKETING_TEMPLATES = ("convite_conversa",)
+INVITE_COOLDOWN = timedelta(days=30)
 OPT_OUT_PHRASES = ("nao quero receber", "nao quero mais receber", "parar de receber")
 OPT_OUT_CONFIRMATION = (
     "Pronto, você não vai mais receber novidades da Veratus por aqui. "
@@ -271,6 +274,23 @@ def clean_template_param(value: Any) -> str:
     return " ".join(str(value or "").split())[:1000]
 
 
+def normalize_number(value: Any) -> str | None:
+    """Número brasileiro só em dígitos, com o 55, como a Meta recebe."""
+    digits = re.sub(r"\D", "", str(value or "")).lstrip("0")
+    if len(digits) in (10, 11):
+        digits = "55" + digits
+    return digits if re.fullmatch(r"55[1-9]\d{9,10}", digits) else None
+
+
+def number_variants(wa_id: str) -> list[str]:
+    """As duas formas de um celular brasileiro: com e sem o nono dígito."""
+    if len(wa_id) == 13 and wa_id.startswith("55") and wa_id[4] == "9":
+        return [wa_id, wa_id[:4] + wa_id[5:]]
+    if len(wa_id) == 12 and wa_id.startswith("55"):
+        return [wa_id, wa_id[:4] + "9" + wa_id[4:]]
+    return [wa_id]
+
+
 def send_block_reasons(
     conversation: dict[str, Any],
     text: str | None,
@@ -324,12 +344,27 @@ class WhatsAppCloudClient:
 
     def send_message(self, to: str, content: dict[str, Any]) -> str:
         """Texto, template, interativo, imagem ou produto: o mesmo envio."""
+        return self.send_message_contact(to, content)[0]
+
+    def send_message_contact(
+        self, to: str, content: dict[str, Any]
+    ) -> tuple[str, str | None]:
+        """O envio e o ``wa_id`` que a Meta devolve para o número informado.
+
+        Num celular brasileiro o ``wa_id`` pode vir sem o nono dígito, e é com
+        ele que a resposta do cliente chega.
+        """
         payload = {"messaging_product": "whatsapp", "recipient_type": "individual"}
         response = self._post({**payload, "to": to, **content})
         try:
-            return str(response.json()["messages"][0]["id"])
+            data = response.json()
+            message_id = str(data["messages"][0]["id"])
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise WhatsAppApiError("UNEXPECTED_RESPONSE", response.status_code) from exc
+        contacts = data.get("contacts") or []
+        first = contacts[0] if isinstance(contacts, list) and contacts else {}
+        wa_id = first.get("wa_id") if isinstance(first, dict) else None
+        return message_id, re.sub(r"\D", "", str(wa_id or "")) or None
 
     def mark_read(self, message_id: str, *, typing: bool = True) -> None:
         """Confirmação de leitura e "digitando…" (some no envio ou em 25 s)."""
@@ -988,7 +1023,11 @@ class WhatsAppChannel(SqlStore):
         self._audit(db, mark, conversation_id, "OPT_OUT", "customer", {})
 
     def template_reasons(
-        self, name: str, registry: dict[str, dict[str, Any]] | None = None
+        self,
+        name: str,
+        registry: dict[str, dict[str, Any]] | None = None,
+        *,
+        category: str = "UTILITY",
     ) -> list[str]:
         """O que impede o template: registro, categoria e o último aviso da Meta."""
         registry = load_templates() if registry is None else registry
@@ -998,8 +1037,8 @@ class WhatsAppChannel(SqlStore):
         reasons = []
         if item.get("status") != "APPROVED":
             reasons.append("TEMPLATE_NOT_APPROVED")
-        if item.get("category") != "UTILITY":
-            reasons.append("TEMPLATE_NOT_UTILITY")
+        if item.get("category") != category:
+            reasons.append(f"TEMPLATE_NOT_{category}")
         with self._connect() as (db, mark):
             row = db.execute(
                 self._sql(
@@ -1015,9 +1054,235 @@ class WhatsAppChannel(SqlStore):
             "UNKNOWN",
         ):
             reasons.append(f"TEMPLATE_{row['status']}"[:60])
-        if row is not None and row["category"] not in (None, "UTILITY"):
+        if row is not None and row["category"] not in (None, category):
             reasons.append("TEMPLATE_RECLASSIFIED")
         return reasons
+
+    # -- convite a quem autorizou o contato ----------------------------------------
+
+    def start_outbound(
+        self, number: Any, *, source: str, product_id: str | None = None
+    ) -> dict[str, Any]:
+        """Abre a conversa de um contato que autorizou a Veratus a escrever.
+
+        ``source`` diz onde e quando a pessoa autorizou, declarado pelo fundador;
+        sem ele não há convite. Quem já pediu para parar, nesta forma do número ou
+        na outra (com ou sem o nono dígito), não volta a receber.
+        """
+        wa_id = normalize_number(number)
+        if wa_id is None:
+            return {"status": "BLOCKED", "reasons": ["NUMBER_INVALID"]}
+        contact = f"***{wa_id[-4:]}"
+        source = " ".join(str(source or "").split())[:80]
+        if len(source) < 3:
+            return {
+                "status": "BLOCKED",
+                "reasons": ["OPT_IN_SOURCE_REQUIRED"],
+                "contact": contact,
+            }
+        hint = product_id if product_id and _HINT.match(product_id) else None
+        now = _now().isoformat()
+        ids = [self.conversation_id(item) for item in number_variants(wa_id)]
+        with self._connect() as (db, mark):
+            optins = {}
+            for item in ids:
+                row = db.execute(
+                    self._sql(
+                        "SELECT * FROM wa_optins WHERE conversation_id = ?", mark
+                    ),
+                    [item],
+                ).fetchone()
+                if row is not None:
+                    optins[item] = dict(row)
+            if any(row["revoked_at"] for row in optins.values()):
+                return {
+                    "status": "BLOCKED",
+                    "reasons": ["OPTED_OUT"],
+                    "contact": contact,
+                }
+            existing = [item for item in ids if self._conversation_row(db, mark, item)]
+            conversation_id = existing[0] if existing else ids[0]
+            if not existing:
+                db.execute(
+                    self._sql(
+                        "INSERT INTO wa_conversations (conversation_id, "
+                        "wa_id_encrypted, wa_id_last4, state, product_id, utm_json, "
+                        "created_at, updated_at) VALUES (?, ?, ?, 'BOT', ?, ?, ?, ?)",
+                        mark,
+                    ),
+                    [
+                        conversation_id,
+                        self._cipher.encrypt(wa_id.encode()).decode("ascii"),
+                        wa_id[-4:],
+                        hint,
+                        json.dumps({"utm_source": "convite"}),
+                        now,
+                        now,
+                    ],
+                )
+            if conversation_id not in optins:
+                db.execute(
+                    self._sql(
+                        "INSERT INTO wa_optins (conversation_id, granted_at, source) "
+                        "VALUES (?, ?, ?)",
+                        mark,
+                    ),
+                    [conversation_id, now, source],
+                )
+                self._audit(
+                    db,
+                    mark,
+                    conversation_id,
+                    "OPT_IN",
+                    "founder",
+                    {"source": source, "declared_by": "founder"},
+                )
+        return {
+            "status": "READY",
+            "conversation_id": conversation_id,
+            "contact": contact,
+        }
+
+    def send_invitation(
+        self,
+        conversation_id: str,
+        name: str,
+        *,
+        client: WhatsAppCloudClient | None,
+        enabled: bool,
+        marketing_enabled: bool,
+        daily_limit: int,
+        registry: dict[str, dict[str, Any]] | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Convite de conversa: template de marketing aprovado, para quem autorizou.
+
+        Um convite por contato a cada 30 dias, com teto por dia, e nunca no meio de
+        uma conversa aberta. Quando o cliente responde, a conversa segue no motor.
+        """
+        now = now or _now()
+        registry = load_templates() if registry is None else registry
+        item = registry.get(name) or {}
+        reasons = [] if marketing_enabled else ["WHATSAPP_MARKETING_DISABLED"]
+        if name not in MARKETING_TEMPLATES:
+            reasons.append("TEMPLATE_NOT_ALLOWED")
+        reasons += self.template_reasons(name, registry, category="MARKETING")
+        if item.get("params"):
+            reasons.append("TEMPLATE_PARAMS_INVALID")
+        opt_in = self.opt_in(conversation_id)
+        if not (opt_in and opt_in.get("granted_at") and opt_in.get("source")):
+            reasons.append("OPT_IN_MISSING")
+        day_ago = (now - timedelta(hours=24)).isoformat()
+        with self._connect() as (db, mark):
+            conversation = self._conversation_row(db, mark, conversation_id) or {}
+            rows = db.execute(
+                self._sql(
+                    "SELECT conversation_id, sent_at FROM wa_messages "
+                    "WHERE direction = 'OUT' AND kind = 'invitation' "
+                    "AND (conversation_id = ? OR sent_at >= ?)",
+                    mark,
+                ),
+                [conversation_id, day_ago],
+            ).fetchall()
+        mine = [
+            row["sent_at"] for row in rows if row["conversation_id"] == conversation_id
+        ]
+        last_inbound = conversation.get("last_inbound_at")
+        if (
+            last_inbound
+            and now - datetime.fromisoformat(last_inbound) <= SERVICE_WINDOW
+        ):
+            reasons.append("CONVERSATION_ACTIVE")
+        if mine and now - datetime.fromisoformat(max(mine)) < INVITE_COOLDOWN:
+            reasons.append("INVITED_RECENTLY")
+        if len([row for row in rows if row["sent_at"] >= day_ago]) >= daily_limit:
+            reasons.append("DAILY_LIMIT_REACHED")
+        content = {
+            "type": "template",
+            "template": {
+                "name": name,
+                "language": {"code": item.get("language") or "pt_BR"},
+            },
+        }
+        return self.deliver(
+            conversation_id,
+            content,
+            body=str(item.get("body") or name),
+            kind="invitation",
+            actor="founder",
+            client=client,
+            enabled=enabled,
+            idempotency_key=f"invite:{name}:{conversation_id}:{now:%Y%m%d}",
+            reasons=reasons,
+            window=False,
+            rekey=True,
+            now=now,
+        )
+
+    def _move_conversation(self, db: Any, mark: str, old_id: str, wa_id: str) -> str:
+        """Passa a conversa para o ``wa_id`` que a Meta devolveu no envio."""
+        new_id = self.conversation_id(wa_id)
+        old = self._conversation_row(db, mark, old_id)
+        if new_id == old_id or old is None:
+            return old_id
+        db.execute(
+            self._sql(
+                "INSERT INTO wa_conversations (conversation_id, wa_id_encrypted, "
+                "wa_id_last4, state, visit_ref, product_id, utm_json, ctwa_clid, "
+                "referral_source_url, last_inbound_at, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (conversation_id) DO NOTHING",
+                mark,
+            ),
+            [
+                new_id,
+                self._cipher.encrypt(wa_id.encode()).decode("ascii"),
+                wa_id[-4:],
+                old["state"],
+                old["visit_ref"],
+                old["product_id"],
+                old["utm_json"],
+                old["ctwa_clid"],
+                old["referral_source_url"],
+                old["last_inbound_at"],
+                old["created_at"],
+                old["updated_at"],
+            ],
+        )
+        pair = [new_id, old_id]
+        db.execute(
+            self._sql(
+                "UPDATE wa_messages SET conversation_id = ? WHERE conversation_id = ?",
+                mark,
+            ),
+            pair,
+        )
+        db.execute(
+            self._sql(
+                "UPDATE wa_audit SET conversation_id = ? WHERE conversation_id = ?",
+                mark,
+            ),
+            pair,
+        )
+        kept = db.execute(
+            self._sql("SELECT 1 FROM wa_optins WHERE conversation_id = ?", mark),
+            [new_id],
+        ).fetchone()
+        db.execute(
+            self._sql(
+                "DELETE FROM wa_optins WHERE conversation_id = ?"
+                if kept
+                else "UPDATE wa_optins SET conversation_id = ? "
+                "WHERE conversation_id = ?",
+                mark,
+            ),
+            [old_id] if kept else pair,
+        )
+        db.execute(
+            self._sql("DELETE FROM wa_conversations WHERE conversation_id = ?", mark),
+            [old_id],
+        )
+        return new_id
 
     def send_template(
         self,
@@ -1086,6 +1351,7 @@ class WhatsAppChannel(SqlStore):
         idempotency_key: str,
         reasons: list[str] | None = None,
         window: bool = True,
+        rekey: bool = False,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         """Envio de template, botões, lista, imagem ou produto, com as mesmas travas.
@@ -1134,8 +1400,13 @@ class WhatsAppChannel(SqlStore):
                 "external_message_sent": False,
             }
         wa_id = self._cipher.decrypt(conversation["wa_id_encrypted"].encode()).decode()
+        contact = None
         try:
-            message_id = client.send_message(wa_id, content)
+            if rekey:
+                # Primeiro contato: a conversa passa a valer no wa_id da Meta.
+                message_id, contact = client.send_message_contact(wa_id, content)
+            else:
+                message_id = client.send_message(wa_id, content)
         except WhatsAppApiError as exc:
             detail.update(error=exc.code, http_status=exc.http_status)
             self._record_audit(conversation_id, "SEND_FAILED", actor, detail)
@@ -1145,6 +1416,10 @@ class WhatsAppChannel(SqlStore):
                 "external_message_sent": False,
             }
         with self._connect() as (db, mark):
+            if contact and contact != wa_id:
+                conversation_id = self._move_conversation(
+                    db, mark, conversation_id, contact
+                )
             db.execute(
                 self._sql(
                     "INSERT INTO wa_messages (message_id, conversation_id, direction, "
@@ -1167,6 +1442,7 @@ class WhatsAppChannel(SqlStore):
             "status": "SENT",
             "message_id": message_id,
             "external_message_sent": True,
+            **({"conversation_id": conversation_id} if rekey else {}),
         }
 
     def claim_read_receipt(self, message_id: str) -> bool:
@@ -1317,6 +1593,16 @@ def send_enabled() -> bool:
 
 def templates_enabled() -> bool:
     return env_flag("WHATSAPP_TEMPLATES_ENABLED")
+
+
+def marketing_enabled() -> bool:
+    return env_flag("WHATSAPP_MARKETING_ENABLED")
+
+
+def invite_daily_limit() -> int:
+    """Teto de convites em 24 h (``WHATSAPP_INVITE_DAILY_LIMIT``, padrão 20)."""
+    raw = os.getenv("WHATSAPP_INVITE_DAILY_LIMIT", "").strip()
+    return min(int(raw), 250) if raw.isdigit() else 20
 
 
 # -- mensagens interativas (botões, lista e botão de link) ------------------------
@@ -1485,8 +1771,9 @@ def account_health(
         "quality_ok": number.get("quality_rating") in ("GREEN", "UNKNOWN"),
         "app_subscribed": bool(apps.get("data")),
         "templates_approved": all(
-            item["meta"] == "APPROVED" and item["category"] == "UTILITY"
-            for item in templates.values()
+            item["meta"] == "APPROVED"
+            and item["category"] == registry[name].get("category")
+            for name, item in templates.items()
         ),
     }
     return {
