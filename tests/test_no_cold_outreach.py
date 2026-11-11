@@ -1,7 +1,9 @@
 """Nenhum envio para quem não iniciou conversa com a Veratus.
 
 A Meta só permite responder: no Instagram, a quem comentou (resposta privada
-ao comment_id); no WhatsApp, dentro da janela de 24 h aberta pelo cliente.
+ao comment_id); no WhatsApp, dentro da janela de 24 h aberta pelo cliente. A
+única primeira mensagem é o convite a quem autorizou o contato, com template
+aprovado (regra provada em tests/test_whatsapp_convites.py).
 """
 
 from __future__ import annotations

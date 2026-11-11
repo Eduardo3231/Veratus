@@ -151,6 +151,7 @@ Autenticação: toda rota `/os/*` e as rotas de status, verificação e OAuth de
 | `GET /os/harvey` | O que o Harvey aprendeu: canais do perfil e objeções. |
 | `GET,POST /os/orders`, `GET /os/orders/<id>`, `POST /os/orders/<id>/status` | Orders Ledger: o pagamento só muda de estado pela confirmação do provedor. |
 | `GET /os/whatsapp/health` | Só leitura na Meta: número, nome, qualidade, app assinado e modelos de mensagem. |
+| `POST /os/whatsapp/convites` | Convite de conversa para contatos que autorizaram a Veratus a escrever. Corpo: `{"contatos": [{"numero": "11 9…", "origem": "onde e quando autorizou", "produto": "id opcional"}]}` (até 50). Sai o template de marketing `convite_conversa`; quando o cliente responde, o Harvey segue a conversa. Só envia com `WHATSAPP_SEND_ENABLED` e `WHATSAPP_MARKETING_ENABLED` ligadas e o template aprovado pela Meta; senão devolve a prévia bloqueada. Um convite por contato a cada 30 dias, teto diário em `WHATSAPP_INVITE_DAILY_LIMIT`, e quem respondeu PARAR não recebe mais. |
 | `GET /os/crm/twenty`, `POST /os/crm/twenty/sync` | Funil no Twenty (prévia; envio só com a chave ligada). |
 
 ### Redes sociais e mídia paga

@@ -1,5 +1,5 @@
 {
-  "_leia": "Templates de utilidade do WhatsApp. Envie cada um no WhatsApp Manager como UTILITY, pt_BR, com o exemplo. Troque status para APPROVED só depois da aprovação da Meta. Se a Meta reclassificar como MARKETING, não use.",
+  "_leia": "Templates do WhatsApp. Os de utilidade (pedido e alerta): envie no WhatsApp Manager como UTILITY, pt_BR, com o exemplo; se a Meta reclassificar como MARKETING, não use. O convite_conversa é MARKETING de propósito: só vai para quem autorizou o contato (POST /os/whatsapp/convites) e é cobrado por mensagem. Troque status para APPROVED só depois da aprovação da Meta.",
   "templates": [
     {
       "name": "pedido_confirmado",
@@ -26,6 +26,15 @@
       "body": "Atendimento Veratus: {{1}}. {{2}} Sugestão: {{3}}. Veja no painel.",
       "params": ["motivo", "resumo", "sugestao"],
       "example": ["RECLAMACAO", "O cliente pediu para falar com uma pessoa.", "Leia a conversa e responda"],
+      "status": "DRAFT"
+    },
+    {
+      "name": "convite_conversa",
+      "language": "pt_BR",
+      "category": "MARKETING",
+      "body": "Olá! Aqui é o Harvey, assistente virtual da Veratus. Você pediu para receber as novidades das nossas peças. Posso te mostrar o que chegou? Se não quiser mais receber, é só responder PARAR.",
+      "params": [],
+      "example": [],
       "status": "DRAFT"
     }
   ]

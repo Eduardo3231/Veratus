@@ -352,9 +352,9 @@ def test_health_reads_the_account_without_writing():
                 "name": n,
                 "language": "pt_BR",
                 "status": "APPROVED",
-                "category": "UTILITY",
+                "category": item["category"],
             }
-            for n in load_templates()
+            for n, item in load_templates().items()
         ]
     }
     client = FakeClient(
