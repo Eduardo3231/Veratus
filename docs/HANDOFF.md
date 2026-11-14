@@ -14,7 +14,8 @@ Pedido do fundador: conferir o acesso à Shopify e estruturar a loja por complet
 - **Menus**: principal (Início, Relógios com os 4 estilos, Veratus Feminino com os 3 tipos, Como comprar, Sobre) e rodapé (ajuda e páginas legais).
 - **Tema**: cópia não publicada "Veratus" do Horizon: paleta obsidiana, marfim e dourado, Cormorant nos títulos e DM Sans no corpo, logo V com trigo, página inicial (hero com duas joias, faixa de condições, bloco "Um V com trigo"), rodapé com atendimento do Harvey, página de senha em português, `DESIGN.md` no tema. As vitrines de produto e os links de coleção da página inicial estão **desligados** (com tudo em rascunho o tema mostraria produtos de exemplo).
 - **Não conferido**: o layout renderizado. A captura de tela do conector não carrega o CSS do tema (nem no Horizon original); falta olhar a prévia do tema "Veratus" no admin.
-- **Falta, com o fundador**: publicar o tema "Veratus" (pede o sim dele); trocar o nome da loja para Veratus e assinar um plano; foto real de cada relógio, sem marca de terceiros; preço das joias; colar o texto das páginas nas políticas oficiais e revisar; forma de pagamento e frete no checkout (os fatos falam em Pix e link do Mercado Pago). Depois disso: ativar os produtos e religar as três seções da página inicial.
+- **Publicação (14/11)**: o fundador disse sim; o conector recusou ("só temas criados pelo agente podem ser publicados aqui"; a cópia do Horizon não conta). Publicar pelo admin: Loja virtual > Temas > Veratus > Publicar.
+- **Falta, com o fundador**: publicar o tema "Veratus" pelo admin; trocar o nome da loja para Veratus e assinar um plano; foto real de cada relógio, sem marca de terceiros; preço das joias; colar o texto das páginas nas políticas oficiais e revisar; forma de pagamento e frete no checkout (os fatos falam em Pix e link do Mercado Pago). Depois disso: ativar os produtos e religar as três seções da página inicial.
 
 ## Skills de interface Emil Kowalski (14/11)
 
